@@ -1,5 +1,5 @@
 idf_component_register(SRCS "app_main.cpp"
-                       PRIV_REQUIRES spi_flash
+                       PRIV_REQUIRES spi_flash blackbox
                        INCLUDE_DIRS "")
 
 # 脚本目录

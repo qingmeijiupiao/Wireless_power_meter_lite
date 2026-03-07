@@ -13,10 +13,13 @@
 #include "esp_flash.h"
 #include "esp_system.h"
 #include "esp_littlefs.h"
+#include "blackbox.h"
+#include "esp_log.h"
 extern "C" void app_main(void)
 {
-    printf("Hello world!\n");
-
+    
+    
+    BlackBox::init();
     /* Print chip information */
     esp_chip_info_t chip_info;
     uint32_t flash_size;
@@ -46,6 +49,23 @@ extern "C" void app_main(void)
         printf("Restarting in %d seconds...\n", i);
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
+    BlackBox::BlackBoxData_t _log{
+        .sof = BlackBox::DATA_SOF,
+        .timestamp = esp_log_timestamp(),
+        .voltage = 230.0f,
+        .current = 10.0f,
+        .ah = 100.0f,
+        .wh = 1000.0f,
+        .flags = 0,
+        .strlog = "Test log",
+    };
+    printf("NOW LOGS COUNT: %ld\n", BlackBox::get_count());
+    // BlackBox::add_log(_log);
+    // for (int i = 0; i < BlackBox::get_count(); i++) {
+    //     _log=BlackBox::get_log(i);
+    //     printf("LOG %d: %s\n", i, _log.strlog);
+    // }
+    vTaskDelay(5000 / portTICK_PERIOD_MS);
     printf("Restarting now.\n");
     fflush(stdout);
     esp_restart();
