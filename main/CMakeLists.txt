@@ -23,4 +23,5 @@ add_custom_target(run_post_build ALL
 )
 
 # 确保 post_build 目标在 app 之后执行
-add_dependencies(run_post_build app)
+add_dependencies(run_post_build app bootloader)
+#add_dependencies(run_post_build bootloader)
