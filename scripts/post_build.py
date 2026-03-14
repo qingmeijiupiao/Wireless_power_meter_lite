@@ -157,7 +157,7 @@ def main():
     project_name, project_root = get_project_info()
     build_dir = "build"
     output_file = f"{project_name}_merged.bin"
-    chip = "esp32c3"
+    chip = "esp32c6"
     
     print(f"项目名称: {project_name}")
     print(f"项目根目录: {project_root}")

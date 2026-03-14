@@ -15,10 +15,13 @@
 #include "esp_littlefs.h"
 #include "blackbox.h"
 #include "esp_log.h"
-extern "C" void app_main(void)
-{
-    
-    
+#include "load_lp.hpp"
+
+#include "st7735.h"
+
+
+extern "C" void app_main(void){
+    LP_Core_Load();
     BlackBox::init();
     /* Print chip information */
     esp_chip_info_t chip_info;
@@ -45,10 +48,10 @@ extern "C" void app_main(void)
 
     printf("Minimum free heap size: %" PRIu32 " bytes\n", esp_get_minimum_free_heap_size());
 
-    for (int i = 10; i >= 0; i--) {
-        printf("Restarting in %d seconds...\n", i);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-    }
+    // for (int i = 10; i >= 0; i--) {
+    //     printf("Restarting in %d seconds...\n", i);
+    //     vTaskDelay(1000 / portTICK_PERIOD_MS);
+    // }
     BlackBox::BlackBoxData_t _log{
         .sof = BlackBox::DATA_SOF,
         .timestamp = esp_log_timestamp(),
@@ -60,6 +63,11 @@ extern "C" void app_main(void)
         .strlog = "Test log",
     };
     printf("NOW LOGS COUNT: %ld\n", BlackBox::get_count());
+    while (1){
+        ESP_LOGI(LPTAG, "lp core COUNT: %ld", ulp_ulp_counter);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+    
     // BlackBox::add_log(_log);
     // for (int i = 0; i < BlackBox::get_count(); i++) {
     //     _log=BlackBox::get_log(i);

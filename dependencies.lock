@@ -13,9 +13,19 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.20.4
+  t4v4res/st7735_driver:
+    component_hash: b1d85ef8ba4ea08761d9568dfbac2bd83741155a00658b4a10cf1d85ae4f096e
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    targets:
+    - esp32c6
+    version: 0.1.2
 direct_dependencies:
 - idf
 - joltwallet/littlefs
-manifest_hash: 52bafb119f6c7ecc551cf55de7b82ac5d564cd4687ee68c9de68172d49d753e3
-target: esp32c3
+- t4v4res/st7735_driver
+manifest_hash: a17819d1e640907b85b3f0bb3eb50a7fb55e008da21e253a6c9f997df545ea99
+target: esp32c6
 version: 2.0.0
