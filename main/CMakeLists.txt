@@ -1,6 +1,6 @@
 idf_component_register(SRCS "app_main.cpp"
-                       PRIV_REQUIRES spi_flash blackbox
-                       REQUIRES ulp
+                       PRIV_REQUIRES spi_flash blackbox hal esp_adc Interp cpp_gpio_driver
+                       REQUIRES ulp 
                        INCLUDE_DIRS "")
                        
 # LP核程序配置
@@ -9,7 +9,7 @@ set(ulp_sources "ulp/ulp_main.c")                        # LP核源文件路径
 set(ulp_exp_dep_srcs "main.c")                           # 主源文件（包含生成的ulp_main.h）
 
 # 调用ulp_embed_binary
-ulp_embed_binary(${ulp_app_name} "${ulp_sources}" "${ulp_exp_dep_srcs}")
+ulp_embed_binary(${ulp_app_name} "${ulp_sources}" "${ulp_exp_dep_srcs}" REQUIRES ulp_lp_core)
 
 # 脚本目录
 set(SCRIPT_DIR "${CMAKE_SOURCE_DIR}/scripts")
