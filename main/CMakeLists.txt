@@ -1,5 +1,5 @@
 idf_component_register(SRCS "app_main.cpp"
-                       PRIV_REQUIRES spi_flash blackbox hal esp_adc Interp cpp_gpio_driver
+                       PRIV_REQUIRES spi_flash blackbox hal esp_adc Interp cpp_gpio_driver esp_timer t4v4res__st7735_driver
                        REQUIRES ulp 
                        INCLUDE_DIRS "")
                        

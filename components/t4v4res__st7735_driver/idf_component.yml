@@ -1,0 +1,6 @@
+description: Driver ST7735S (Adafruit Mini TFT 0.96 160x80) para ESP-IDF, testado
+  no ESP32-C6
+license: MIT
+targets:
+- esp32c6
+version: 0.1.2
