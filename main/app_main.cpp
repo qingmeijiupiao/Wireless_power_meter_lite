@@ -16,33 +16,19 @@
 #include "blackbox.h"
 #include "esp_log.h"
 #include "load_lp.hpp"
-#include "hal/adc_types.h"
-#include "esp_adc/adc_oneshot.h"
-#include "esp_adc/adc_cali.h"
-#include "esp_adc/adc_cali_scheme.h" // 包含校准方案特定函数
-#include "ntc_table.h"
-#include "Interp.hpp"
 #include "st7735.h"
 #include "cpp_gpio_driver.hpp"
 #include "esp_timer.h"
-adc_oneshot_unit_handle_t adc1_handle;
-adc_oneshot_unit_init_cfg_t init_config1 = {
-    .unit_id = ADC_UNIT_1,
-    .ulp_mode = ADC_ULP_MODE_DISABLE,
-};
-adc_oneshot_chan_cfg_t config = {
-    .atten = ADC_ATTEN_DB_12,
-    .bitwidth = ADC_BITWIDTH_DEFAULT,
-};
-adc_cali_handle_t cali_handle = NULL;
-adc_cali_curve_fitting_config_t cali_config = {
-    .unit_id = ADC_UNIT_1,
-    .atten = ADC_ATTEN_DB_12,    // 必须与通道配置的衰减一致
-    .bitwidth = ADC_BITWIDTH_12, // 必须与通道配置的位宽一致
-};
+
+#include "NTCTemperatureSensor.hpp"
+#include "ESPChipTemperatureSensor.hpp"
+
+#include "ina226_interface.h"
+
 CppGpioDriver<GPIO_NUM_16, GpioMode::OUTPUT> CAN_register;
 CppGpioDriver<GPIO_NUM_21, GpioMode::OUTPUT> POWER_OUT;
-int adc_value_mv = 0;
+CppGpioDriver<GPIO_NUM_17, GpioMode::INPUT_PULLUP> Main_Button;
+
 
 
 st7735_config_t cfg = {
@@ -55,58 +41,85 @@ st7735_config_t cfg = {
     .host_id     = SPI2_HOST
 };
 
+bool OUTPUT_state = false;
+TemperatureSensor_t Chip_Temperature_Sensor;
+
+
+
 void screen_task(void* arg){
     st7735_init(&cfg);
-    std::vector<std::pair<int16_t, int16_t>> points;
-    points.reserve(NTC_TABLE_SIZE);
-    for (int i = 0; i < NTC_TABLE_SIZE; i++) {
-        points.emplace_back(ntc_table[i][0], ntc_table[i][1]);
-    }
 
-    NonEquidistantInterp<int16_t, int16_t> interp_ntc(static_cast<const std::vector<std::pair<int16_t, int16_t>>&>(points));
+    
     //st7735_fill_screen(ST7735_RGB565(0, 0, 0));
     while (1){
-
-        int adc_value = 0;
-        ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, ADC_CHANNEL_5, reinterpret_cast<int*>(&adc_value)));
-        ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle, adc_value, &adc_value_mv));
-        int16_t temp = interp_ntc.interpolate(adc_value_mv);
-        char temp_str[10];
-        snprintf(temp_str, sizeof(temp_str), "%d", temp);
         //st7735_fill_rect(-1, -2, ST7735_WIDTH, ST7735_HEIGHT, ST7735_YELLOW);
-        st7735_fill_screen(ST7735_RGB565(0, 0, 0));
-        st7735_draw_string(10, 30, temp_str,ST7735_RGB565(0xFF, 0xFF, 0xFF), ST7735_RGB565(0, 0, 0), 2);
+        uint32_t background_color = ST7735_RGB565(0, 0, 0);
+        if(OUTPUT_state){
+            background_color=ST7735_RGB565(0, 255, 0);
+        }else{
+            background_color=ST7735_RGB565(255, 0, 0);
+        }
+        
+        int Ctemp = Chip_Temperature_Sensor.getTemperature();
+        int Ntemp = NTC::getTemperature()/100;
+        char temp_str[16];
+        snprintf(temp_str, sizeof(temp_str), "C: %d", Ctemp);
+        st7735_fill_screen(background_color);
+        st7735_draw_string(10, 20, temp_str,ST7735_RGB565(255, 255, 255),background_color,2);
+        snprintf(temp_str, sizeof(temp_str), "N: %d", Ntemp);
+        st7735_draw_string(10, 40, temp_str,ST7735_RGB565(255, 255, 255),background_color,2);
+        
         vTaskDelay(20 / portTICK_PERIOD_MS);
     }
-    
 }
+
+void OUTPUT_ctrl_task(void* arg){
+    bool last_button_state = Main_Button.get();
+    while (1){
+        if (Main_Button.get() != last_button_state){
+            if(!Main_Button.get()){
+                OUTPUT_state = !OUTPUT_state;
+            }
+            last_button_state = Main_Button.get();
+        }
+        POWER_OUT.set(OUTPUT_state);
+        vTaskDelay(5 / portTICK_PERIOD_MS);
+    }
+}
+
+
 
 
 
 extern "C" void app_main(void){
     ESP_ERROR_CHECK(CAN_register.init());
     ESP_ERROR_CHECK(POWER_OUT.init());
-    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config1, &adc1_handle));
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, ADC_CHANNEL_5, &config));
-    ESP_ERROR_CHECK(adc_cali_create_scheme_curve_fitting(&cali_config, &cali_handle));
-
+    ESP_ERROR_CHECK(Main_Button.init());
+    INA226 CurrentSensor(GPIO_NUM_6, GPIO_NUM_7,DEFAULT_INA226_I2C_ADDRESS,400000,I2C_NUM_0);
+    Chip_Temperature_Sensor.init();
+    NTC::init(ADC_CHANNEL_5);
     LP_Core_Load();
     BlackBox::init();
 
     printf("NOW LOGS COUNT: %ld\n", BlackBox::get_count());
     CAN_register.set(false);
     POWER_OUT.set(true);
-    xTaskCreate(screen_task, "screen_task", 2048, NULL, 5, NULL);
 
+    CurrentSensor.SetOperatingMode(INA226::OperatingMode::SHUNT_AND_BUS_CONTINUOUS);
+    CurrentSensor.SetAveragingMode(INA226::AveragingMode::SAMPLE_16);
+    CurrentSensor.SetBusVoltageConversionTime(INA226::ConversionTime::TIME_332_uS);
+    CurrentSensor.SetShuntVoltageConversionTime(INA226::ConversionTime::TIME_332_uS);
+
+    xTaskCreate(screen_task, "screen_task", 2048, NULL, 4, NULL);
+    xTaskCreate(OUTPUT_ctrl_task, "OUTPUT_ctrl_task", 512, NULL, 5, NULL);
 
     while (1){
-
+        float Ctemp = Chip_Temperature_Sensor.getTemperature();
+        float Ntemp = (float)NTC::getTemperature()/100.0f;
+        int shunt = float(CurrentSensor.GetShuntVoltage_uV())/2.25;
+        int voltage = CurrentSensor.GetBusVoltage_mV();
+        printf("Chip Temperature: %.2f C, NTC Temperature: %.2f C, Voltage: %d V, Current: %d mA\n", Ctemp, Ntemp, voltage, shunt);
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
     
-    // BlackBox::add_log(_log);
-    // for (int i = 0; i < BlackBox::get_count(); i++) {
-    //     _log=BlackBox::get_log(i);
-    //     printf("LOG %d: %s\n", i, _log.strlog);
-    // }
 }

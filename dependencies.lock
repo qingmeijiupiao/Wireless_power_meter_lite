@@ -13,9 +13,20 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.20.4
+  zivlow/ina226:
+    component_hash: ce42087d92e984dce1c88b145a827472474578e6330e5370163906444f832a79
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.2'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 0.0.5
 direct_dependencies:
 - idf
 - joltwallet/littlefs
-manifest_hash: 13cac09dcc5f0164a10f04f336731e914a2c875d7c06d8f01ea77ca80c5a4ae4
+- zivlow/ina226
+manifest_hash: b2c4f66ce27c37e6a0bb218b4102b7a4d4ac0bcdfed5637ef96d8f2d6c64a4f1
 target: esp32c6
 version: 2.0.0
