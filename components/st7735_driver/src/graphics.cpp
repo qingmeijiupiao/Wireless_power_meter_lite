@@ -3,19 +3,24 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Fonte 5x7 básica (caracteres ASCII 32-127)
+#ifdef __cplusplus
+using namespace ST7735;
+namespace Graphics {
+#endif
+
+// 基本5x7字体 (ASCII字符 32-127)
 extern const uint8_t font5x7[];
 
 void draw_pixel(uint16_t x, uint16_t y, uint16_t color) {
-    st7735_draw_pixel(x, y, color);
+    ST7735::draw_pixel(x, y, color);
 }
 
 void draw_hline(uint16_t x, uint16_t y, uint16_t w, uint16_t color) {
-    st7735_fill_rect(x, y, w, 1, color);
+    fill_rect(x, y, w, 1, color);
 }
 
 void draw_vline(uint16_t x, uint16_t y, uint16_t h, uint16_t color) {
-    st7735_fill_rect(x, y, 1, h, color);
+    fill_rect(x, y, 1, h, color);
 }
 
 void draw_line(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color) {
@@ -64,7 +69,7 @@ void draw_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color) {
 }
 
 void draw_filled_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color) {
-    st7735_fill_rect(x, y, w, h, color);
+    fill_rect(x, y, w, h, color);
 }
 
 void draw_circle(uint16_t x0, uint16_t y0, uint16_t r, uint16_t color) {
@@ -126,7 +131,7 @@ void draw_filled_circle(uint16_t x0, uint16_t y0, uint16_t r, uint16_t color) {
 }
 
 void draw_char(uint16_t x, uint16_t y, char c, uint16_t color, uint16_t bg, uint8_t size) {
-    if (c < 32 || c > 127) c = '?'; // Substitui caracteres fora do range
+    if (c < 32 || c > 127) c = '?'; // 替换超出范围的字符
     
     uint8_t index = c - 32;
     
@@ -137,24 +142,24 @@ void draw_char(uint16_t x, uint16_t y, char c, uint16_t color, uint16_t bg, uint
                 if (size == 1) {
                     draw_pixel(x + i, y + j, color);
                 } else {
-                    st7735_fill_rect(x + i * size, y + j * size, size, size, color);
+                    fill_rect(x + i * size, y + j * size, size, size, color);
                 }
             } else if (bg != color) {
                 if (size == 1) {
                     draw_pixel(x + i, y + j, bg);
                 } else {
-                    st7735_fill_rect(x + i * size, y + j * size, size, size, bg);
+                    fill_rect(x + i * size, y + j * size, size, size, bg);
                 }
             }
         }
     }
     
-    // Espaço entre caracteres
+    // 字符之间的空格
     if (bg != color) {
         if (size == 1) {
             draw_vline(x + 5, y, 7, bg);
         } else {
-            st7735_fill_rect(x + 5 * size, y, size, 7 * size, bg);
+            fill_rect(x + 5 * size, y, size, 7 * size, bg);
         }
     }
 }
@@ -168,7 +173,7 @@ void draw_string(uint16_t x, uint16_t y, const char *str, uint16_t color, uint16
             cursor_x = x;
         } else {
             draw_char(cursor_x, y, *str, color, bg, size);
-            cursor_x += 6 * size; // 5 pixels + 1 espaço
+            cursor_x += 6 * size; // 5像素 + 1空格
         }
         str++;
     }
@@ -179,6 +184,10 @@ void draw_image_rgb565(uint16_t x, uint16_t y, uint16_t width, uint16_t height, 
         return;
     }
     
-    // Usa a função otimizada do driver ST7735
-    st7735_draw_image(x, y, width, height, image_data);
+    // 使用ST7735驱动的优化函数
+    ST7735::draw_image(x, y, width, height, image_data);
 }
+
+#ifdef __cplusplus
+} // namespace Graphics
+#endif

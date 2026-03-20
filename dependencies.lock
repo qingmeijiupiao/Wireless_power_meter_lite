@@ -27,6 +27,6 @@ direct_dependencies:
 - idf
 - joltwallet/littlefs
 - zivlow/ina226
-manifest_hash: b2c4f66ce27c37e6a0bb218b4102b7a4d4ac0bcdfed5637ef96d8f2d6c64a4f1
+manifest_hash: a1dbf618047c7de3d145604c042806d2c0dfceea10ca70f54b46cf3109538b96
 target: esp32c6
 version: 2.0.0

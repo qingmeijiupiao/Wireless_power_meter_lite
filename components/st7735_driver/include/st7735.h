@@ -1,9 +1,9 @@
 /**
  * @file st7735.h
- * @brief Driver para display ST7735S (Adafruit Mini TFT 0.96" 160x80)
+ * @brief ST7735S显示屏驱动
  * 
- * API pública para controlar o display TFT ST7735S via SPI.
- * Inclui funções para desenhar pixels, retângulos, texto e mais.
+ * 通过SPI控制TFT ST7735S显示屏的公共API。
+ * 包含绘制像素、矩形、文本等函数。
  * 
  * @example
  * ```c
@@ -27,143 +27,149 @@
 #include "esp_err.h"
 
 #ifdef __cplusplus
-extern "C" {
+namespace ST7735 {
 #endif
 
-/* ==================== Configuração do Display ==================== */
+/* ==================== 显示屏配置 ==================== */
 
-/** Largura do display em modo landscape (pixels) */
-#define ST7735_WIDTH  160
+/** 显示屏在横向模式下的宽度（像素） */
+static constexpr uint16_t WIDTH = 160;
 
-/** Altura do display em modo landscape (pixels) */
-#define ST7735_HEIGHT 80
+/** 显示屏在横向模式下的高度（像素） */
+static constexpr uint16_t HEIGHT = 80;
 
-/* ==================== Cores RGB565 ==================== */
+/* ==================== RGB565颜色 ==================== */
 
-#define ST7735_BLACK   0x0000  /**< Preto */
-#define ST7735_WHITE   0xFFFF  /**< Branco */
-#define ST7735_RED     0xF800  /**< Vermelho */
-#define ST7735_GREEN   0x07E0  /**< Verde */
-#define ST7735_BLUE    0x001F  /**< Azul */
-#define ST7735_CYAN    0x07FF  /**< Ciano */
-#define ST7735_MAGENTA 0xF81F  /**< Magenta */
-#define ST7735_YELLOW  0xFFE0  /**< Amarelo */
-#define ST7735_ORANGE  0xFC00  /**< Laranja */
-#define ST7735_GRAY    0x7BEF  /**< Cinzento */
+static constexpr uint16_t BLACK    = 0x0000;  /**< 黑色 */
+static constexpr uint16_t WHITE    = 0xFFFF;  /**< 白色 */
+static constexpr uint16_t RED      = 0xF800;  /**< 红色 */
+static constexpr uint16_t GREEN    = 0x07E0;  /**< 绿色 */
+static constexpr uint16_t BLUE     = 0x001F;  /**< 蓝色 */
+static constexpr uint16_t CYAN     = 0x07FF;  /**< 青色 */
+static constexpr uint16_t MAGENTA  = 0xF81F;  /**< 洋红色 */
+static constexpr uint16_t YELLOW   = 0xFFE0;  /**< 黄色 */
+static constexpr uint16_t ORANGE   = 0xFC00;  /**< 橙色 */
+static constexpr uint16_t GRAY     = 0x7BEF;  /**< 灰色 */
 
-/** Macro para criar cor RGB565 a partir de componentes RGB (0-255) */
-#define ST7735_RGB565(r, g, b) ((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3))
-
-/* ==================== Estruturas ==================== */
-#define ST7735_COLSTART 0
-#define ST7735_ROWSTART 24
-
-/**
- * @brief Configuração de hardware do display
- */
-typedef struct {
-    int mosi_io_num;           /**< Pino GPIO para MOSI (SI no display) */
-    int sclk_io_num;           /**< Pino GPIO para Clock (SCK) */
-    int cs_io_num;             /**< Pino GPIO para Chip Select (TCS) */
-    int dc_io_num;             /**< Pino GPIO para Data/Command (DC) */
-    int rst_io_num;            /**< Pino GPIO para Reset (RST) */
-    int bl_io_num;             /**< Pino GPIO para Backlight (Lite), -1 se não usado */
-    spi_host_device_t host_id; /**< Host SPI (SPI2_HOST ou SPI3_HOST) */
-} st7735_config_t;
-
-/* ==================== Funções Públicas ==================== */
-
-/**
- * @brief Inicializa o display ST7735
- * @param cfg Ponteiro para estrutura de configuração
- * @return ESP_OK em caso de sucesso, código de erro caso contrário
- */
-esp_err_t st7735_init(const st7735_config_t *cfg);
-
-/**
- * @brief Desenha um pixel
- * @param x Coordenada X (0 a width-1)
- * @param y Coordenada Y (0 a height-1)
- * @param color Cor em formato RGB565
- */
-void st7735_draw_pixel(uint16_t x, uint16_t y, uint16_t color);
-
-/**
- * @brief Preenche um retângulo com uma cor
- * @param x Coordenada X do canto superior esquerdo
- * @param y Coordenada Y do canto superior esquerdo
- * @param w Largura do retângulo
- * @param h Altura do retângulo
- * @param color Cor em formato RGB565
- */
-void st7735_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
-
-/**
- * @brief Preenche todo o ecrã com uma cor
- * @param color Cor em formato RGB565
- */
-void st7735_fill_screen(uint16_t color);
-
-/**
- * @brief Define a rotação do display
- * @param rotation Valor de 0 a 3:
- *        - 0: Portrait (80x160)
- *        - 1: Landscape (160x80) [padrão]
- *        - 2: Portrait invertido (80x160)
- *        - 3: Landscape invertido (160x80)
- */
-void st7735_set_rotation(uint8_t rotation);
-
-/**
- * @brief Inverte as cores do display
- * @param invert true para inverter, false para normal
- */
-void st7735_invert_display(bool invert);
-
-/**
- * @brief Desenha um caractere
- * @param x Coordenada X
- * @param y Coordenada Y
- * @param c Caractere ASCII (32-127)
- * @param color Cor do texto
- * @param bg Cor de fundo
- * @param size Escala (1 = 5x7, 2 = 10x14, etc.)
- */
-void st7735_draw_char(uint16_t x, uint16_t y, char c, uint16_t color, uint16_t bg, uint8_t size);
-
-/**
- * @brief Desenha uma string de texto
- * @param x Coordenada X inicial
- * @param y Coordenada Y inicial
- * @param str String terminada em NULL
- * @param color Cor do texto
- * @param bg Cor de fundo
- * @param size Escala do texto
- */
-void st7735_draw_string(uint16_t x, uint16_t y, const char *str, uint16_t color, uint16_t bg, uint8_t size);
-
-/**
- * @brief Obtém a largura atual do display
- * @return Largura em pixels (depende da rotação)
- */
-uint16_t st7735_get_width(void);
-
-/**
- * @brief Obtém a altura atual do display
- * @return Altura em pixels (depende da rotação)
- */
-uint16_t st7735_get_height(void);
-
-/**
- * @brief Desenha uma imagem RGB565 no display
- * @param x Coordenada X do canto superior esquerdo
- * @param y Coordenada Y do canto superior esquerdo
- * @param w Largura da imagem
- * @param h Altura da imagem
- * @param data Ponteiro para array de pixels RGB565 (big-endian)
- */
-void st7735_draw_image(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t *data);
-
-#ifdef __cplusplus
+/** 从RGB分量（0-255）创建RGB565颜色的宏 */
+static constexpr uint16_t RGB565(uint8_t r, uint8_t g, uint8_t b) {
+    return (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
 }
+
+/* ==================== 结构体 ==================== */
+static constexpr uint8_t COLSTART = 0;
+static constexpr uint8_t ROWSTART = 24;
+
+/**
+ * @brief 显示屏硬件配置
+ */
+struct Config {
+    int mosi_io_num;           /**< MOSI的GPIO引脚（显示屏上的SI） */
+    int sclk_io_num;           /**< 时钟的GPIO引脚（SCK） */
+    int cs_io_num;             /**< 片选的GPIO引脚（TCS） */
+    int dc_io_num;             /**< 数据/命令的GPIO引脚（DC） */
+    int rst_io_num;            /**< 复位的GPIO引脚（RST） */
+    int bl_io_num;             /**< 背光的GPIO引脚（Lite），-1表示未使用 */
+    spi_host_device_t host_id; /**< SPI主机（SPI2_HOST或SPI3_HOST） */
+};
+
+/* ==================== 公共函数 ==================== */
+
+/**
+ * @brief 初始化ST7735显示屏
+ * @param cfg 指向配置结构的指针
+ * @return 成功返回ESP_OK，否则返回错误代码
+ */
+esp_err_t init(const Config *cfg);
+
+/**
+ * @brief 绘制一个像素
+ * @param x X坐标（0到width-1）
+ * @param y Y坐标（0到height-1）
+ * @param color RGB565格式的颜色
+ */
+void draw_pixel(uint16_t x, uint16_t y, uint16_t color);
+
+/**
+ * @brief 用颜色填充矩形
+ * @param x 左上角的X坐标
+ * @param y 左上角的Y坐标
+ * @param w 矩形的宽度
+ * @param h 矩形的高度
+ * @param color RGB565格式的颜色
+ */
+void fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
+
+/**
+ * @brief 用颜色填充整个屏幕
+ * @param color RGB565格式的颜色
+ */
+void fill_screen(uint16_t color);
+
+/**
+ * @brief 设置显示屏的旋转方向
+ * @param rotation 0到3的值：
+ *        - 0: 纵向（80x160）
+ *        - 1: 横向（160x80）[默认]
+ *        - 2: 反向纵向（80x160）
+ *        - 3: 反向横向（160x80）
+ */
+void set_rotation(uint8_t rotation);
+
+/**
+ * @brief 反转显示屏的颜色
+ * @param invert true表示反转，false表示正常
+ */
+void invert_display(bool invert);
+
+/**
+ * @brief 绘制一个字符
+ * @param x X坐标
+ * @param y Y坐标
+ * @param c ASCII字符（32-127）
+ * @param color 文本颜色
+ * @param bg 背景颜色
+ * @param size 缩放比例（1 = 5x7, 2 = 10x14, 等）
+ */
+void draw_char(uint16_t x, uint16_t y, char c, uint16_t color, uint16_t bg, uint8_t size);
+
+/**
+ * @brief 绘制文本字符串
+ * @param x 起始X坐标
+ * @param y 起始Y坐标
+ * @param str 以NULL结尾的字符串
+ * @param color 文本颜色
+ * @param bg 背景颜色
+ * @param size 文本缩放比例
+ */
+void draw_string(uint16_t x, uint16_t y, const char *str, uint16_t color, uint16_t bg, uint8_t size);
+
+/**
+ * @brief 获取当前显示屏的宽度
+ * @return 宽度（像素）（取决于旋转方向）
+ */
+uint16_t get_width(void);
+
+/**
+ * @brief 获取当前显示屏的高度
+ * @return 高度（像素）（取决于旋转方向）
+ */
+uint16_t get_height(void);
+
+/**
+ * @brief 在显示屏上绘制RGB565图像
+ * @param x 左上角的X坐标
+ * @param y 左上角的Y坐标
+ * @param w 图像的宽度
+ * @param h 图像的高度
+ * @param data 指向RGB565像素数组的指针（大端序）
+ */
+void draw_image(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t *data);
+
+/**
+ * @brief 同步双缓冲区，将当前缓冲区的内容发送到显示屏
+ */
+void sync_buffers();
+#ifdef __cplusplus
+} // namespace ST7735
 #endif
