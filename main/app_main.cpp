@@ -44,31 +44,38 @@ st7735_config_t cfg = {
 bool OUTPUT_state = false;
 TemperatureSensor_t Chip_Temperature_Sensor;
 
+struct main_state_t{
+    float voltage;
+    float current;
+    bool OUTPUT_state;
+    float esp_temp;
+    float ntc_temp;
+} main_state;
 
 
 void screen_task(void* arg){
     st7735_init(&cfg);
 
-    
-    //st7735_fill_screen(ST7735_RGB565(0, 0, 0));
+    uint32_t background_color=ST7735_RGB565(0, 0, 0);
+    st7735_fill_screen(background_color);
     while (1){
         //st7735_fill_rect(-1, -2, ST7735_WIDTH, ST7735_HEIGHT, ST7735_YELLOW);
-        uint32_t background_color = ST7735_RGB565(0, 0, 0);
-        if(OUTPUT_state){
-            background_color=ST7735_RGB565(0, 255, 0);
-        }else{
-            background_color=ST7735_RGB565(255, 0, 0);
-        }
+        // if(OUTPUT_state){
+        //     background_color=ST7735_RGB565(0, 255, 0);
+        // }else{
+        //     background_color=ST7735_RGB565(255, 0, 0);
+        // }
         
-        int Ctemp = Chip_Temperature_Sensor.getTemperature();
-        int Ntemp = NTC::getTemperature()/100;
         char temp_str[16];
-        snprintf(temp_str, sizeof(temp_str), "C: %d", Ctemp);
-        st7735_fill_screen(background_color);
+        snprintf(temp_str, sizeof(temp_str), "C: %.2f C", main_state.esp_temp);
+        //st7735_fill_screen(background_color);
+        st7735_draw_string(10, 0, temp_str,ST7735_RGB565(255, 255, 255),background_color,2);
+        snprintf(temp_str, sizeof(temp_str), "N: %.2f C", main_state.ntc_temp);
         st7735_draw_string(10, 20, temp_str,ST7735_RGB565(255, 255, 255),background_color,2);
-        snprintf(temp_str, sizeof(temp_str), "N: %d", Ntemp);
+        snprintf(temp_str, sizeof(temp_str), "V: %.2f V", main_state.voltage);
         st7735_draw_string(10, 40, temp_str,ST7735_RGB565(255, 255, 255),background_color,2);
-        
+        snprintf(temp_str, sizeof(temp_str), "I: %.2f A", main_state.current);
+        st7735_draw_string(10, 60, temp_str,ST7735_RGB565(255, 255, 255),background_color,2);
         vTaskDelay(20 / portTICK_PERIOD_MS);
     }
 }
@@ -114,11 +121,16 @@ extern "C" void app_main(void){
     xTaskCreate(OUTPUT_ctrl_task, "OUTPUT_ctrl_task", 512, NULL, 5, NULL);
 
     while (1){
-        float Ctemp = Chip_Temperature_Sensor.getTemperature();
-        float Ntemp = (float)NTC::getTemperature()/100.0f;
-        int shunt = float(CurrentSensor.GetShuntVoltage_uV())/2.25;
-        int voltage = CurrentSensor.GetBusVoltage_mV();
-        printf("Chip Temperature: %.2f C, NTC Temperature: %.2f C, Voltage: %d V, Current: %d mA\n", Ctemp, Ntemp, voltage, shunt);
+        // float Ctemp = Chip_Temperature_Sensor.getTemperature();
+        // float Ntemp = (float)NTC::getTemperature()/100.0f;
+        // int shunt = float(CurrentSensor.GetShuntVoltage_uV())/2.25;
+        // int voltage = CurrentSensor.GetBusVoltage_mV();
+        main_state.voltage = CurrentSensor.GetBusVoltage_mV()/1000.0f;
+        main_state.current = float(CurrentSensor.GetShuntVoltage_uV())/2250.f;
+        main_state.esp_temp = Chip_Temperature_Sensor.getTemperature();
+        main_state.ntc_temp = (float)NTC::getTemperature()/100.0f;
+
+        printf("Chip Temperature: %.2f C, NTC Temperature: %.2f C, Voltage: %.2f V, Current: %.2f A\n", main_state.esp_temp, main_state.ntc_temp, main_state.voltage, main_state.current);
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
     
