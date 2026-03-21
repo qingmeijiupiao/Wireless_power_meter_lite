@@ -18,17 +18,17 @@
  * ```
  */
 
-#pragma once
+#ifndef __ST7735_H__
+#define __ST7735_H__
 
 #include <stdint.h>
 #include <stdbool.h>
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
 #include "esp_err.h"
+#include "color.h"
 
-#ifdef __cplusplus
 namespace ST7735 {
-#endif
 
 /* ==================== 显示屏配置 ==================== */
 
@@ -38,25 +38,8 @@ static constexpr uint16_t WIDTH = 160;
 /** 显示屏在横向模式下的高度（像素） */
 static constexpr uint16_t HEIGHT = 80;
 
-/* ==================== RGB565颜色 ==================== */
 
-static constexpr uint16_t BLACK    = 0x0000;  /**< 黑色 */
-static constexpr uint16_t WHITE    = 0xFFFF;  /**< 白色 */
-static constexpr uint16_t RED      = 0xF800;  /**< 红色 */
-static constexpr uint16_t GREEN    = 0x07E0;  /**< 绿色 */
-static constexpr uint16_t BLUE     = 0x001F;  /**< 蓝色 */
-static constexpr uint16_t CYAN     = 0x07FF;  /**< 青色 */
-static constexpr uint16_t MAGENTA  = 0xF81F;  /**< 洋红色 */
-static constexpr uint16_t YELLOW   = 0xFFE0;  /**< 黄色 */
-static constexpr uint16_t ORANGE   = 0xFC00;  /**< 橙色 */
-static constexpr uint16_t GRAY     = 0x7BEF;  /**< 灰色 */
-
-/** 从RGB分量（0-255）创建RGB565颜色的宏 */
-static constexpr uint16_t RGB565(uint8_t r, uint8_t g, uint8_t b) {
-    return (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
-}
-
-/* ==================== 结构体 ==================== */
+/* ==================== 像素偏移 ==================== */
 static constexpr uint8_t COLSTART = 0;
 static constexpr uint8_t ROWSTART = 24;
 
@@ -88,7 +71,7 @@ esp_err_t init(const Config *cfg);
  * @param y Y坐标（0到height-1）
  * @param color RGB565格式的颜色
  */
-void draw_pixel(uint16_t x, uint16_t y, uint16_t color);
+void draw_pixel(uint16_t x, uint16_t y, color_t color);
 
 /**
  * @brief 用颜色填充矩形
@@ -98,13 +81,13 @@ void draw_pixel(uint16_t x, uint16_t y, uint16_t color);
  * @param h 矩形的高度
  * @param color RGB565格式的颜色
  */
-void fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
+void fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, color_t color);
 
 /**
  * @brief 用颜色填充整个屏幕
  * @param color RGB565格式的颜色
  */
-void fill_screen(uint16_t color);
+void fill_screen(color_t color);
 
 /**
  * @brief 设置显示屏的旋转方向
@@ -131,7 +114,7 @@ void invert_display(bool invert);
  * @param bg 背景颜色
  * @param size 缩放比例（1 = 5x7, 2 = 10x14, 等）
  */
-void draw_char(uint16_t x, uint16_t y, char c, uint16_t color, uint16_t bg, uint8_t size);
+void draw_char(uint16_t x, uint16_t y, char c, color_t color, color_t bg, uint8_t size);
 
 /**
  * @brief 绘制文本字符串
@@ -142,7 +125,7 @@ void draw_char(uint16_t x, uint16_t y, char c, uint16_t color, uint16_t bg, uint
  * @param bg 背景颜色
  * @param size 文本缩放比例
  */
-void draw_string(uint16_t x, uint16_t y, const char *str, uint16_t color, uint16_t bg, uint8_t size);
+void draw_string(uint16_t x, uint16_t y, const char *str, color_t color, color_t bg, uint8_t size);
 
 /**
  * @brief 获取当前显示屏的宽度
@@ -170,6 +153,7 @@ void draw_image(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t *
  * @brief 同步双缓冲区，将当前缓冲区的内容发送到显示屏
  */
 void sync_buffers();
-#ifdef __cplusplus
+
 } // namespace ST7735
+
 #endif

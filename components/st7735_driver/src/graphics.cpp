@@ -2,11 +2,8 @@
 #include "st7735.h"
 #include <stdlib.h>
 #include <string.h>
-
-#ifdef __cplusplus
 using namespace ST7735;
 namespace Graphics {
-#endif
 
 // 基本5x7字体 (ASCII字符 32-127)
 extern const uint8_t font5x7[];
@@ -188,6 +185,4 @@ void draw_image_rgb565(uint16_t x, uint16_t y, uint16_t width, uint16_t height, 
     ST7735::draw_image(x, y, width, height, image_data);
 }
 
-#ifdef __cplusplus
 } // namespace Graphics
-#endif

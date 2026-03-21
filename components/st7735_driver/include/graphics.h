@@ -1,11 +1,10 @@
-#pragma once
-
+#ifndef __GRAPHICS_H__
+#define __GRAPHICS_H__
 #include <stdint.h>
 #include "st7735.h"
 
-#ifdef __cplusplus
 namespace Graphics {
-#endif
+
 
 // 图形函数原型
 void draw_pixel(uint16_t x, uint16_t y, uint16_t color);
@@ -22,6 +21,5 @@ void draw_char(uint16_t x, uint16_t y, char c, uint16_t color, uint16_t bg, uint
 void draw_string(uint16_t x, uint16_t y, const char *str, uint16_t color, uint16_t bg, uint8_t size);
 void draw_image_rgb565(uint16_t x, uint16_t y, uint16_t width, uint16_t height, const uint16_t *image_data);
 
-#ifdef __cplusplus
 } // namespace Graphics
 #endif

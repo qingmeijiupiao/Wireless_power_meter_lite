@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __ST7735_COMMANDS_H__
+#define __ST7735_COMMANDS_H__
 
 // ST7735命令定义
 #define ST7735_NOP       0x00
@@ -60,3 +61,5 @@
 #define ST7735_MADCTL_RGB 0x00  // RGB顺序
 #define ST7735_MADCTL_BGR 0x08  // BGR顺序
 #define ST7735_MADCTL_MH  0x04  // 水平刷新顺序
+
+#endif

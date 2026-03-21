@@ -17,7 +17,7 @@
 #include "esp_log.h"
 #include "load_lp.hpp"
 #include "st7735.h"
-
+#include "main_ui.h"
 #ifdef __cplusplus
 #endif
 #include "cpp_gpio_driver.hpp"
@@ -59,28 +59,31 @@ struct main_state_t{
 void screen_task(void* arg){
     ST7735::init(&cfg);
 
-    uint32_t background_color=ST7735::RGB565(0, 0, 0);
+    ST7735::color_t background_color=ST7735::GREEN;
+    ST7735::color_t text_color=ST7735::GREEN;
     ST7735::fill_screen(background_color);
+    auto ticks = xTaskGetTickCount();
+    constexpr int fps = 60;
     while (1){
-        //ST7735::fill_rect(-1, -2, ST7735::WIDTH, ST7735::HEIGHT, ST7735::YELLOW);
-        if(OUTPUT_state){
-            background_color=ST7735::RGB565(0, 255, 0);
-        }else{
-            background_color=ST7735::RGB565(255, 0, 0);
-        }
-        
-        char temp_str[16];
-        snprintf(temp_str, sizeof(temp_str), "C: %.2f C", main_state.esp_temp);
-        ST7735::fill_screen(background_color);
-        ST7735::draw_string(10, 0, temp_str,ST7735::RGB565(255, 255, 255),background_color,2);
-        snprintf(temp_str, sizeof(temp_str), "N: %.2f C", main_state.ntc_temp);
-        ST7735::draw_string(10, 20, temp_str,ST7735::RGB565(255, 255, 255),background_color,2);
-        snprintf(temp_str, sizeof(temp_str), "V: %.2f V", main_state.voltage);
-        ST7735::draw_string(10, 40, temp_str,ST7735::RGB565(255, 255, 255),background_color,2);
-        snprintf(temp_str, sizeof(temp_str), "I: %.2f A", main_state.current);
-        ST7735::draw_string(10, 60, temp_str,ST7735::RGB565(255, 255, 255),background_color,2);
+        // if(OUTPUT_state){
+        //     background_color=ST7735::BLACK;
+        // }else{
+        //     background_color=ST7735::BLACK;
+        // }
+        // ST7735::fill_screen(background_color);
+        // char temp_str[16];
+        // snprintf(temp_str, sizeof(temp_str), "C: %.2f C", main_state.esp_temp);
+        // ST7735::fill_screen(background_color);
+        // ST7735::draw_string(10, 2, temp_str,text_color,background_color,2);
+        // snprintf(temp_str, sizeof(temp_str), "N: %.2f C", main_state.ntc_temp);
+        // ST7735::draw_string(10, 22, temp_str,text_color,background_color,2);
+        // snprintf(temp_str, sizeof(temp_str), "V: %.2f V", main_state.voltage);
+        // ST7735::draw_string(10, 42, temp_str,text_color,background_color,2);
+        // snprintf(temp_str, sizeof(temp_str), "I: %.2f A", main_state.current);
+        // ST7735::draw_string(10, 62, temp_str,text_color,background_color,2);
+        ST7735::draw_image(0, 0, MAIN_UI_WIDTH, MAIN_UI_HEIGHT, main_ui_data);
         ST7735::sync_buffers();
-        vTaskDelay(20 / portTICK_PERIOD_MS);
+        vTaskDelayUntil(&ticks, configTICK_RATE_HZ / fps);
     }
 }
 
@@ -134,8 +137,8 @@ extern "C" void app_main(void){
         main_state.esp_temp = Chip_Temperature_Sensor.getTemperature();
         main_state.ntc_temp = (float)NTC::getTemperature()/100.0f;
 
-        printf("Chip Temperature: %.2f C, NTC Temperature: %.2f C, Voltage: %.2f V, Current: %.2f A\n", main_state.esp_temp, main_state.ntc_temp, main_state.voltage, main_state.current);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        //printf("Chip Temperature: %.2f C, NTC Temperature: %.2f C, Voltage: %.2f V, Current: %.2f A\n", main_state.esp_temp, main_state.ntc_temp, main_state.voltage, main_state.current);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
     }
     
 }

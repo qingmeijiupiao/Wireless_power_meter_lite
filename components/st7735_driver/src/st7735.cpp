@@ -13,9 +13,9 @@
 #include "font5x7.h"
 #include <algorithm>
 
-#ifdef __cplusplus
+#define U16_LITTLE_TO_BIG(x) (((x) >> 8)&0xFF) | (((x) << 8)&0xFF)
+
 namespace ST7735 {
-#endif
 
 static const char *TAG = "ST7735";
 
@@ -162,26 +162,26 @@ esp_err_t init(const Config *cfg) {
     return ESP_OK;
 }
 
-void fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color) {
+void fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, color_t color) {
     if (x >= display_width || y >= display_height) return;
     if (x + w > display_width) w = display_width - x;
     if (y + h > display_height) h = display_height - y;
     
     for (uint16_t row = y; row < y + h; row++) {
         for (uint16_t col = x; col < x + w; col++) {
-            double_buffer.data[double_buffer.current_buffer][row * display_width + col] = color;
+            double_buffer.data[double_buffer.current_buffer][row * display_width + col] = color.get_color_raw_big_endian();
         }
     }
 }
 
-void draw_pixel(uint16_t x, uint16_t y, uint16_t color) {
+void draw_pixel(uint16_t x, uint16_t y, color_t color) {
     if (x >= display_width || y >= display_height) return;
-    double_buffer.data[double_buffer.current_buffer][y * display_width + x] = color;
+    double_buffer.data[double_buffer.current_buffer][y * display_width + x] = color.get_color_raw_big_endian();
 }
 
-void fill_screen(uint16_t color) {
+void fill_screen(color_t color) {
     //ST7735::fill_rect(0, 0, display_width, display_height, color);
-    std::fill(double_buffer.data[double_buffer.current_buffer], double_buffer.data[double_buffer.current_buffer]+display_width*display_height, color);
+    std::fill(double_buffer.data[double_buffer.current_buffer], double_buffer.data[double_buffer.current_buffer]+display_width*display_height, color.get_color_raw_big_endian());
 }
 
 void set_rotation(uint8_t rotation) {
@@ -201,20 +201,20 @@ void invert_display(bool invert) {
     write_command(invert ? ST7735_INVON : ST7735_INVOFF);
 }
 
-void draw_char(uint16_t x, uint16_t y, char c, uint16_t color, uint16_t bg, uint8_t size) {
+void draw_char(uint16_t x, uint16_t y, char c, color_t color, color_t bg, uint8_t size) {
     if (c < 32 || c > 127) c = '?';
     uint8_t idx = c - 32;
     for (uint8_t col = 0; col < 5; col++) {
         uint8_t line = font5x7[idx * 5 + col];
         for (uint8_t row = 0; row < 7; row++) {
-            uint16_t px = (line & (1 << row)) ? color : bg;
+            color_t px = (line & (1 << row)) ? color: bg;
             if (size == 1) ST7735::draw_pixel(x + col, y + row, px);
             else ST7735::fill_rect(x + col*size, y + row*size, size, size, px);
         }
     }
 }
 
-void draw_string(uint16_t x, uint16_t y, const char *str, uint16_t color, uint16_t bg, uint8_t size) {
+void draw_string(uint16_t x, uint16_t y, const char *str, color_t color, color_t bg, uint8_t size) {
     uint16_t cx = x;
     while (*str) {
         if (*str == '\n') { y += 8 * size; cx = x; }
@@ -235,11 +235,9 @@ void draw_image(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t *
     
     for (uint16_t row = 0; row < h; row++) {
         for (uint16_t col = 0; col < w; col++) {
-            double_buffer.data[double_buffer.current_buffer][(y + row) * display_width + (x + col)] = data[row * w + col];
+            double_buffer.data[double_buffer.current_buffer][(y + row) * display_width + (x + col)] = U16_LITTLE_TO_BIG(data[row * w + col]);
         }
     }
 }
 
-#ifdef __cplusplus
 } // namespace ST7735
-#endif
