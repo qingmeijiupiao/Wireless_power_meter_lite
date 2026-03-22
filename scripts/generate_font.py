@@ -147,7 +147,7 @@ def generate_font_hpp(font_path, font_size, font_name="Font", output_file=None):
             canvas = Image.new('L', (w, font_height), 0)
 
             # Vertical centering
-            y_offset = (font_height - char_h) // 2
+            y_offset = font_height - char_h
 
             # Paste character ROI at (x0, y_offset)
             # x0 is the left bearing (distance from drawing origin to the left edge of character)
