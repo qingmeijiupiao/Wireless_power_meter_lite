@@ -27,7 +27,7 @@
 #include "driver/gpio.h"
 #include "esp_err.h"
 #include "color.h"
-
+#include "Font.h"
 namespace ST7735 {
 
 /* ==================== 显示屏配置 ==================== */
@@ -38,6 +38,12 @@ static constexpr uint16_t WIDTH = 160;
 /** 显示屏在横向模式下的高度（像素） */
 static constexpr uint16_t HEIGHT = 80;
 
+enum class Rotation {
+    Vertical = 0,
+    Horizontal = 1,
+    VerticalMirror = 2,
+    HorizontalMirror = 3
+};
 
 /* ==================== 像素偏移 ==================== */
 static constexpr uint8_t COLSTART = 0;
@@ -61,9 +67,10 @@ struct Config {
 /**
  * @brief 初始化ST7735显示屏
  * @param cfg 指向配置结构的指针
+ * @param rotation 旋转方向
  * @return 成功返回ESP_OK，否则返回错误代码
  */
-esp_err_t init(const Config *cfg);
+esp_err_t init(const Config *cfg, Rotation rotation=Rotation::Horizontal);
 
 /**
  * @brief 绘制一个像素
@@ -91,13 +98,9 @@ void fill_screen(color_t color);
 
 /**
  * @brief 设置显示屏的旋转方向
- * @param rotation 0到3的值：
- *        - 0: 纵向（80x160）
- *        - 1: 横向（160x80）[默认]
- *        - 2: 反向纵向（80x160）
- *        - 3: 反向横向（160x80）
+ * @param rotation 旋转方向
  */
-void set_rotation(uint8_t rotation);
+void set_rotation(Rotation rotation);
 
 /**
  * @brief 反转显示屏的颜色
@@ -114,7 +117,7 @@ void invert_display(bool invert);
  * @param bg 背景颜色
  * @param size 缩放比例（1 = 5x7, 2 = 10x14, 等）
  */
-void draw_char(uint16_t x, uint16_t y, char c, color_t color, color_t bg, uint8_t size);
+void draw_char(uint16_t x, uint16_t y, char c, color_t color, color_t bg,const Font_t& font);
 
 /**
  * @brief 绘制文本字符串
@@ -125,7 +128,7 @@ void draw_char(uint16_t x, uint16_t y, char c, color_t color, color_t bg, uint8_
  * @param bg 背景颜色
  * @param size 文本缩放比例
  */
-void draw_string(uint16_t x, uint16_t y, const char *str, color_t color, color_t bg, uint8_t size);
+void draw_string(uint16_t x, uint16_t y, const char *str, color_t color, color_t bg,const Font_t& font);
 
 /**
  * @brief 获取当前显示屏的宽度

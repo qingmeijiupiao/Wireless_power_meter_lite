@@ -27,12 +27,18 @@
 #include "ESPChipTemperatureSensor.hpp"
 
 #include "ina226_interface.h"
+#include "HXC_TWAI.hpp"
+#include "DENGB.hpp"
 
-CppGpioDriver<GPIO_NUM_16, GpioMode::OUTPUT> CAN_register;
+
 CppGpioDriver<GPIO_NUM_21, GpioMode::OUTPUT> POWER_OUT;
 CppGpioDriver<GPIO_NUM_17, GpioMode::INPUT_PULLUP> Main_Button;
 
 
+HXC_TWAI CAN_BUS(18,14,CAN_RATE::CAN_RATE_1MBIT);
+
+
+CppGpioDriver<GPIO_NUM_16, GpioMode::OUTPUT> CAN_register;
 
 ST7735::Config cfg = {
     .mosi_io_num = 4,
@@ -57,14 +63,17 @@ struct main_state_t{
 
 
 void screen_task(void* arg){
-    ST7735::init(&cfg);
-
-    ST7735::color_t background_color=ST7735::GREEN;
-    ST7735::color_t text_color=ST7735::GREEN;
+    ST7735::init(&cfg,ST7735::Rotation::Horizontal);
+    ST7735::color_t background_color=ST7735::BLACK;
+    ST7735::color_t text_color=ST7735::WHITE;
     ST7735::fill_screen(background_color);
     auto ticks = xTaskGetTickCount();
     constexpr int fps = 60;
+
     while (1){
+        // if(OUTPUT_state){
+        //     background_color=ST7735::BLACK;
+        // }else{
         // if(OUTPUT_state){
         //     background_color=ST7735::BLACK;
         // }else{
@@ -81,9 +90,11 @@ void screen_task(void* arg){
         // ST7735::draw_string(10, 42, temp_str,text_color,background_color,2);
         // snprintf(temp_str, sizeof(temp_str), "I: %.2f A", main_state.current);
         // ST7735::draw_string(10, 62, temp_str,text_color,background_color,2);
-        ST7735::draw_image(0, 0, MAIN_UI_WIDTH, MAIN_UI_HEIGHT, main_ui_data);
+        //ST7735::draw_image(0, 0, MAIN_UI_WIDTH, MAIN_UI_HEIGHT, main_ui_data);
+        ST7735::draw_string(2,2,"Hello World",text_color,background_color,DENGB);
         ST7735::sync_buffers();
         vTaskDelayUntil(&ticks, configTICK_RATE_HZ / fps);
+
     }
 }
 
@@ -116,7 +127,7 @@ extern "C" void app_main(void){
     BlackBox::init();
 
     printf("NOW LOGS COUNT: %ld\n", BlackBox::get_count());
-    CAN_register.set(false);
+    
     POWER_OUT.set(true);
 
     CurrentSensor.SetOperatingMode(INA226::OperatingMode::SHUNT_AND_BUS_CONTINUOUS);
@@ -126,6 +137,13 @@ extern "C" void app_main(void){
 
     xTaskCreate(screen_task, "screen_task", 8192, NULL, 4, NULL);
     xTaskCreate(OUTPUT_ctrl_task, "OUTPUT_ctrl_task", 512, NULL, 5, NULL);
+
+    CAN_BUS.setup();
+    CAN_register.set(true);
+    // CAN_BUS.add_can_receive_callback_func(0x123, [](HXC_CAN_message_t* message){
+    //     printf("Received message: %08lx\n", message->identifier);
+    // });
+
 
     while (1){
         // float Ctemp = Chip_Temperature_Sensor.getTemperature();
@@ -137,7 +155,7 @@ extern "C" void app_main(void){
         main_state.esp_temp = Chip_Temperature_Sensor.getTemperature();
         main_state.ntc_temp = (float)NTC::getTemperature()/100.0f;
 
-        //printf("Chip Temperature: %.2f C, NTC Temperature: %.2f C, Voltage: %.2f V, Current: %.2f A\n", main_state.esp_temp, main_state.ntc_temp, main_state.voltage, main_state.current);
+        printf("Chip Temperature: %.2f C, NTC Temperature: %.2f C, Voltage: %.2f V, Current: %.2f A\n", main_state.esp_temp, main_state.ntc_temp, main_state.voltage, main_state.current);
         vTaskDelay(100 / portTICK_PERIOD_MS);
     }
     

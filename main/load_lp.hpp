@@ -11,7 +11,7 @@ extern "C" {
 
 void LP_Core_Load(void){
     esp_err_t err;
-    ESP_LOGI(LPTAG, "main core start load lp core...");
+    ESP_LOGD(LPTAG, "main core start load lp core...");
     // 加载 LP 核二进制文件
     err = ulp_lp_core_load_binary(bin_start, bin_end - bin_start);
     if (err != ESP_OK) {
@@ -20,11 +20,10 @@ void LP_Core_Load(void){
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
     }
-    ESP_LOGI(LPTAG, "lp core load binary success...");
+    ESP_LOGD(LPTAG, "lp core load binary success...");
     // 配置 LP 核运行参数
-    ulp_lp_core_cfg_t cfg = {
-        .wakeup_source = ULP_LP_CORE_WAKEUP_SOURCE_HP_CPU,
-    };
+    ulp_lp_core_cfg_t cfg;
+    cfg.wakeup_source = ULP_LP_CORE_WAKEUP_SOURCE_HP_CPU;
     err = ulp_lp_core_run(&cfg);
     if (err != ESP_OK) {
         while(1){
@@ -32,5 +31,5 @@ void LP_Core_Load(void){
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
     }
-    ESP_LOGI(LPTAG, "lp core run success...");
+    ESP_LOGD(LPTAG, "lp core run success...");
 }

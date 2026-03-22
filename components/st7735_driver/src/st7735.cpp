@@ -10,7 +10,6 @@
 #include "esp_heap_caps.h"
 #include "st7735.h"
 #include "st7735_commands.h"
-#include "font5x7.h"
 #include <algorithm>
 
 #define U16_LITTLE_TO_BIG(x) (((x) >> 8)&0xFF) | (((x) << 8)&0xFF)
@@ -74,13 +73,13 @@ void sync_buffers() {
 }
 
 
-esp_err_t init(const Config *cfg) {
+esp_err_t init(const Config *cfg, Rotation rotation) {
     esp_err_t ret;
     dc_pin = static_cast<gpio_num_t>(cfg->dc_io_num);
     rst_pin = static_cast<gpio_num_t>(cfg->rst_io_num);
     
-    ESP_LOGI(TAG, "ST7735 Driver - Adafruit Mini TFT 0.96");
-    ESP_LOGI(TAG, "引脚: MOSI=%d CLK=%d CS=%d DC=%d RST=%d BL=%d",
+    ESP_LOGD(TAG, "ST7735 Driver - Adafruit Mini TFT 0.96");
+    ESP_LOGD(TAG, "引脚: MOSI=%d CLK=%d CS=%d DC=%d RST=%d BL=%d",
              cfg->mosi_io_num, cfg->sclk_io_num, cfg->cs_io_num,
              cfg->dc_io_num, cfg->rst_io_num, cfg->bl_io_num);
     
@@ -94,7 +93,7 @@ esp_err_t init(const Config *cfg) {
         gpio_config_t bl_conf = { .pin_bit_mask = (1ULL << cfg->bl_io_num), .mode = GPIO_MODE_OUTPUT };
         gpio_config(&bl_conf);
         gpio_set_level(static_cast<gpio_num_t>(cfg->bl_io_num), 1);
-        ESP_LOGI(TAG, "Backlight enabled");
+        ESP_LOGD(TAG, "Backlight enabled");
     }
     
     spi_bus_config_t buscfg = {
@@ -119,7 +118,7 @@ esp_err_t init(const Config *cfg) {
         ESP_LOGE(TAG, "SPI device failed: %s", esp_err_to_name(ret));
         return ret;
     }
-    ESP_LOGI(TAG, "SPI @ %d MHz", SPI_CLOCK_SPEED_HZ / 1000000);
+    ESP_LOGD(TAG, "SPI @ %d MHz", SPI_CLOCK_SPEED_HZ / 1000000);
     
     gpio_set_level(rst_pin, 1); vTaskDelay(pdMS_TO_TICKS(50));
     gpio_set_level(rst_pin, 0); vTaskDelay(pdMS_TO_TICKS(100));
@@ -145,9 +144,8 @@ esp_err_t init(const Config *cfg) {
     write_command(ST7735_VMCTR1); write_data_byte(0x0E);
     write_command(ST7735_INVOFF);
     
-    write_command(ST7735_MADCTL); write_data_byte(0x78);
-    colstart = COLSTART; rowstart = ROWSTART; display_width = WIDTH; display_height = HEIGHT;
-    
+    set_rotation(rotation);
+
     write_command(ST7735_COLMOD); write_data_byte(0x05);
     
     write_command(ST7735_GMCTRP1);
@@ -158,7 +156,7 @@ esp_err_t init(const Config *cfg) {
     write_command(ST7735_NORON); vTaskDelay(pdMS_TO_TICKS(10));
     write_command(ST7735_DISPON); vTaskDelay(pdMS_TO_TICKS(100));
     
-    ESP_LOGI(TAG, "显示屏正常: %dx%d 像素", display_width, display_height);
+    ESP_LOGD(TAG, "显示屏正常: %dx%d 像素", display_width, display_height);
     return ESP_OK;
 }
 
@@ -184,13 +182,13 @@ void fill_screen(color_t color) {
     std::fill(double_buffer.data[double_buffer.current_buffer], double_buffer.data[double_buffer.current_buffer]+display_width*display_height, color.get_color_raw_big_endian());
 }
 
-void set_rotation(uint8_t rotation) {
+void set_rotation(Rotation rotation) {
     uint8_t madctl;
-    switch (rotation % 4) {
-        case 0: madctl=0x08; colstart=ROWSTART; rowstart=COLSTART; display_width=WIDTH; display_height=HEIGHT; break;
-        case 1: madctl=0x78; colstart=COLSTART; rowstart=ROWSTART; display_width=HEIGHT; display_height=WIDTH; break;
-        case 2: madctl=0xC8; colstart=ROWSTART; rowstart=COLSTART; display_width=HEIGHT; display_height=WIDTH; break;
-        case 3: madctl=0xB8; colstart=COLSTART; rowstart=ROWSTART; display_width=WIDTH; display_height=HEIGHT; break;
+    switch (rotation) {
+        case Rotation::Vertical: madctl=0x08; colstart=ROWSTART; rowstart=COLSTART; display_width=HEIGHT; display_height=WIDTH; break;
+        case Rotation::Horizontal: madctl=0x78; colstart=COLSTART; rowstart=ROWSTART; display_width=WIDTH; display_height=HEIGHT; break;
+        case Rotation::VerticalMirror: madctl=0xC8; colstart=ROWSTART; rowstart=COLSTART; display_width=HEIGHT; display_height=WIDTH; break;
+        case Rotation::HorizontalMirror: madctl=0xB8; colstart=COLSTART; rowstart=ROWSTART; display_width=WIDTH; display_height=HEIGHT; break;
         default: return;
     }
     write_command(ST7735_MADCTL);
@@ -201,24 +199,60 @@ void invert_display(bool invert) {
     write_command(invert ? ST7735_INVON : ST7735_INVOFF);
 }
 
-void draw_char(uint16_t x, uint16_t y, char c, color_t color, color_t bg, uint8_t size) {
+static uint16_t map_px_data(uint8_t px_val,uint16_t bg,uint16_t color){
+    // 将RGB565颜色值分解为R、G、B分量
+    uint8_t bg_r = (bg >> 11) & 0x1F;  // 5位红色
+    uint8_t bg_g = (bg >> 5) & 0x3F;   // 6位绿色
+    uint8_t bg_b = bg & 0x1F;          // 5位蓝色
+    
+    uint8_t color_r = (color >> 11) & 0x1F;
+    uint8_t color_g = (color >> 5) & 0x3F;
+    uint8_t color_b = color & 0x1F;
+    
+    // 分别对R、G、B分量进行插值
+    uint8_t result_r = (px_val * (color_r - bg_r) / 255) + bg_r;
+    uint8_t result_g = (px_val * (color_g - bg_g) / 255) + bg_g;
+    uint8_t result_b = (px_val * (color_b - bg_b) / 255) + bg_b;
+    
+    // 重新组合成RGB565格式
+    return uint16_t(result_r << 11) | uint16_t(result_g << 5) | uint16_t(result_b);
+}
+
+static uint32_t get_char_start_index(char c,const Font_t& font){
+    uint8_t index = c - ' ';
+    uint32_t start_index = 0;
+    for (int i  = 0; i < index; i++){
+        start_index+=font.font_height*font.width_table[i];
+    }
+    return start_index;
+}
+
+
+void draw_char(uint16_t x, uint16_t y, char c, color_t color, color_t bg, const Font_t& font) {
     if (c < 32 || c > 127) c = '?';
     uint8_t idx = c - 32;
-    for (uint8_t col = 0; col < 5; col++) {
-        uint8_t line = font5x7[idx * 5 + col];
-        for (uint8_t row = 0; row < 7; row++) {
-            color_t px = (line & (1 << row)) ? color: bg;
-            if (size == 1) ST7735::draw_pixel(x + col, y + row, px);
-            else ST7735::fill_rect(x + col*size, y + row*size, size, size, px);
+    uint32_t start_index = get_char_start_index(c,font);
+    uint32_t font_px_index = start_index;
+
+    
+
+    for (uint32_t line = 0;line<font.font_height;line++){
+        for (uint8_t col = 0; col < font.width_table[idx]; col++) {
+            uint8_t font_val=font.font_data[font_px_index];
+            uint16_t px = map_px_data(font_val,bg.get_color_raw(),color.get_color_raw());
+            //px = U16_LITTLE_TO_BIG(px);
+            color_t temp(font_val,font_val,font_val);
+            double_buffer.data[double_buffer.current_buffer][(y + line) * display_width + x + col] = temp.get_color_raw_big_endian();
+            font_px_index++;
         }
     }
 }
 
-void draw_string(uint16_t x, uint16_t y, const char *str, color_t color, color_t bg, uint8_t size) {
+void draw_string(uint16_t x, uint16_t y, const char *str, color_t color, color_t bg,const Font_t& font) {
     uint16_t cx = x;
     while (*str) {
-        if (*str == '\n') { y += 8 * size; cx = x; }
-        else { ST7735::draw_char(cx, y, *str, color, bg, size); cx += 6 * size; }
+        if (*str == '\n') { y += font.font_height; cx = x; }
+        else { ST7735::draw_char(cx, y, *str, color, bg, font); cx += font.width_table[*str-32]; }
         str++;
     }
 }

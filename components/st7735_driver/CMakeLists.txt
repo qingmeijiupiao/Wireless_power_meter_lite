@@ -1,6 +1,5 @@
 idf_component_register(
-    SRCS "src/st7735.cpp" 
-         "src/graphics.cpp"
+    SRC_DIRS "src"
     INCLUDE_DIRS "include"
     REQUIRES driver esp_timer log esp_hw_support
 )
