@@ -13,7 +13,7 @@
 #include "esp_flash.h"
 #include "esp_system.h"
 #include "esp_littlefs.h"
-//#include "blackbox.h"
+#include "blackbox.h"
 #include "esp_log.h"
 #include "load_lp.hpp"
 #include "st7735.h"
@@ -26,8 +26,8 @@
 #include "NTCTemperatureSensor.hpp"
 #include "ESPChipTemperatureSensor.hpp"
 
-#include "ina226_interface.h"
-//#include "HXC_TWAI.hpp"
+//#include "ina226_interface.h"
+#include "HXC_TWAI.hpp"
 #include "DENGB.hpp"
 
 
@@ -35,7 +35,7 @@ CppGpioDriver<GPIO_NUM_21, GpioMode::OUTPUT> POWER_OUT;
 CppGpioDriver<GPIO_NUM_17, GpioMode::INPUT_PULLUP> Main_Button;
 
 
-//HXC_TWAI CAN_BUS(18,14,CAN_RATE::CAN_RATE_1MBIT);
+HXC_TWAI CAN_BUS(18,14,CAN_RATE::CAN_RATE_1MBIT);
 
 
 CppGpioDriver<GPIO_NUM_16, GpioMode::OUTPUT> CAN_register;
@@ -68,7 +68,6 @@ void screen_task(void* arg){
     ST7735::fill_screen(background_color);
     auto ticks = xTaskGetTickCount();
     constexpr int fps = 60;
-
     while (1){
         // if(OUTPUT_state){
         //     background_color=ST7735::BLACK;
@@ -120,27 +119,33 @@ void OUTPUT_ctrl_task(void* arg){
 
 
 
-
 extern "C" void app_main(void){
     ESP_ERROR_CHECK(CAN_register.init());
     ESP_ERROR_CHECK(POWER_OUT.init());
     ESP_ERROR_CHECK(Main_Button.init());
     Chip_Temperature_Sensor.init();
     NTC::init(ADC_CHANNEL_5);
+    CAN_BUS.setup(TWAI_MODE_NORMAL);
+    CAN_BUS.add_can_receive_callback_func(0x123,[](HXC_CAN_message_t* can_message){
+        printf("CAN Message: %08lX ", can_message->identifier);
+        for(int i=0;i<can_message->data_length_code;i++){
+            printf("%02X ", can_message->data[i]);
+        }
+        printf("\n");
+    });
+    //INA226 CurrentSensor(GPIO_NUM_6, GPIO_NUM_7,DEFAULT_INA226_I2C_ADDRESS,400000,I2C_NUM_0);
 
-    INA226 CurrentSensor(GPIO_NUM_6, GPIO_NUM_7,DEFAULT_INA226_I2C_ADDRESS,400000,I2C_NUM_0);
-
-    //LP_Core_Load();
-    //BlackBox::init();
+    LP_Core_Load();
+    BlackBox::init();
 
     //printf("NOW LOGS COUNT: %ld\n", BlackBox::get_count());
     
     POWER_OUT.set(true);
-
-    CurrentSensor.SetOperatingMode(INA226::OperatingMode::SHUNT_AND_BUS_CONTINUOUS);
-    CurrentSensor.SetAveragingMode(INA226::AveragingMode::SAMPLE_16);
-    CurrentSensor.SetBusVoltageConversionTime(INA226::ConversionTime::TIME_332_uS);
-    CurrentSensor.SetShuntVoltageConversionTime(INA226::ConversionTime::TIME_332_uS);
+    
+    // CurrentSensor.SetOperatingMode(INA226::OperatingMode::SHUNT_AND_BUS_CONTINUOUS);
+    // CurrentSensor.SetAveragingMode(INA226::AveragingMode::SAMPLE_16);
+    // CurrentSensor.SetBusVoltageConversionTime(INA226::ConversionTime::TIME_332_uS);
+    // CurrentSensor.SetShuntVoltageConversionTime(INA226::ConversionTime::TIME_332_uS);
 
     xTaskCreate(screen_task, "screen_task", 4096, NULL, 4, NULL);
     xTaskCreate(OUTPUT_ctrl_task, "OUTPUT_ctrl_task", 512, NULL, 5, NULL);
@@ -150,11 +155,10 @@ extern "C" void app_main(void){
 
 
     while (1){
-        main_state.voltage = CurrentSensor.GetBusVoltage_mV()/1000.0f;
-        main_state.current = float(CurrentSensor.GetShuntVoltage_uV())/2250.f;
+        //main_state.voltage = CurrentSensor.GetBusVoltage_mV()/1000.0f;
+        //main_state.current = float(CurrentSensor.GetShuntVoltage_uV())/2250.f;
         main_state.esp_temp = Chip_Temperature_Sensor.getTemperature();
         main_state.ntc_temp = (float)NTC::getTemperature()/100.0f;
-
         //printf("Chip Temperature: %.2f C, NTC Temperature: %.2f C, Voltage: %.2f V, Current: %.2f A\n", main_state.esp_temp, main_state.ntc_temp, main_state.voltage, main_state.current);
         vTaskDelay(100 / portTICK_PERIOD_MS);
     }
