@@ -6,8 +6,8 @@
 
 struct Font_t{
     const uint8_t  font_height; //只支持等高字体，高度为font_height
-    uint8_t width_table[FONT_CHAR_NUM];
-    uint8_t* font_data;
+    const uint8_t* width_table;
+    const uint8_t* font_data;
 };
 
 #endif

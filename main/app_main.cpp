@@ -28,7 +28,7 @@
 
 //#include "ina226_interface.h"
 #include "HXC_TWAI.hpp"
-#include "DENGB.hpp"
+#include "DENGB.h"
 
 
 CppGpioDriver<GPIO_NUM_21, GpioMode::OUTPUT> POWER_OUT;

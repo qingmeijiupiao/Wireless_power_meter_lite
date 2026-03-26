@@ -7,7 +7,16 @@
 import sys
 import os
 import argparse
-from PIL import Image
+
+# 检查 PIL 库是否已安装
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    print("错误：未找到 PIL 库（Pillow）。")
+    print("请先安装依赖：")
+    print("    pip install -r requirements.txt")
+    sys.exit(1)
+    
 import struct
 
 def rgb888_to_rgb565(r, g, b):

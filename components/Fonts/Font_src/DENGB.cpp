@@ -1,11 +1,6 @@
-#ifndef DENGB_HPP
-#define DENGB_HPP
+#include "DENGB.h"
 
-//Font Name : DENGB
-
-#include "Font.h"
-
-uint8_t DENGB_font_data[] = {
+static const uint8_t DENGB_font_data[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
@@ -762,18 +757,17 @@ uint8_t DENGB_font_data[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x95, 0xe4, 0xf9, 0xe4, 0xb7, 0x84, 0x5f, 0x71, 0xc3, 0x00, 
     0x00, 0xc5, 0x76, 0x62, 0x7f, 0xb0, 0xe0, 0xf8, 0xe8, 0x9d, 0x00
 };
-
-const Font_t DENGB{
-    .font_height = 15,
-    .width_table = {
-          4,   5,   7,   9,   9,   9,  13,   4,   5,   5,   7,  11,   4,   8,   4,   7, 
-          9,   9,   9,   9,   9,   9,   9,   9,   9,   9,   4,   4,  11,  11,  11,   7, 
-         15,  11,  10,  10,  11,   8,   8,  11,  12,   5,   6,  10,   8,  15,  12,  12, 
-          9,  12,  10,   9,   9,  11,  10,  15,  10,   9,   9,   5,   6,   5,  11,   7, 
-          5,   8,  10,   8,  10,   9,   6,  10,   9,   4,   4,   8,   4,  14,   9,  10, 
-         10,  10,   6,   7,   6,   9,   8,  12,   8,   8,   7,   6,   4,   5,  11
-    },
-    .font_data = DENGB_font_data
+const uint8_t DENGB_width_table[] = {
+    4,   5,   7,   9,   9,   9,  13,   4,   5,   5,   7,  11,   4,   8,   4,   7, 
+    9,   9,   9,   9,   9,   9,   9,   9,   9,   9,   4,   4,  11,  11,  11,   7, 
+    15,  11,  10,  10,  11,   8,   8,  11,  12,   5,   6,  10,   8,  15,  12,  12, 
+    9,  12,  10,   9,   9,  11,  10,  15,  10,   9,   9,   5,   6,   5,  11,   7, 
+    5,   8,  10,   8,  10,   9,   6,  10,   9,   4,   4,   8,   4,  14,   9,  10, 
+    10,  10,   6,   7,   6,   9,   8,  12,   8,   8,   7,   6,   4,   5,  11
 };
 
-#endif // DENGB_HPP
+const Font_t DENGB{
+    .font_height = DENGB_FONT_HEIGHT,
+    .width_table = DENGB_width_table,
+    .font_data = DENGB_font_data
+};
