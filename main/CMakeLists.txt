@@ -5,7 +5,7 @@ idf_component_register(SRCS "app_main.cpp"
                        
 # LP核程序配置
 set(ulp_app_name ulp_main)                              # 二进制文件名，将生成 ulp_main.h 等
-set(ulp_sources "ulp/ulp_main.c")                       # LP核源文件路径
+set(ulp_sources "ulp/ulp_main.cpp" "ulp/ina226.hpp")    # LP核源文件路径
 set(ulp_exp_dep_srcs "main.cpp")                        # 主源文件（包含生成的ulp_main.h）
 
 # 调用ulp_embed_binary
