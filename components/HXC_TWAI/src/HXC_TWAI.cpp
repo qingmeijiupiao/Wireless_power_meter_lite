@@ -1,4 +1,4 @@
-#include "HXC_TWAI.hpp"
+#include "HXC_TWAI.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 constexpr int timeout_ms = 10;

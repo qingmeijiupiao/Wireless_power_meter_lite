@@ -3,15 +3,14 @@
  * @LastEditors: qingmeijiupiao
  * @Description: HXC ESP32 twai封装类
  * @Author: qingmeijiupiao
- * @LastEditTime: 2026-03-22 22:38:28
+ * @LastEditTime: 2026-03-28 16:12:39
  */
 #ifndef HXC_TWAI_HPP
 #define HXC_TWAI_HPP
-#include "driver/twai.h" //can驱动，esp32sdk自带
 #include <cstring>
 #include <map>
 #include <functional>
-
+#include "esp_twai.h"
 //CAN消息结构体
 struct HXC_CAN_message_t{
   bool extd=0;           /**< 扩展帧格式标志（29位ID） */

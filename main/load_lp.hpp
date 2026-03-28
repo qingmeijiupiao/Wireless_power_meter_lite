@@ -5,6 +5,9 @@
 #include "esp_task.h"
 #include "lp_core_i2c.h"
 
+#include "soc/lp_clkrst_reg.h"
+#include "soc/lp_clkrst_struct.h"
+
 const char *LPTAG = "LP_CORE";
 extern "C" {
     extern const uint8_t bin_start[] asm("_binary_ulp_main_bin_start");
@@ -19,6 +22,10 @@ extern "C" {
  */
 void print_lp_core_log(void* arg){
     while (1){
+        if (ulp_have_log){
+            ESP_LOGI(LPTAG, "lp core log: %ld", ulp_log_data);
+            ulp_have_log = false;
+        }
         vTaskDelay(5 / portTICK_PERIOD_MS);
     }
 }
@@ -57,10 +64,13 @@ void LP_Core_Load(void){
         }
     }
     ESP_LOGI(LPTAG, "lp core load binary success...");
-    
+
+    LP_CLKRST.lp_clk_conf.fast_clk_sel = 1; //IDF 6.0版本默认是内部RC时钟(17.5MHz)，且没有API可以切换到外部时钟源，需要手动操作寄存器切换到外部时钟源(20MHz)
+
     // 配置 LP 核运行参数
     ulp_lp_core_cfg_t cfg;
     cfg.wakeup_source = ULP_LP_CORE_WAKEUP_SOURCE_HP_CPU;
+    
     err = ulp_lp_core_run(&cfg);
     if (err != ESP_OK) {
         while(1){

@@ -7,7 +7,7 @@
 #ifndef TEMPERATURESENSOR_HPP
 #define TEMPERATURESENSOR_HPP
 #include "driver/temperature_sensor.h"
-#include "soc/temperature_sensor_periph.h"
+#include "hal/temperature_sensor_periph.h"
 #include "esp_err.h"
 #include "esp_log.h"
 

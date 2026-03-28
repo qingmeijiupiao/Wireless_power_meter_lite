@@ -27,7 +27,7 @@
 #include "ESPChipTemperatureSensor.hpp"
 
 //#include "ina226_interface.h"
-#include "HXC_TWAI.hpp"
+//#include "HXC_TWAI.h"
 #include "DENGB.h"
 
 
@@ -35,7 +35,7 @@ CppGpioDriver<GPIO_NUM_21, GpioMode::OUTPUT> POWER_OUT;
 CppGpioDriver<GPIO_NUM_17, GpioMode::INPUT_PULLUP> Main_Button;
 
 
-HXC_TWAI CAN_BUS(18,14,CAN_RATE::CAN_RATE_1MBIT);
+//HXC_TWAI CAN_BUS(18,14,CAN_RATE::CAN_RATE_1MBIT);
 
 
 CppGpioDriver<GPIO_NUM_16, GpioMode::OUTPUT> CAN_register;
@@ -125,14 +125,14 @@ extern "C" void app_main(void){
     ESP_ERROR_CHECK(Main_Button.init());
     Chip_Temperature_Sensor.init();
     NTC::init(ADC_CHANNEL_5);
-    CAN_BUS.setup(TWAI_MODE_NORMAL);
-    CAN_BUS.add_can_receive_callback_func(0x123,[](HXC_CAN_message_t* can_message){
-        printf("CAN Message: %08lX ", can_message->identifier);
-        for(int i=0;i<can_message->data_length_code;i++){
-            printf("%02X ", can_message->data[i]);
-        }
-        printf("\n");
-    });
+    // CAN_BUS.setup(TWAI_MODE_NORMAL);
+    // CAN_BUS.add_can_receive_callback_func(0x123,[](HXC_CAN_message_t* can_message){
+    //     printf("CAN Message: %08lX ", can_message->identifier);
+    //     for(int i=0;i<can_message->data_length_code;i++){
+    //         printf("%02X ", can_message->data[i]);
+    //     }
+    //     printf("\n");
+    // });
     //INA226 CurrentSensor(GPIO_NUM_6, GPIO_NUM_7,DEFAULT_INA226_I2C_ADDRESS,400000,I2C_NUM_0);
 
     LP_Core_Load();

@@ -92,7 +92,7 @@ esp_err_t read_register(Register_enum reg, uint16_t *val){
 
 esp_err_t write_register(Register_enum reg, uint16_t val){
     uint8_t data[3] = {static_cast<uint8_t>(reg), static_cast<uint8_t>(val >> 8), static_cast<uint8_t>(val)};
-    uint8_t reg_byte;//v5.5.3版本的IDF API不允许读取0字节
+    uint8_t reg_byte;//v6.0.0版本的IDF API不允许读取0字节
     esp_err_t ret = lp_core_i2c_master_write_read_device(LP_I2C_NUM_0, I2C_ADDR,
                                                          data, 3, &reg_byte, 1, I2C_TIMEOUT);
     if(ret != ESP_OK){
