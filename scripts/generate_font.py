@@ -181,7 +181,7 @@ def generate_font_files(font_path, font_size, font_name):
     with open(header_path, 'w') as f:
         f.write(f"#ifndef {guard}\n")
         f.write(f"#define {guard}\n\n")
-        f.write(f"// 字体名称 : {font_name}\n\n")
+        f.write(f"// Font Name : {font_name}\n\n")
         f.write('#include "Font.h"\n\n')
         f.write(f"constexpr int {font_name}_FONT_HEIGHT = {font_height};\n\n")
         f.write(f"extern const Font_t {font_name};\n\n")

@@ -12,8 +12,7 @@
 #include "st7735_commands.h"
 #include <algorithm>
 
-#define U16_LITTLE_TO_BIG(x) (((x) >> 8)&0xFF) | (((x) << 8)&0xFF)
-
+#define U16_LITTLE_TO_BIG(x) ((((x) >> 8)&0xFF) | (((x) << 8)&0xFF))
 namespace ST7735 {
 
 static const char *TAG = "ST7735";
@@ -234,15 +233,12 @@ void draw_char(uint16_t x, uint16_t y, char c, color_t color, color_t bg, const 
     uint32_t start_index = get_char_start_index(c,font);
     uint32_t font_px_index = start_index;
 
-    
-
     for (uint32_t line = 0;line<font.font_height;line++){
         for (uint8_t col = 0; col < font.width_table[idx]; col++) {
             uint8_t font_val=font.font_data[font_px_index];
             uint16_t px = map_px_data(font_val,bg.get_color_raw(),color.get_color_raw());
-            //px = U16_LITTLE_TO_BIG(px);
-            color_t temp(font_val,font_val,font_val);
-            double_buffer.data[double_buffer.current_buffer][(y + line) * display_width + x + col] = temp.get_color_raw_big_endian();
+            px = (px>>8) | (px<<8);
+            double_buffer.data[double_buffer.current_buffer][(y + line) * display_width + x + col] = px;
             font_px_index++;
         }
     }
@@ -266,10 +262,12 @@ void draw_image(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t *
     if (x >= display_width || y >= display_height) return;
     if (x + w > display_width) w = display_width - x;
     if (y + h > display_height) h = display_height - y;
-    
+    uint16_t px;
     for (uint16_t row = 0; row < h; row++) {
         for (uint16_t col = 0; col < w; col++) {
-            double_buffer.data[double_buffer.current_buffer][(y + row) * display_width + (x + col)] = U16_LITTLE_TO_BIG(data[row * w + col]);
+            px = data[row * w + col];
+            double_buffer.data[double_buffer.current_buffer]
+            [(y + row) * display_width + (x + col)] = (px>>8) | (px<<8);
         }
     }
 }

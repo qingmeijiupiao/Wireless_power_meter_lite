@@ -32,6 +32,19 @@ def rgb888_to_rgb565(r, g, b):
     # 转换为小端序字节
     return struct.pack('<H', rgb565)
 
+def rgb888_to_bgr565(r, g, b):
+    """将RGB888颜色转换为BGR565格式"""
+    # 将8位颜色值转换为5位或6位
+    r5 = (r >> 3) & 0x1F  # 5位红色
+    g6 = (g >> 2) & 0x3F  # 6位绿色  
+    b5 = (b >> 3) & 0x1F  # 5位蓝色
+    
+    # 组合成16位BGR565（小端序）
+    bgr565 = (b5 << 11) | (g6 << 5) | r5
+    
+    # 转换为小端序字节
+    return struct.pack('<H', bgr565)
+
 def convert_image_to_rgb565(input_path, output_path, image_name=None):
     """将图片转换为RGB565数组"""
     
