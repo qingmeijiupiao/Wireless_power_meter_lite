@@ -1,5 +1,5 @@
 idf_component_register(SRCS "app_main.cpp"
-                       PRIV_REQUIRES spi_flash blackbox hal cpp_gpio_driver esp_timer st7735_driver Temperature Fonts
+                       PRIV_REQUIRES spi_flash blackbox hal cpp_gpio_driver esp_timer st7735_driver Temperature Fonts HXC_TWAI
                        REQUIRES ulp soc
                        INCLUDE_DIRS "")
                        

@@ -4,7 +4,7 @@
 #include "esp_log.h"
 #include "esp_task.h"
 #include "lp_core_i2c.h"
-
+#include "ulp/ulp_state.h"
 #include "soc/lp_clkrst_reg.h"
 #include "soc/lp_clkrst_struct.h"
 
@@ -14,6 +14,7 @@ extern "C" {
     extern const uint8_t bin_end[]   asm("_binary_ulp_main_bin_end");
 }
 
+ULP_CORE_STATE& ulp_state = *(ULP_CORE_STATE*)&(ulp_ulp_state);
 
 /**
  * @brief : 打印 LP 核日志附带 LP 核心看门狗
@@ -22,9 +23,9 @@ extern "C" {
  */
 void print_lp_core_log(void* arg){
     while (1){
-        if (ulp_have_log){
+        if (ulp_state.ulp_state_bits.ulp_have_log){
             ESP_LOGI(LPTAG, "lp core log: %ld", ulp_log_data);
-            ulp_have_log = false;
+            ulp_state.ulp_state_bits.ulp_have_log = false;
         }
         vTaskDelay(5 / portTICK_PERIOD_MS);
     }

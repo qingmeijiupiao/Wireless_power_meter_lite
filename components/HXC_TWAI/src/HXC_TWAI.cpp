@@ -1,176 +1,230 @@
 #include "HXC_TWAI.h"
+#include "esp_twai.h"
+#include "esp_twai_onchip.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-constexpr int timeout_ms = 10;
-HXC_TWAI::HXC_TWAI(uint8_t tx, uint8_t rx, CAN_RATE rate): TX_PIN(tx), RX_PIN(rx), can_rate(rate){}
+#include "esp_log.h"
 
-HXC_TWAI::~HXC_TWAI() {
-    if (twai_fb_handle != nullptr) {
-        vTaskDelete(twai_fb_handle);
+struct twai_node_map_t{
+    twai_node_handle_t handle;
+    HXC_TWAI* twai;
+};
+static twai_node_map_t twai_node_maps[3];
+
+HXC_TWAI::HXC_TWAI(uint8_t tx, uint8_t rx, CAN_RATE rate): TX_PIN(tx), RX_PIN(rx), can_rate(rate){
+    // 初始化回调函数数组
+    for (int i = 0; i < MAX_TWAI_CALLBACK_NUM; i++) {
+        callback_maps[i].used = false;
+        callback_maps[i].addr = 0;
     }
-    if (is_setup) {
-        twai_stop();
-        twai_driver_uninstall();
-        delete func_map;
-    }
+    callback_count = 0;
 }
 
-esp_err_t HXC_TWAI::setup(twai_mode_t twai_mode) {
-    if (is_setup == true) {// 如果已经初始化过，不再初始化
+HXC_TWAI::~HXC_TWAI() {
+    // if (twai_node_handle != nullptr) {
+    //     twai_stop_v2(twai_node_handle);
+    //     twai_driver_uninstall_v2(twai_node_handle);
+    // }
+    // 线性数组无需手动清理，自动析构
+}
+uint32_t test_count = 0;
+void HXC_TWAI::receive_callback(){
+    if(have_new_receive){
+        have_new_receive = false;
+        // 线性查表查找对应的回调函数
+        for (int i = 0; i < MAX_TWAI_CALLBACK_NUM; i++) {
+            if (callback_maps[i].used && callback_maps[i].addr == RX_message_buf.identifier) {
+                callback_maps[i].func(&RX_message_buf);
+                break;
+            }
+        }
+        test_count++;
+    }
+
+}
+
+
+bool HXC_TWAI::on_rx_done_callback(twai_node_handle_t handle, const twai_rx_done_event_data_t *edata, void *user_ctx){
+    uint8_t recv_buff[8];
+    twai_frame_t rx_frame;
+    rx_frame.buffer = recv_buff;
+    rx_frame.buffer_len = sizeof(recv_buff);
+    for (size_t i = 0; i < sizeof(twai_node_maps)/sizeof(twai_node_maps[0]); i++){
+        if(twai_node_maps[i].handle == handle){
+            if (ESP_OK != twai_node_receive_from_isr(handle, &rx_frame)){
+                return ESP_FAIL;
+            }
+            twai_node_maps[i].twai->RX_message_buf.identifier = rx_frame.header.id;
+            twai_node_maps[i].twai->RX_message_buf.data_length_code = rx_frame.header.dlc;
+            twai_node_maps[i].twai->RX_message_buf.rtr = rx_frame.header.rtr;
+            twai_node_maps[i].twai->RX_message_buf.extd = rx_frame.header.ide;
+            memcpy(twai_node_maps[i].twai->RX_message_buf.data, rx_frame.buffer, rx_frame.buffer_len);
+            twai_node_maps[i].twai->have_new_receive = true;
+            return ESP_OK;
+        }
+    }
+    return ESP_FAIL;
+}
+
+esp_err_t HXC_TWAI::setup() {
+    if (twai_node_handle != nullptr) {// 如果已经初始化过，不再初始化   
         return ESP_OK;
     }
-    func_map = new std::map<int, HXC_can_feedback_func>();
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
-    // 总线速率配置
-    static twai_timing_config_t t_config;
-    switch (this->can_rate) {
-        case CAN_RATE_1MBIT:
-            t_config = TWAI_TIMING_CONFIG_1MBITS();
+
+    for (size_t i = 0; i < sizeof(twai_node_maps)/sizeof(twai_node_maps[0]); i++){
+        if(twai_node_maps[i].handle == nullptr){
+            twai_node_maps[i].handle = twai_node_handle;
+            twai_node_maps[i].twai = this;
             break;
-        case CAN_RATE_800KBIT:
-            t_config = TWAI_TIMING_CONFIG_800KBITS();
+        }
+    }
+
+    twai_onchip_node_config_t node_config={};
+    node_config.io_cfg.tx = static_cast<gpio_num_t>(TX_PIN);
+    node_config.io_cfg.rx = static_cast<gpio_num_t>(RX_PIN);
+    node_config.io_cfg.quanta_clk_out = GPIO_NUM_NC;
+    node_config.io_cfg.bus_off_indicator = GPIO_NUM_NC;
+    node_config.tx_queue_depth = 5;
+    node_config.intr_priority = 1;
+    node_config.bit_timing = {};
+    node_config.clk_src = TWAI_CLK_SRC_DEFAULT;
+    node_config.timestamp_resolution_hz = 0;
+    node_config.fail_retry_cnt = 1;
+    node_config.flags.enable_self_test = false;
+    node_config.flags.enable_loopback = false;
+    node_config.flags.enable_listen_only = false;
+    node_config.flags.no_receive_rtr = false;
+    // /* 测试模式 */
+    node_config.flags.enable_self_test = true;
+    node_config.flags.enable_loopback = true;
+
+    switch (can_rate){
+        case CAN_RATE::CAN_RATE_1MBIT:
+            node_config.bit_timing.bitrate = 1000000;
             break;
-        case CAN_RATE_500KBIT:
-            t_config = TWAI_TIMING_CONFIG_500KBITS();
+        case CAN_RATE::CAN_RATE_800KBIT:
+            node_config.bit_timing.bitrate = 800000;
             break;
-        case CAN_RATE_250KBIT:
-            t_config = TWAI_TIMING_CONFIG_250KBITS();
+        case CAN_RATE::CAN_RATE_500KBIT:
+            node_config.bit_timing.bitrate = 500000;
             break;
-        case CAN_RATE_125KBIT:
-            t_config = TWAI_TIMING_CONFIG_125KBITS();
+        case CAN_RATE::CAN_RATE_250KBIT:
+            node_config.bit_timing.bitrate = 250000;
             break;
-        case CAN_RATE_100KBIT:
-            t_config = TWAI_TIMING_CONFIG_100KBITS();
+        case CAN_RATE::CAN_RATE_125KBIT:
+            node_config.bit_timing.bitrate = 125000;
+            break;
+        case CAN_RATE::CAN_RATE_100KBIT:
+            node_config.bit_timing.bitrate = 100000;
             break;
         default:
-            t_config = TWAI_TIMING_CONFIG_1MBITS();
-            break;
+            node_config.bit_timing.bitrate = 1000000;
+    }
+    esp_err_t ret = twai_new_node_onchip(&node_config, &twai_node_handle);
+    if(ret != ESP_OK){
+        return ret;
     }
 
-    // 滤波器设置，接受所有地址的数据
-    static const twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
-
-    // 总线配置
-    static const twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(gpio_num_t(TX_PIN), gpio_num_t(RX_PIN), twai_mode);
-
-    // 传入驱动配置信息
-    twai_driver_install(&g_config, &t_config, &f_config);
+    while (twai_node_handle == nullptr){
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+    
+    for (size_t i = 0; i < sizeof(twai_node_maps)/sizeof(twai_node_maps[0]); i++){
+        if(twai_node_maps[i].handle == nullptr){
+            twai_node_maps[i].handle = twai_node_handle;
+            twai_node_maps[i].twai = this;
+            break;
+        }
+    }
+    have_new_receive = false;
+    twai_event_callbacks_t user_cbs;
+    user_cbs.on_rx_done = on_rx_done_callback;
+    ret = twai_node_register_event_callbacks(twai_node_handle, &user_cbs,NULL);
+    if(ret != ESP_OK){
+        return ret;
+    }
 
     // 启动CAN驱动
-    auto status = twai_start();
-    if (status != ESP_OK) {
-        return status;
+    ret = twai_node_enable(twai_node_handle);
+    if (ret != ESP_OK) {
+        return ret;
     }
-
-    // 创建任务
-    xTaskCreate(twai_feedback_update_task, "twai_fb", 4096, this, 5, &twai_fb_handle); // CAN反馈任务
-
-    // 设置标志
-    is_setup = true;
-    
+    xTaskCreate(receive_task, "receive_task", 4096, this, 2, NULL);
     return ESP_OK;
 }
 
 // 添加CAN消息接收回调函数
 void HXC_TWAI::add_can_receive_callback_func(int addr, HXC_can_feedback_func func) {
-    (*func_map)[addr] = func;  // 将回调函数存入映射表
+    // 查找是否已存在相同地址的回调
+    for (int i = 0; i < MAX_TWAI_CALLBACK_NUM; i++) {
+        if (callback_maps[i].used && callback_maps[i].addr == addr) {
+            callback_maps[i].func = func;  // 更新现有回调
+            return;
+        }
+    }
+    
+    // 查找空闲位置添加新回调
+    for (int i = 0; i < MAX_TWAI_CALLBACK_NUM; i++) {
+        if (!callback_maps[i].used) {
+            callback_maps[i].addr = addr;
+            callback_maps[i].func = func;
+            callback_maps[i].used = true;
+            callback_count++;
+            return;
+        }
+    }
+    // 如果数组已满，无法添加新回调
 }
 
 // 移除CAN消息接收回调函数
 void HXC_TWAI::remove_can_receive_callback_func(int addr) {
-    if (!exist_can_receive_callback_func(addr)) {
-        return;  // 如果回调函数不存在，则返回
+    for (int i = 0; i < MAX_TWAI_CALLBACK_NUM; i++) {
+        if (callback_maps[i].used && callback_maps[i].addr == addr) {
+            callback_maps[i].used = false;
+            callback_maps[i].addr = 0;
+            callback_count--;
+            return;
+        }
     }
-    func_map->erase(addr);  // 从映射表中删除回调函数
 }
 
 // 判断CAN消息接收回调函数是否存在
 bool HXC_TWAI::exist_can_receive_callback_func(int addr) {
-    return func_map->find(addr) != func_map->end();  // 如果地址存在于映射表中，则返回true
+    for (int i = 0; i < MAX_TWAI_CALLBACK_NUM; i++) {
+        if (callback_maps[i].used && callback_maps[i].addr == addr) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // 获取初始化状态
 bool HXC_TWAI::get_setup_flag() {
-    return is_setup;
+    return twai_node_handle != nullptr;
 }
 
 esp_err_t HXC_TWAI::send(HXC_CAN_message_t* message) {
-    if(!is_setup){
+    if(twai_node_handle == nullptr || message == nullptr){
         return ESP_FAIL;
     }
-    twai_message_t twai_message;
-    twai_message.extd = message->extd;
-    twai_message.rtr = message->rtr;
-    twai_message.self = message->self;
-    twai_message.identifier = message->identifier;
-    twai_message.data_length_code = message->data_length_code;
-    //拷贝数据
-    memcpy(twai_message.data, message->data, message->data_length_code);
-
-    return twai_transmit(&twai_message, portMAX_DELAY);//发送数据并等待发送完成
-}
-
-esp_err_t HXC_TWAI::send(HXC_CAN_message_t message) {
-    if(!is_setup){
-        return ESP_FAIL;
+    tx_message_head_buf.header.ide = message->extd;
+    tx_message_head_buf.header.rtr = message->rtr;
+    tx_message_head_buf.header.id = message->identifier;
+    tx_message_head_buf.header.dlc = message->data_length_code;
+    for (size_t i = 0; i < message->data_length_code; i++){
+        tx_message_data_buf[i] = message->data[i];
     }
-    twai_message_t twai_message;
-    twai_message.extd = message.extd;//扩展帧标志
-    twai_message.rtr = message.rtr;//远程帧标志
-    twai_message.self = message.self;//自我接收请求
-    twai_message.identifier = message.identifier;//CAN地址
-    twai_message.data_length_code = message.data_length_code;//数据长度
-    //拷贝数据
-    memcpy(twai_message.data, message.data, message.data_length_code);
-
-    return twai_transmit(&twai_message, portMAX_DELAY);//发送数据并等待发送完成
+    tx_message_head_buf.buffer = tx_message_data_buf;
+    tx_message_head_buf.buffer_len = message->data_length_code;
+    auto ret = twai_node_transmit(twai_node_handle, &tx_message_head_buf,100);
+    return ret;
 }
 
-void HXC_TWAI::stop_receive() {
-    if (twai_fb_handle == nullptr) {
-        return;
+void HXC_TWAI::receive_task(void* arg){
+    HXC_TWAI* twai = reinterpret_cast<HXC_TWAI*>(arg);
+    while(true){
+        twai->receive_callback();
+        vTaskDelay(1);
     }
-    vTaskDelete(twai_fb_handle);
-    twai_fb_handle = nullptr;
-}
 
-void HXC_TWAI::resume_receive() {
-    if (twai_fb_handle != nullptr) {
-        return;
-    }
-    xTaskCreate(twai_feedback_update_task, "twai_fb", 4096, this, 5, &twai_fb_handle); // CAN反馈任务
-}
-
-bool HXC_TWAI::get_receive_status() {
-    return twai_fb_handle != nullptr;
-}
-
-void HXC_TWAI::twai_feedback_update_task(void* n) {
-    HXC_TWAI* twai = (HXC_TWAI*)n;
-    twai_message_t Twai_message;
-
-    auto To_HXC_CAN_message_t = [&](twai_message_t* twai_message) {
-        twai->RX_message_buf.extd = twai_message->extd;//扩展帧标志
-        twai->RX_message_buf.rtr = twai_message->rtr;//远程帧标志
-        twai->RX_message_buf.self = twai_message->self;//自我接收标志
-        twai->RX_message_buf.identifier = twai_message->identifier;//CAN地址
-        twai->RX_message_buf.data_length_code = twai_message->data_length_code;//数据长度
-        // 复制数据
-        memcpy(twai->RX_message_buf.data, twai_message->data, twai_message->data_length_code);
-    };
-
-    while (1) {
-        
-        // 接收CAN数据
-        twai_receive(&Twai_message, portMAX_DELAY);
-
-        // 查看是否为需要的CAN消息地址，如果是就调用回调函数
-        if (twai->exist_can_receive_callback_func(Twai_message.identifier)) {
-            // 将twai_message转换成HXC_CAN_message
-            To_HXC_CAN_message_t(&Twai_message);
-
-            // 调用回调函数
-            (*twai->func_map)[twai->RX_message_buf.identifier](&twai->RX_message_buf);
-        }
-    }
 }

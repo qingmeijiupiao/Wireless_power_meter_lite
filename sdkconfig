@@ -1116,6 +1116,18 @@ CONFIG_SPI_SLAVE_ISR_IN_IRAM=y
 # end of ESP-Driver:Temperature Sensor Configurations
 
 #
+# ESP-Driver:TWAI Configurations
+#
+CONFIG_TWAI_ISR_IN_IRAM=y
+CONFIG_TWAI_IO_FUNC_IN_IRAM=y
+# default:
+# CONFIG_TWAI_ISR_CACHE_SAFE is not set
+# default:
+CONFIG_TWAI_OBJ_CACHE_SAFE=y
+CONFIG_TWAI_ENABLE_DEBUG_LOG=y
+# end of ESP-Driver:TWAI Configurations
+
+#
 # ESP-Driver:UART Configurations
 #
 # CONFIG_UART_ISR_IN_IRAM is not set
