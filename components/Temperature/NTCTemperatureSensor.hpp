@@ -42,7 +42,11 @@ namespace NTC {
         }
         interp_ntc = new NonEquidistantInterp<int16_t, int16_t>(points);
     };
-
+    
+    /**
+     * @brief :  获取NTC温度
+     * @return  {int16_t} 温度值，单位为0.01摄氏度，例如返回2534表示25.34摄氏度
+     */
     int16_t getTemperature(){
         int adc_value = 0;
         int adc_value_mv = 0;

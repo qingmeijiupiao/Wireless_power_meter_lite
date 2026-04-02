@@ -5,6 +5,9 @@
 namespace ST7735 {
 class color_t{
 public:
+    color_t(){
+        color_raw = 0;
+    };
     color_t(uint8_t r, uint8_t g, uint8_t b){
         color_raw = (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
     };
@@ -15,6 +18,12 @@ public:
     }
     uint16_t get_color_raw_big_endian(){ // 获取大端序颜色值
         return (color_raw << 8) | (color_raw >> 8);
+    }
+    void set_color_raw(uint16_t color_raw){
+        this->color_raw = color_raw;
+    }
+    void set_color_raw_big_endian(uint16_t color_raw){
+        this->color_raw = (color_raw << 8) | (color_raw >> 8);
     }
 protected:
     uint16_t color_raw; // RGB565颜色值小端序

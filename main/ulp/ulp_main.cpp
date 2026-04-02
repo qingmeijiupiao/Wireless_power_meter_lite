@@ -8,6 +8,11 @@
 constexpr uint32_t LP_CPU_FREQ_HZ = 20000000;
 constexpr lp_io_num_t Alert_Pin = LP_IO_NUM_1;
 
+//校准系数，实测来的
+constexpr int current_scale = 1106;
+constexpr int voltage_scale = 1250;
+
+
 #define MS_TO_US(ms) ((ms) * 1000)
 
 #define LP_VAR __attribute__((section(".rtc.bss")))
@@ -15,7 +20,7 @@ constexpr lp_io_num_t Alert_Pin = LP_IO_NUM_1;
 volatile uint32_t ulp_state LP_VAR;
 volatile uint32_t log_data LP_VAR;
 volatile uint32_t voltage_uv LP_VAR;
-volatile uint32_t current_nv LP_VAR;
+volatile uint32_t current_nA LP_VAR;
 volatile uint32_t now_time_ms = 0;
 
 ULP_CORE_STATE& ulp_state_p = *(ULP_CORE_STATE*)&(ulp_state);
@@ -77,10 +82,14 @@ void ina226_run(){
     INA226::read_register(INA226::Register_enum::INA226_BUS_VOLTAGE, &bus_voltage);
     INA226::read_register(INA226::Register_enum::INA226_SHUNT_VOLTAGE, &shunt_voltage);
     INA226::read_register(INA226::Register_enum::INA226_MASK_ENABLE,nullptr);
-    voltage_uv = bus_voltage*1250;
-    current_nv = *(int16_t*)&shunt_voltage*1250;
+    voltage_uv = bus_voltage*voltage_scale;
+    if(*(int16_t*)&shunt_voltage*current_scale<3){ //死区3mA
+        current_nA = 0;
+    }else{
+        current_nA = *(int16_t*)&shunt_voltage*current_scale;
+    }
+
     last_ina226_run_ms = now_time_ms;
-    ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout = false;
 }
 
 void timer_run(void) {
