@@ -71,6 +71,7 @@ void LP_Core_Load(void){
     // 配置 LP 核运行参数
     ulp_lp_core_cfg_t cfg;
     cfg.wakeup_source = ULP_LP_CORE_WAKEUP_SOURCE_HP_CPU;
+    ulp_state.ulp_state_bits.ulp_run = false;
     
     err = ulp_lp_core_run(&cfg);
     if (err != ESP_OK) {
@@ -79,7 +80,19 @@ void LP_Core_Load(void){
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
     }
+    int32_t timeout = 3000;
+    while (timeout-=10){
+        if(ulp_state.ulp_state_bits.ulp_run){
+            break;
+        }
+        vTaskDelay(10/ portTICK_PERIOD_MS);
+    }
+
+    if(timeout <= 0){
+        ESP_LOGE(LPTAG, "lp core init timeout...");
+    }else{
+        ESP_LOGI(LPTAG, "lp core init success...");
+    }
 
     xTaskCreate(print_lp_core_log, "print_lp_core_log", 2048, NULL, 4, NULL);
-    ESP_LOGI(LPTAG, "lp core run success...");
 }

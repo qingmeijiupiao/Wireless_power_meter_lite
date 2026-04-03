@@ -73,6 +73,7 @@ uint16_t bus_voltage = 0;
 int16_t shunt_voltage = 0;
 uint32_t last_ina226_run_ms = 0;
 void ina226_run(){
+    ulp_state_p.ulp_state_bits.ulp_run = true;
     if(ulp_lp_core_gpio_get_level(Alert_Pin) == 1){
         if((now_time_ms - last_ina226_run_ms) > 1000){
             ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout = true;
