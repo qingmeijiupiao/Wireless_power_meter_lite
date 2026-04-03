@@ -70,7 +70,7 @@ void ulp_i2c_init(){
 
     
 uint16_t bus_voltage = 0;
-uint16_t shunt_voltage = 0;
+int16_t shunt_voltage = 0;
 uint32_t last_ina226_run_ms = 0;
 void ina226_run(){
     if(ulp_lp_core_gpio_get_level(Alert_Pin) == 1){
@@ -80,13 +80,13 @@ void ina226_run(){
         return;
     }
     INA226::read_register(INA226::Register_enum::INA226_BUS_VOLTAGE, &bus_voltage);
-    INA226::read_register(INA226::Register_enum::INA226_SHUNT_VOLTAGE, &shunt_voltage);
+    INA226::read_register(INA226::Register_enum::INA226_SHUNT_VOLTAGE, reinterpret_cast<uint16_t*>(&shunt_voltage));
     INA226::read_register(INA226::Register_enum::INA226_MASK_ENABLE,nullptr);
     voltage_uv = bus_voltage*voltage_scale;
-    if(*(int16_t*)&shunt_voltage*current_scale<3){ //死区3mA
+    if(shunt_voltage*current_scale<3000){ //死区3mA
         current_nA = 0;
     }else{
-        current_nA = *(int16_t*)&shunt_voltage*current_scale;
+        current_nA = shunt_voltage*current_scale;
     }
 
     last_ina226_run_ms = now_time_ms;
