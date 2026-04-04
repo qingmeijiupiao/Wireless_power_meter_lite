@@ -5,12 +5,13 @@
 #include "esp_log.h"
 #include "ina226.hpp"
 #include "ulp_state.h"
-constexpr uint32_t LP_CPU_FREQ_HZ = 20000000;
-constexpr lp_io_num_t Alert_Pin = LP_IO_NUM_1;
 
 //校准系数，实测来的
 constexpr int current_scale = 1106;
 constexpr int voltage_scale = 1250;
+
+constexpr uint32_t LP_CPU_FREQ_HZ = 20000000;
+constexpr lp_io_num_t Alert_Pin = LP_IO_NUM_1;
 
 
 #define MS_TO_US(ms) ((ms) * 1000)
@@ -42,7 +43,7 @@ void ulp_gpio_init(){
 void ulp_i2c_init(){
     INA226::reset();
 
-    ulp_lp_core_delay_us(MS_TO_US(100));
+    ulp_lp_core_delay_us(MS_TO_US(5));
 
     uint16_t temp_value = 0;
     INA226::read_register(INA226::Register_enum::INA226_MANUFACTURER,&temp_value);
@@ -54,9 +55,8 @@ void ulp_i2c_init(){
         INA226::Avg_times_enum::INA226_64_samples,
         INA226::Timing_enum::INA226_1100_us,
         INA226::Timing_enum::INA226_1100_us,
-        INA226::Mode_enum::INA226_SHUNT_AND_BUS_CONTINUOUS);
-
-    ulp_lp_core_delay_us(MS_TO_US(10));
+        INA226::Mode_enum::INA226_SHUNT_AND_BUS_CONTINUOUS
+    );
 
     INA226::MaskEnable_reg_t MaskEnable_reg;
     MaskEnable_reg.raw = 0;
@@ -64,7 +64,6 @@ void ulp_i2c_init(){
     MaskEnable_reg.bits.APOL=0;
     MaskEnable_reg.bits.CNVR=1;
     INA226::write_register(INA226::Register_enum::INA226_MASK_ENABLE,MaskEnable_reg.raw);
-    ulp_lp_core_delay_us(MS_TO_US(10));
 };
 
     
@@ -92,6 +91,11 @@ void ina226_run(){
     last_ina226_run_ms = now_time_ms;
 }
 
+/**
+ * @brief : 定时器运行函数,更新ulp_core的内部时间计数器,单位为ms
+ * @note  : 需要这个函数是因为ulp_lp_core_get_cpu_cycles返回的是cpu周期数,大约215s就会溢出，必须处理溢出情况
+ * @return  {*}
+ */
 void timer_run(void) {
     constexpr uint32_t CYCLES_PER_MS = LP_CPU_FREQ_HZ / 1000;
     constexpr uint32_t MAX_MS = 0xFFFFFFFF / CYCLES_PER_MS;
@@ -114,13 +118,19 @@ void timer_run(void) {
     last_raw_ms = current_ms;
 }
 
-
-void test_func(void){
+/**
+ * @brief : APP 循环函数,每interval_ms执行一次action
+ * @return  {*}
+ * @param {uint32_t} interval_ms 运行的间隔时间，单位为ms
+ * @param {F&&} action 循执行的函数可以是lambda表达式,也可以是普通函数
+ */
+template<typename F>
+void app_loop_every_ms(uint32_t interval_ms, F&& action) {
     static uint32_t last_run_ms = 0;
-    if((now_time_ms - last_run_ms) > 1000){
+    if ((now_time_ms - last_run_ms) > interval_ms) {
         last_run_ms = now_time_ms;
+        action();
     }
-
 }
 
 int main(void){
@@ -130,6 +140,8 @@ int main(void){
     while (1) {
         ina226_run();
         timer_run();
-        test_func();
+        app_loop_every_ms(5000, [](){
+            // lp_log(now_time_ms);
+        });
     }
 }

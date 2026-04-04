@@ -3,18 +3,19 @@
  * @LastEditors: qingmeijiupiao
  * @Description: 黑匣子实现
  * @author: qingmeijiupiao
- * @LastEditTime: 2026-04-04 20:10:04
+ * @LastEditTime: 2026-04-05 00:11:11
  */
 #include "blackbox.h"
 #include <stddef.h>
 #include "esp_partition.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_flash.h"
 #include <cstring>
 using namespace BlackBox;
-
+auto& global_state_blackbox = get_global_state();
 static esp_partition_t* blackbox_partition = nullptr;
 
 static bool log_enable = true; // 是否启用日志记录
@@ -167,37 +168,27 @@ esp_err_t BlackBox::init(){
 
     return ESP_OK;
 }
-
-esp_err_t BlackBox::add_log(BlackBoxData_t& data){
-    if(!log_enable){
-        return ESP_ERR_NOT_SUPPORTED;
-    }
-
-    data.crc_checksum = CRC8_Calc((uint8_t*)&data, sizeof(BlackBoxData_t) - 1);
+static esp_err_t write_log_to_flash(BlackBoxData_t data){
+    //写入页缓冲区
     size_t offset = log_page_index * BLACKBOX_DATA_SIZE;
     memcpy(page_baffer + offset, &data, sizeof(BlackBoxData_t));
     log_page_index = (log_page_index + 1) % (PAGE_SIZE / BLACKBOX_DATA_SIZE);
     log_count++;
-
-    // 写入当前页面
+    
+    //写入物理页
     if (write_page(now_write_page, page_baffer) != ESP_OK) {
         ESP_LOGE("BlackBox", "Failed to write page %d", now_write_page);
         return ESP_ERR_INVALID_STATE;
     }
-
-    // 如果当前页面已满，准备写入下一个页面
-    if(log_page_index == 0){
-        now_write_page = (now_write_page + 1) % total_pages; // 更新写入页面索引
-        memset(page_baffer, 0xFF, PAGE_SIZE); //重置页缓冲区
-
-        // 如果写入到一个新的扇区，擦除后续两个扇区
+    
+    //页面已满时切换下一页并擦除后续扇区
+    if (log_page_index == 0) {
+        now_write_page = (now_write_page + 1) % total_pages;
+        memset(page_baffer, 0xFF, PAGE_SIZE);
+        
         if (now_write_page % PAGES_PER_SECTOR == 0) {
             uint32_t sector_index = now_write_page / PAGES_PER_SECTOR;
-            // 在sector_index-2写满时sector_index擦除过一次了，所以不需要再擦除一次
-            // if (erase_sector(sector_index) != ESP_OK) { 
-            //     ESP_LOGE("BlackBox", "Failed to erase sector %d", sector_index);
-            // }
-            if (erase_sector((sector_index + 1)% total_sectors)  != ESP_OK) {
+            if (erase_sector((sector_index + 1) % total_sectors) != ESP_OK) {
                 ESP_LOGE("BlackBox", "Failed to erase sector %d", sector_index + 1);
                 return ESP_ERR_INVALID_STATE;
             }
@@ -206,7 +197,32 @@ esp_err_t BlackBox::add_log(BlackBoxData_t& data){
     return ESP_OK;
 }
 
+
+esp_err_t BlackBox::add_log(const char *fmt, ...) {
+    if(!log_enable){
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+    
+    // 1. 格式化字符串到临时缓冲区
+    char log_str[LOG_STRING_MAX_LEN];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(log_str, sizeof(log_str), fmt, args);
+    va_end(args);
+    
+    // 2. 构造黑匣子数据块（原直接字符串版本的逻辑）
+    BlackBoxData_t data;
+    data.global_state = global_state_blackbox;
+    strncpy((char*)data.strlog, log_str, sizeof(data.strlog) - 1);
+    data.strlog[sizeof(data.strlog) - 1] = '\0';
+    data.timestamp = esp_timer_get_time() / 1000;
+    data.crc_checksum = CRC8_Calc((uint8_t*)&data, sizeof(BlackBoxData_t) - 1);
+    
+    return write_log_to_flash(data);
+}
+
 void BlackBox::set_log_enable(bool enable){
+    add_log("[BlackBox] : %s", enable ? "enabled" : "disabled");
     log_enable = enable;
 }
 
