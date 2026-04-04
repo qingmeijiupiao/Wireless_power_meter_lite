@@ -10,11 +10,13 @@
 #include "esp_partition.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_flash.h"
 #include <cstring>
 using namespace BlackBox;
+auto& global_state_blackbox = get_global_state();
 auto& global_state_blackbox = get_global_state();
 static esp_partition_t* blackbox_partition = nullptr;
 
@@ -188,6 +190,7 @@ static esp_err_t write_log_to_flash(BlackBoxData_t data){
         
         if (now_write_page % PAGES_PER_SECTOR == 0) {
             uint32_t sector_index = now_write_page / PAGES_PER_SECTOR;
+            if (erase_sector((sector_index + 1) % total_sectors) != ESP_OK) {
             if (erase_sector((sector_index + 1) % total_sectors) != ESP_OK) {
                 ESP_LOGE("BlackBox", "Failed to erase sector %d", sector_index + 1);
                 return ESP_ERR_INVALID_STATE;
