@@ -16,11 +16,14 @@ struct protect_threshold_t{
     uint32_t is_asc; //true: 大于阈值触发，false: 小于阈值触发 4字节对齐
 } __attribute__((packed));
 
-struct protect_states_t{
-    ProtectState_t temperature_protect_state;
-    ProtectState_t voltage_protect_state;
-    ProtectState_t current_protect_state;
-    ProtectState_t reverse; //4字节对齐
+union protect_states_t{
+    uint8_t protect_states_raw;
+    struct {
+    ProtectState_t temperature_protect_state : 2;
+    ProtectState_t voltage_protect_state : 2;
+    ProtectState_t current_protect_state : 2;
+    ProtectState_t reverse : 2;
+    } states_bit; //1字节对齐
 } __attribute__((packed));
 
 void protect_task(void* pvParameters);

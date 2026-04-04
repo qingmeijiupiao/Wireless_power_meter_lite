@@ -21,7 +21,7 @@
 
 
 
-GlobalState& global_state_protect = get_global_state();
+GlobalState& glb_states = get_global_state();
 
 protect_threshold_t temperature_threshold ={
     .warning_threshold = 60.0f,
@@ -98,16 +98,17 @@ ProtectState_t check_now_state(protect_threshold_t threshold, ProtectState_t las
 void protect_task(void* pvParameters){
     auto ticks = xTaskGetTickCount();
     constexpr int protect_check_HZ = 10;
+    auto& global_state_protects = glb_states.protect_states.states_bit; 
     while(1){
         //检查温度保护状态
-        global_state_protect.protect_states.temperature_protect_state = check_now_state(temperature_threshold, global_state_protect.protect_states.temperature_protect_state, global_state_protect.NTC_temperature);
+        global_state_protects.temperature_protect_state = check_now_state(temperature_threshold, global_state_protects.temperature_protect_state, glb_states.NTC_temperature/ 100.0f);
 
         //检查电压保护状态
-        global_state_protect.protect_states.voltage_protect_state = check_now_state(voltage_threshold, global_state_protect.protect_states.voltage_protect_state, global_state_protect.voltage_uV / 1e6);
+        global_state_protects.voltage_protect_state = check_now_state(voltage_threshold, global_state_protects.voltage_protect_state, glb_states.voltage_mV/ 1e3);
 
         //检查电流保护状态
-        global_state_protect.protect_states.current_protect_state = check_now_state(current_threshold, global_state_protect.protect_states.current_protect_state, global_state_protect.current_nA / 1e9);
-        
+        global_state_protects.current_protect_state = check_now_state(current_threshold, global_state_protects.current_protect_state, glb_states.current_nA / 1e9);
+
         xTaskDelayUntil(&ticks, configTICK_RATE_HZ / protect_check_HZ);
     }
 }

@@ -41,7 +41,8 @@ CppGpioDriver<GPIO_NUM_21, GpioMode::OUTPUT> POWER_OUT;
 CppGpioDriver<GPIO_NUM_17, GpioMode::INPUT_PULLUP> Main_Button;
 CppGpioDriver<GPIO_NUM_16, GpioMode::OUTPUT> CAN_register;
 
-GlobalState& global_state = get_global_state();
+auto& global_state   = get_global_state();
+auto& protect_states = global_state.protect_states.states_bit;
 
 HXC_TWAI CAN_BUS(18,14,CAN_RATE::CAN_RATE_1MBIT);
 
@@ -92,7 +93,7 @@ void screen_task(void* arg){
     warning_background_color.set_color_raw(0xFE60);
     ST7735::color_t error_background_color;
     error_background_color.set_color_raw(0xB123);
-
+    auto& global_state_bits = global_state.global_state_bits;
     while (1){
 
         char temp_str[16];
@@ -114,19 +115,19 @@ void screen_task(void* arg){
         snprintf(temp_str, sizeof(temp_str), "%.3fW", current*voltage);
         ST7735::draw_string(28, 47, temp_str,ST7735::color_t(0x003ED0),background_color,DENGB16);
 
-        snprintf(temp_str, sizeof(temp_str), "%.1fC", global_state.NTC_temperature);
+        snprintf(temp_str, sizeof(temp_str), "%.1fC", global_state.NTC_temperature/100.0f);
         ST7735::draw_string(28, 67, temp_str,ST7735::color_t(0xb3261e),background_color,DENGB12);
 
         snprintf(temp_str, sizeof(temp_str), "%02d:%02d:%02d", now.hour, now.minute, now.second);
         ST7735::draw_string(111, 0, temp_str,ST7735::color_t(0xffffff),background_color,DENGB12);
 
-        if(global_state.out_put_state){
+        if(global_state_bits.state_bit.out_put_state){
             ST7735::draw_image(65, 66, OPEN_WIDTH, OPEN_HEIGHT, open_data);
         }else{
             ST7735::draw_image(65, 66, CLOSE_WIDTH, CLOSE_HEIGHT, close_data);
         }
 
-        ProtectState_t temp_protect_state = global_state.protect_states.temperature_protect_state;
+        ProtectState_t temp_protect_state = protect_states.temperature_protect_state;
         if(temp_protect_state != PROTECT_STATE_NORMAL){
             if(temp_protect_state == PROTECT_STATE_PROTECT){
                 ST7735::draw_image(113,18,ERRORRECTANGLE_WIDTH,ERRORRECTANGLE_HEIGHT,ErrorRectangle_data);
@@ -140,7 +141,7 @@ void screen_task(void* arg){
             ST7735::fill_rect(113, 18, WARNINGRECTANGLE_WIDTH, WARNINGRECTANGLE_HEIGHT, background_color);
         }
         
-        ProtectState_t voltage_protect_state = global_state.protect_states.voltage_protect_state;
+        ProtectState_t voltage_protect_state = protect_states.voltage_protect_state;
         if(voltage_protect_state != PROTECT_STATE_NORMAL){
             if(voltage_protect_state == PROTECT_STATE_PROTECT){
                 ST7735::draw_image(113,18+21,ERRORRECTANGLE_WIDTH,ERRORRECTANGLE_HEIGHT,ErrorRectangle_data);
@@ -154,7 +155,7 @@ void screen_task(void* arg){
             ST7735::fill_rect(113, 18+21, WARNINGRECTANGLE_WIDTH, WARNINGRECTANGLE_HEIGHT, background_color);
         }
         
-        ProtectState_t current_protect_state = global_state.protect_states.current_protect_state;
+        ProtectState_t current_protect_state = protect_states.current_protect_state;
         if(current_protect_state != PROTECT_STATE_NORMAL){
             if(current_protect_state == PROTECT_STATE_PROTECT){
                 ST7735::draw_image(113,18+21+21,ERRORRECTANGLE_WIDTH,ERRORRECTANGLE_HEIGHT,ErrorRectangle_data);
@@ -179,10 +180,10 @@ void update_main_state_task(void* arg){
     auto ticks = xTaskGetTickCount();
     constexpr int update_HZ = 200;
     while (1){
-        global_state.voltage_uV = ulp_voltage_uv;
+        global_state.voltage_mV = ulp_voltage_uv/1e3;
         global_state.current_nA = ulp_current_nA;
-        global_state.NTC_temperature = NTC::getTemperature()/100.0f;
-        global_state.chip_temperature = Chip_Temperature_Sensor.getTemperature();
+        global_state.NTC_temperature = NTC::getTemperature();
+        global_state.chip_temperature = Chip_Temperature_Sensor.getTemperature()*100.0f;
         xTaskDelayUntil(&ticks, configTICK_RATE_HZ / update_HZ);
     }
 }
@@ -198,19 +199,19 @@ void OUTPUT_ctrl_task(void* arg){
         if (now_button_state != last_button_state){
             if(!now_button_state){
                 ESP_LOGI("OUTPUT_ctrl_task", "Button pressed");
-                global_state.out_put_state = !global_state.out_put_state;
+                global_state.global_state_bits.state_bit.out_put_state = !global_state.global_state_bits.state_bit.out_put_state;
             }
             last_button_state = now_button_state;
         }
 
         // 保护状态判断, 有保护状态时, 输出关闭
-        if(global_state.protect_states.voltage_protect_state == PROTECT_STATE_PROTECT || 
-           global_state.protect_states.current_protect_state == PROTECT_STATE_PROTECT || 
-           global_state.protect_states.temperature_protect_state == PROTECT_STATE_PROTECT){
-            global_state.out_put_state = false;
+        if(protect_states.voltage_protect_state == PROTECT_STATE_PROTECT || 
+           protect_states.current_protect_state == PROTECT_STATE_PROTECT || 
+           protect_states.temperature_protect_state == PROTECT_STATE_PROTECT){
+            global_state.global_state_bits.state_bit.out_put_state = false;
         }
 
-        POWER_OUT.set(global_state.out_put_state);
+        POWER_OUT.set(global_state.global_state_bits.state_bit.out_put_state);
         xTaskDelayUntil(&ticks, configTICK_RATE_HZ / button_check_HZ);
     }
 }
@@ -276,9 +277,6 @@ extern "C" void app_main(void){
     ESP_ERROR_CHECK(NTC::init(ADC_CHANNEL_5));
     ESP_ERROR_CHECK(LP_Core_Load());
     ESP_ERROR_CHECK(BlackBox::init());
-
-    //printf("NOW LOGS COUNT: %ld\n", BlackBox::get_count());
-    
     POWER_OUT.set(true);
     xTaskCreate(update_main_state_task, "update_main_state_task", 2048, NULL, 6, NULL);
     xTaskCreate(screen_task, "screen_task", 4096, NULL, 4, NULL);
@@ -286,10 +284,17 @@ extern "C" void app_main(void){
     xTaskCreate(protect_task, "protect_task", 2048, NULL, 5, NULL);
 
     //xTaskCreate(CAN_test_task, "CAN_test_task", 8192, NULL, 6, NULL);
-
+    uint32_t test_count = 0;
     while (1){
+        ESP_LOGI("app_main", "NOW LOGS COUNT: %ld", BlackBox::get_count());
+        //BlackBox::add_log("test log %d", test_count++);
+        for (size_t i = 0; i < BlackBox::get_count(); i++){
+            auto log = BlackBox::get_log(i);
+            ESP_LOGI("app_main", "datas voltage: %ld, current: %ld, temp: %f, chip temp: %f, Log_str%d: %s", log.global_state.voltage_mV, log.global_state.current_nA, log.global_state.NTC_temperature, log.global_state.chip_temperature, i, log.strlog);
+        }
+        
         //ESP_LOGI("app_main", "protect_states: temp=%d, voltage=%d, current=%d", global_state.protect_states.temperature_protect_state, global_state.protect_states.voltage_protect_state, global_state.protect_states.current_protect_state);
-        vTaskDelay(1000/ portTICK_PERIOD_MS);
+        vTaskDelay(5000/ portTICK_PERIOD_MS);
     }
     
 }
