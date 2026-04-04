@@ -290,11 +290,11 @@ extern "C" void app_main(void){
         //BlackBox::add_log("test log %d", test_count++);
         for (size_t i = 0; i < BlackBox::get_count(); i++){
             auto log = BlackBox::get_log(i);
-            ESP_LOGI("app_main", "datas voltage: %ld, current: %ld, temp: %f, chip temp: %f, Log_str%d: %s", log.global_state.voltage_mV, log.global_state.current_nA, log.global_state.NTC_temperature, log.global_state.chip_temperature, i, log.strlog);
+            ESP_LOGI("app_main", "datas voltage: %d, current: %ld, temp: %d, chip temp: %d, Log_str%d: %s", log.global_state.voltage_mV, log.global_state.current_nA, log.global_state.NTC_temperature, log.global_state.chip_temperature, i, log.strlog);
         }
         
         //ESP_LOGI("app_main", "protect_states: temp=%d, voltage=%d, current=%d", global_state.protect_states.temperature_protect_state, global_state.protect_states.voltage_protect_state, global_state.protect_states.current_protect_state);
-        vTaskDelay(5000/ portTICK_PERIOD_MS);
+        vTaskDelay(2000/ portTICK_PERIOD_MS);
     }
     
 }

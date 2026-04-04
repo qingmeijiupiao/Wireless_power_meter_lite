@@ -3,16 +3,16 @@
  * @LastEditors: qingmeijiupiao
  * @Description: 黑匣子实现
  * @author: qingmeijiupiao
- * @LastEditTime: 2026-04-05 00:11:11
+ * @LastEditTime: 2026-04-05 00:50:39
  */
 #include "blackbox.h"
 #include <stddef.h>
 #include "esp_partition.h"
 #include "esp_log.h"
 #include "esp_timer.h"
-#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "esp_flash.h"
 #include <cstring>
 using namespace BlackBox;
@@ -20,6 +20,7 @@ auto& global_state_blackbox = get_global_state();
 static esp_partition_t* blackbox_partition = nullptr;
 
 static bool log_enable = true; // 是否启用日志记录
+static SemaphoreHandle_t log_mutex = nullptr; // 保护日志记录的互斥锁
 
 static uint32_t now_write_page = 0;   // 当前写入的页面索引
 static uint8_t log_page_index = 0;    // 下一条日志在页面中的索引
@@ -166,10 +167,17 @@ esp_err_t BlackBox::init(){
     // 读取当前页面数据到缓冲区
     esp_partition_read(blackbox_partition, now_write_page * PAGE_SIZE, buffer, PAGE_SIZE);
     memcpy(page_baffer, buffer, PAGE_SIZE);
+    log_mutex = xSemaphoreCreateBinary();
+    if(log_mutex == nullptr){
+        ESP_LOGE("BlackBox", "Failed to create log mutex!");
+        return ESP_ERR_NO_MEM;
+    }
+    xSemaphoreGive(log_mutex);
 
     return ESP_OK;
 }
 static esp_err_t write_log_to_flash(BlackBoxData_t data){
+    xSemaphoreTake(log_mutex, portMAX_DELAY);
     //写入页缓冲区
     size_t offset = log_page_index * BLACKBOX_DATA_SIZE;
     memcpy(page_baffer + offset, &data, sizeof(BlackBoxData_t));
@@ -195,6 +203,7 @@ static esp_err_t write_log_to_flash(BlackBoxData_t data){
             }
         }
     }
+    xSemaphoreGive(log_mutex);
     return ESP_OK;
 }
 
@@ -203,7 +212,7 @@ esp_err_t BlackBox::add_log(const char *fmt, ...) {
     if(!log_enable){
         return ESP_ERR_NOT_SUPPORTED;
     }
-    
+
     // 1. 格式化字符串到临时缓冲区
     char log_str[LOG_STRING_MAX_LEN];
     va_list args;
@@ -218,13 +227,14 @@ esp_err_t BlackBox::add_log(const char *fmt, ...) {
     data.strlog[sizeof(data.strlog) - 1] = '\0';
     data.timestamp = esp_timer_get_time() / 1000;
     data.crc_checksum = CRC8_Calc((uint8_t*)&data, sizeof(BlackBoxData_t) - 1);
-    
     return write_log_to_flash(data);
 }
 
 void BlackBox::set_log_enable(bool enable){
+    xSemaphoreTake(log_mutex, portMAX_DELAY);
     add_log("[BlackBox] : %s", enable ? "enabled" : "disabled");
     log_enable = enable;
+    xSemaphoreGive(log_mutex);
 }
 
 uint32_t BlackBox::get_count(){
@@ -232,14 +242,16 @@ uint32_t BlackBox::get_count(){
 }
 
 BlackBoxData_t BlackBox::get_log(uint32_t index){
+    xSemaphoreTake(log_mutex, portMAX_DELAY);
     BlackBoxData_t log_entry;  // 用于返回的静态对象
     if(index>=get_count()){
         ESP_LOGW("BlackBox", "Log Index out of range!");
+        xSemaphoreGive(log_mutex);
         return log_entry;
     }
     uint8_t buffer[PAGE_SIZE];
 
-    // 1. 确定最新日志的位置
+    //确定最新日志的位置
     uint32_t last_page;
     uint8_t last_offset;
 
@@ -253,7 +265,7 @@ BlackBoxData_t BlackBox::get_log(uint32_t index){
         last_offset = log_page_index - 1;
     }
 
-    // 2. 根据 index 倒退找到目标日志的位置
+    //根据 index 倒退找到目标日志的位置
     uint32_t target_page = last_page;
     uint8_t target_offset = last_offset;
     uint32_t remaining = index;
@@ -276,7 +288,7 @@ BlackBoxData_t BlackBox::get_log(uint32_t index){
         }
     }
 
-    // 3. 读取目标页数据
+    //读取目标页数据
     esp_err_t err = esp_partition_read(blackbox_partition,
                                        target_page * PAGE_SIZE,
                                        buffer,
@@ -284,19 +296,22 @@ BlackBoxData_t BlackBox::get_log(uint32_t index){
     if (err != ESP_OK) {
         ESP_LOGE("BlackBox", "Failed to read page %d", target_page);
         memset(static_cast<void*>(&log_entry), 0, sizeof(log_entry));
+        xSemaphoreGive(log_mutex);
         return log_entry;
     }
 
-    // 4. 提取对应日志
+    //提取对应日志
     memcpy(static_cast<void*>(&log_entry),
            buffer + target_offset * BLACKBOX_DATA_SIZE,
            sizeof(log_entry));
+    uint8_t calc_crc = CRC8_Calc((uint8_t*)&log_entry, sizeof(BlackBoxData_t) - 1);
 
-    // 可选：验证帧头，若不正确可返回空数据
-    if (log_entry.sof != DATA_SOF) {
-        ESP_LOGW("BlackBox", "Log at index %d has invalid SOF", index);
-        // 不清零，直接返回，由调用者处理
+    //验证帧头和CRC8，若不正确返回空数据
+    if (log_entry.sof != DATA_SOF || log_entry.crc_checksum != calc_crc) {
+        ESP_LOGW("BlackBox", "Log at index %d has invalid SOF or CRC8", index);
+        memset(static_cast<void*>(&log_entry), 0, sizeof(log_entry));
     }
-
+    
+    xSemaphoreGive(log_mutex);
     return log_entry;
 }
