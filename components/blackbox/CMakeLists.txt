@@ -1,3 +1,3 @@
 idf_component_register(SRCS "blackbox.cpp"
-                    REQUIRES esp_partition spi_flash
+                    PRIV_REQUIRES esp_partition spi_flash freertos log
                     INCLUDE_DIRS "include")

@@ -1,4 +1,4 @@
 idf_component_register(
                     SRCS "src/protect.cpp" 
-                    REQUIRES global_state
+                    PRIV_REQUIRES global_state freertos log
                     INCLUDE_DIRS "include")
