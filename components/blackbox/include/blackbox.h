@@ -1,7 +1,7 @@
 #ifndef BLACKBOX_H
 #define BLACKBOX_H
 #include <stdint.h>
-
+#include "esp_err.h"
 namespace BlackBox {
     constexpr uint32_t BLACKBOX_DATA_SIZE = 64;
     constexpr uint32_t PAGE_SIZE = 256; // 每页256字节
@@ -28,14 +28,14 @@ namespace BlackBox {
      * @brief : 初始化黑匣子
      * @return  {*}
      */
-    void init();
+    esp_err_t init();
 
     /**
      * @brief : 添加一条日志
      * @return  {*}
      * @param {BlackBoxData_t*} data 不需要先计算crc校验码，函数内部会自动计算并添加
      */
-    void add_log(BlackBoxData_t& data);
+    esp_err_t add_log(BlackBoxData_t& data);
 
     /**
      * @brief : 获取日志总数

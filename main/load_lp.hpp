@@ -42,28 +42,17 @@ void LP_i2c_init(){
     i2c_cfg.i2c_timing_cfg.clk_speed_hz = 400000;
     i2c_cfg.i2c_src_clk = LP_I2C_SCLK_DEFAULT;
 
-    auto err = lp_core_i2c_master_init(LP_I2C_NUM_0, (const lp_core_i2c_cfg_t*)&i2c_cfg);
-    if (err != ESP_OK) {
-        while(1){
-            ESP_LOGE(LPTAG, "lp core init i2c failed: %s", esp_err_to_name(err));
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-        }
-    }
+    ESP_ERROR_CHECK(lp_core_i2c_master_init(LP_I2C_NUM_0, (const lp_core_i2c_cfg_t*)&i2c_cfg));
+
     ESP_LOGI(LPTAG, "lp core init i2c success...");
 }
 
-void LP_Core_Load(void){
+esp_err_t LP_Core_Load(void){
     LP_i2c_init();
     ESP_LOGI(LPTAG, "main core start load lp core...");
+
     // 加载 LP 核二进制文件
-    esp_err_t err;
-    err = ulp_lp_core_load_binary(bin_start, bin_end - bin_start);
-    if (err != ESP_OK) {
-        while(1){
-            ESP_LOGE(LPTAG, "lp core load binary failed: %s", esp_err_to_name(err));
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-        }
-    }
+    ESP_ERROR_CHECK(ulp_lp_core_load_binary(bin_start, bin_end - bin_start));
     ESP_LOGI(LPTAG, "lp core load binary success...");
 
     LP_CLKRST.lp_clk_conf.fast_clk_sel = 1; //IDF 6.0版本默认是内部RC时钟(17.5MHz)，且没有API可以切换到外部时钟源，需要手动操作寄存器切换到外部时钟源(20MHz)
@@ -73,14 +62,9 @@ void LP_Core_Load(void){
     cfg.wakeup_source = ULP_LP_CORE_WAKEUP_SOURCE_HP_CPU;
     ulp_state.ulp_state_bits.ulp_run = false;
     
-    err = ulp_lp_core_run(&cfg);
-    if (err != ESP_OK) {
-        while(1){
-            ESP_LOGE(LPTAG, "lp core run failed: %s", esp_err_to_name(err));
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-        }
-    }
-    int32_t timeout = 3000;
+    ESP_ERROR_CHECK(ulp_lp_core_run(&cfg)); 
+
+    int32_t timeout = 200;
     while (timeout-=10){
         if(ulp_state.ulp_state_bits.ulp_run){
             break;
@@ -89,10 +73,12 @@ void LP_Core_Load(void){
     }
 
     if(timeout <= 0){
-        ESP_LOGE(LPTAG, "lp core init timeout...");
+        ESP_LOGE(LPTAG, "lp core run timeout");
+        return ESP_ERR_TIMEOUT;
     }else{
-        ESP_LOGI(LPTAG, "lp core init success...");
+        ESP_LOGI(LPTAG, "lp core run success...");
     }
 
     xTaskCreate(print_lp_core_log, "print_lp_core_log", 2048, NULL, 4, NULL);
+    return ESP_OK;
 }

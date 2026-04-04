@@ -3,7 +3,7 @@
  * @LastEditors: qingmeijiupiao
  * @Description: 黑匣子实现
  * @author: qingmeijiupiao
- * @LastEditTime: 2026-03-08 00:06:36
+ * @LastEditTime: 2026-04-04 20:10:04
  */
 #include "blackbox.h"
 #include <stddef.h>
@@ -88,7 +88,7 @@ uint8_t get_empty_log_index_form_page(uint8_t* page_data){
     return PAGE_SIZE/sizeof(BlackBoxData_t); // 没有找到没有帧头的位置，说明页面满了
 }
 
-void BlackBox::init(){
+esp_err_t BlackBox::init(){
     alignas(4) uint8_t buffer[PAGE_SIZE];
     
     const esp_partition_t* _partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "blackbox");   
@@ -116,9 +116,9 @@ void BlackBox::init(){
     }
 
     //设计上至少有一个空页，如果没有，说明flash寿命已尽
-    while(!empty_page_found){
+    if(!empty_page_found){
         ESP_LOGE("BlackBox", "No empty page found! Flash may be worn out.");
-        vTaskDelay(1000);
+        return ESP_ERR_INVALID_STATE;
     }
 
     // 第一个页面为空，可能是第一次使用，也可能是之前的日志已经写满了并且擦除了这个页面，需要判断情况
@@ -164,11 +164,13 @@ void BlackBox::init(){
     // 读取当前页面数据到缓冲区
     esp_partition_read(blackbox_partition, now_write_page * PAGE_SIZE, buffer, PAGE_SIZE);
     memcpy(page_baffer, buffer, PAGE_SIZE);
+
+    return ESP_OK;
 }
 
-void BlackBox::add_log(BlackBoxData_t& data){
+esp_err_t BlackBox::add_log(BlackBoxData_t& data){
     if(!log_enable){
-        return;
+        return ESP_ERR_NOT_SUPPORTED;
     }
 
     data.crc_checksum = CRC8_Calc((uint8_t*)&data, sizeof(BlackBoxData_t) - 1);
@@ -180,7 +182,7 @@ void BlackBox::add_log(BlackBoxData_t& data){
     // 写入当前页面
     if (write_page(now_write_page, page_baffer) != ESP_OK) {
         ESP_LOGE("BlackBox", "Failed to write page %d", now_write_page);
-        return;
+        return ESP_ERR_INVALID_STATE;
     }
 
     // 如果当前页面已满，准备写入下一个页面
@@ -197,10 +199,11 @@ void BlackBox::add_log(BlackBoxData_t& data){
             // }
             if (erase_sector((sector_index + 1)% total_sectors)  != ESP_OK) {
                 ESP_LOGE("BlackBox", "Failed to erase sector %d", sector_index + 1);
+                return ESP_ERR_INVALID_STATE;
             }
         }
     }
-    
+    return ESP_OK;
 }
 
 void BlackBox::set_log_enable(bool enable){

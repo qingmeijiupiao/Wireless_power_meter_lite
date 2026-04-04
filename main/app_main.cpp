@@ -272,11 +272,10 @@ extern "C" void app_main(void){
     ESP_ERROR_CHECK(CAN_register.init());
     ESP_ERROR_CHECK(POWER_OUT.init());
     ESP_ERROR_CHECK(Main_Button.init());
-    Chip_Temperature_Sensor.init();
-
-    NTC::init(ADC_CHANNEL_5);
-    LP_Core_Load();
-    BlackBox::init();
+    ESP_ERROR_CHECK(Chip_Temperature_Sensor.init());
+    ESP_ERROR_CHECK(NTC::init(ADC_CHANNEL_5));
+    ESP_ERROR_CHECK(LP_Core_Load());
+    ESP_ERROR_CHECK(BlackBox::init());
 
     //printf("NOW LOGS COUNT: %ld\n", BlackBox::get_count());
     

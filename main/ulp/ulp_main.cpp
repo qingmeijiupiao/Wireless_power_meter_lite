@@ -35,7 +35,6 @@ void ulp_gpio_init(){
     ulp_lp_core_gpio_init(Alert_Pin);
     ulp_lp_core_gpio_pullup_enable(Alert_Pin);
     ulp_lp_core_gpio_input_enable(Alert_Pin);
-    ulp_lp_core_delay_us(MS_TO_US(10));
 };
 
 

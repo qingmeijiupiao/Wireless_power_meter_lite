@@ -36,7 +36,7 @@ class TemperatureSensor_t{
      * 设置默认温度范围并启动传感器。默认使用范围90(-10°C到80°C)，
      * 这是最常用的温度范围，精度最高(±1°C)。
      */
-    void init() {
+    esp_err_t init() {
         uint8_t default_range_index = 2; // 默认使用范围90(-10°C到80°C)
         current_range_index = default_range_index;
         
@@ -57,6 +57,7 @@ class TemperatureSensor_t{
         // 记录当前范围的边界值
         current_range_min = temperature_sensor_attributes[default_range_index].range_min;
         current_range_max = temperature_sensor_attributes[default_range_index].range_max;
+        return ESP_OK;
     }
     /**
      * @brief 获取当前温度值
