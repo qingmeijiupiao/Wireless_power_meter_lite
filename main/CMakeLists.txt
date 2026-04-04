@@ -17,6 +17,7 @@ idf_component_register(
         log
         freertos
         littlefs
+        ui_resources
     INCLUDE_DIRS ""
 )
 
