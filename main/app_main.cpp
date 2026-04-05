@@ -225,6 +225,12 @@ const twai_frame_t send_message = {
     .header = {
         .id = 0x123,
         .dlc = 8,
+        .ide = false,
+        .rtr = false,
+        .fdf = false,
+        .brs = false,
+        .esi = false,
+        .timestamp = 0,
     },
     .buffer = const_cast<uint8_t*>(send_data),
     .buffer_len = sizeof(send_data),

@@ -35,14 +35,20 @@ struct double_buffer_t{
 
 
 static void write_command(uint8_t cmd) {
-    spi_transaction_t t = { .length = 8, .tx_buffer = &cmd };
+    spi_transaction_t t = {};
+    t.length = 8;
+    t.tx_buffer = &cmd;
     gpio_set_level(dc_pin, 0);
     spi_device_polling_transmit(spi, &t);
 }
 
 static void write_data(const uint8_t *data, size_t len) {
     if (len == 0) return;
-    spi_transaction_t t = { .length = len * 8, .tx_buffer = data };
+
+    spi_transaction_t t = {};
+    t.length = len * 8;
+    t.tx_buffer = data;
+
     gpio_set_level(dc_pin, 1);
     spi_device_polling_transmit(spi, &t);
 }
@@ -82,30 +88,35 @@ esp_err_t init(const Config *cfg, Rotation rotation) {
              cfg->mosi_io_num, cfg->sclk_io_num, cfg->cs_io_num,
              cfg->dc_io_num, cfg->rst_io_num, cfg->bl_io_num);
     
-    gpio_config_t io_conf = {
-        .pin_bit_mask = (1ULL << dc_pin) | (1ULL << rst_pin),
-        .mode = GPIO_MODE_OUTPUT,
-    };
+    gpio_config_t io_conf = {};
+    io_conf.pin_bit_mask = (1ULL << dc_pin) | (1ULL << rst_pin);
+    io_conf.mode = GPIO_MODE_OUTPUT;
+
     gpio_config(&io_conf);
     
     if (cfg->bl_io_num >= 0) {
-        gpio_config_t bl_conf = { .pin_bit_mask = (1ULL << cfg->bl_io_num), .mode = GPIO_MODE_OUTPUT };
+        gpio_config_t bl_conf = {};
+        bl_conf.pin_bit_mask = (1ULL << cfg->bl_io_num);
+        bl_conf.mode = GPIO_MODE_OUTPUT;
         gpio_config(&bl_conf);
         gpio_set_level(static_cast<gpio_num_t>(cfg->bl_io_num), 1);
         ESP_LOGD(TAG, "Backlight enabled");
     }
     
-    spi_bus_config_t buscfg = {
-        .mosi_io_num = cfg->mosi_io_num, .miso_io_num = -1, .sclk_io_num = cfg->sclk_io_num,
-        .quadwp_io_num = -1, .quadhd_io_num = -1, .max_transfer_sz = MAX_TRANSFER_SIZE,
-    };
-    spi_device_interface_config_t devcfg = {
-        .mode = 0,
-        .clock_speed_hz = SPI_CLOCK_SPEED_HZ,
-        .spics_io_num = static_cast<gpio_num_t>(cfg->cs_io_num),
-        .flags = SPI_DEVICE_NO_DUMMY,
-        .queue_size = 7
-    };
+    spi_bus_config_t buscfg = {};
+    buscfg.mosi_io_num = cfg->mosi_io_num;
+    buscfg.miso_io_num = -1;
+    buscfg.sclk_io_num = cfg->sclk_io_num;
+    buscfg.quadwp_io_num = -1;
+    buscfg.quadhd_io_num = -1;
+    buscfg.max_transfer_sz = MAX_TRANSFER_SIZE;
+
+    spi_device_interface_config_t devcfg = {};
+    devcfg.mode = 0;
+    devcfg.clock_speed_hz = SPI_CLOCK_SPEED_HZ;
+    devcfg.spics_io_num = static_cast<gpio_num_t>(cfg->cs_io_num);
+    devcfg.flags = SPI_DEVICE_NO_DUMMY;
+    devcfg.queue_size = 7;
     
     ret = spi_bus_initialize(cfg->host_id, &buscfg, SPI_DMA_CH_AUTO);
     if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
