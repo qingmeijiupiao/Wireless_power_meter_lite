@@ -1,16 +1,45 @@
 /*
- * @version: 2.0
+ * @version: 2.2
  * @LastEditors: qingmeijiupiao
  * @Description: HXC ESP32 twai封装类
  * @Author: qingmeijiupiao
- * @LastEditTime: 2026-03-29 16:50:11
+ * @LastEditTime: 2026-04-06
  */
-#ifndef HXC_TWAI_HPP
-#define HXC_TWAI_HPP
+#ifndef HXC_TWAI_H
+#define HXC_TWAI_H
+
 #include <cstring>
 #include <functional>
 #include "esp_twai.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+
+// 性能与资源调节参数 (根据应用场景调整)
+
+/** 软件分发映射表大小：决定了你能同时为多少个特定 ID 注册独立回调函数 */
 constexpr uint8_t MAX_TWAI_CALLBACK_NUM = 10;
+
+/** 接收任务优先级：若处理 8000fps 等极端场景，建议设为 10 以上以抢占普通应用 */
+constexpr UBaseType_t TWAI_RECEIVE_TASK_PRIO = 2;
+
+/** 接收任务栈大小：4096 字节足以应对大多数包含打印逻辑的回调 */
+constexpr uint32_t TWAI_RECEIVE_TASK_STACK = 4096;
+
+/** 软件接收队列深度：在 8000fps 负载下，深度 50-100 可提供更稳健的系统抖动缓冲 */
+constexpr uint32_t TWAI_RX_QUEUE_LEN = 20;
+
+/** 发送阻塞超时时间 (ms)：当发送硬件 FIFO 满时，函数允许等待的时间 */
+constexpr TickType_t TWAI_SEND_TIMEOUT_MS = pdMS_TO_TICKS(100);
+
+/** 硬件发送队列深度：ESP-IDF 驱动内部的暂存队列深度 */
+constexpr uint32_t TWAI_HW_TX_QUEUE_LEN = 5;
+
+/** 最大TWAI节点数量：决定了你能同时管理多少个TWAI节点 */
+constexpr uint8_t MAX_TWAI_NODE_NUM = 3;
+
+// ==========================================
+
 //CAN消息结构体
 struct HXC_CAN_message_t{
   uint8_t extd=0;                    /**< 扩展帧格式标志（29位ID） */
@@ -40,6 +69,7 @@ struct callback_map_t {
     HXC_can_feedback_func func;
     bool used;
 };
+
 // TWAI封装类
 class HXC_TWAI {
 public:
@@ -76,6 +106,23 @@ public:
     esp_err_t setup();
 
     /**
+     * @description: 获取初始化状态
+     * @return {bool} true:已初始化 false:未初始化
+     * @Author: qingmeijiupiao
+     */
+    bool get_setup_flag();
+    
+    /**
+     * @description: 设置CAN过滤器
+     * @param {twai_mask_filter_config_t} filter 过滤器配置
+     * @note 配置了过滤器时，接收标准CAN消息和扩展帧格式的消息只能二选一
+     * @note 最好在setup之前设置过滤器，否则会暂停一段时间twai节点
+     * @return {esp_err_t} 成功返回ESP_OK
+     * @Author: qingmeijiupiao
+     */
+    esp_err_t set_filter(twai_mask_filter_config_t filter);
+
+    /**
      * @description: 发送CAN消息
      * @return {esp_err_t}
      * @Author: qingmeijiupiao
@@ -87,7 +134,7 @@ public:
      * @description: 添加CAN消息接收回调,收到对应地址的消息时运行回调函数
      * @return {*}
      * @Author: qingmeijiupiao
-     * @param {int} addr CAN消息地址
+     * @param {int} addr CAN消息地址 -1表示所有地址
      * @param {HXC_can_feedback_func} func 回调函数
      */
     void add_can_receive_callback_func(int addr, HXC_can_feedback_func func);
@@ -96,41 +143,52 @@ public:
      * @description: 移除CAN消息接收回调函数
      * @return {*}
      * @Author: qingmeijiupiao
-     * @param {int} addr CAN消息地址
+     * @param {int} addr CAN消息地址 -1表示所有地址
      */
     void remove_can_receive_callback_func(int addr);
 
     /**
-     * @description: 获取初始化状态
-     * @return {bool} true:已初始化 false:未初始化
-     * @Author: qingmeijiupiao
-     */
-    bool get_setup_flag();
-    
-    /**
      * @description: 判断CAN消息接收回调函数是否存在
      * @return {bool} true:存在 false:不存在
      * @Author: qingmeijiupiao
-     * @param {int} addr CAN消息地址
+     * @param {int} addr CAN消息地址 -1表示所有地址回调函数是否存在
      */
     bool exist_can_receive_callback_func(int addr);
-//protected:
-    twai_node_handle_t twai_node_handle = nullptr;  /**< TWAI节点句柄 */
-    uint8_t TX_PIN, RX_PIN;  /**< 连接CAN收发芯片的TX和RX引脚IO号 */
-    HXC_CAN_message_t RX_message_buf;  /**< 接收CAN消息缓存 */
-    twai_frame_t tx_message_head_buf;  /**< 发送CAN消息缓存 */
-    uint8_t tx_message_data_buf[8]={0};  /**< 发送CAN消息数据缓存 */
-    CAN_RATE can_rate;  /**< CAN速率 */
-    callback_map_t callback_maps[MAX_TWAI_CALLBACK_NUM];  /**< 回调函数线性映射表 */
-    uint8_t callback_count = 0;  /**< 当前回调函数数量 */
-    bool have_new_receive = false;  /**< 是否有新接收消息 */
+
     /**
-     * @description: TWAI接受数据的线程，接收到数据后转换成HXC_CAN_message，然后调用回调函数
+     * @description: 获取接收队列溢出计数
+     * @return {uint32_t} 溢出次数
+     */
+    uint32_t get_rx_overflow_count() const { return rx_overflow_count; }
+
+protected:
+    twai_node_handle_t twai_node_handle = nullptr;  /**< TWAI节点句柄 */
+    uint8_t TX_PIN, RX_PIN;                         /**< 连接CAN收发芯片的TX和RX引脚IO号 */
+    twai_mask_filter_config_t filter_config;         /**< 过滤器配置 */ 
+    bool user_set_filter = false;                    /**< 用户是否设置了过滤器 */
+    CAN_RATE can_rate;                              /**< CAN速率 */
+    callback_map_t callback_maps[MAX_TWAI_CALLBACK_NUM];  /**< 回调函数线性映射表 */
+    uint8_t callback_count = 0;                     /**< 当前回调函数数量 */
+    
+    QueueHandle_t rx_queue = nullptr;               /**< 接收队列句柄，用于解决高并发数据覆盖问题 */
+    TaskHandle_t rx_task_handle = nullptr;          /**< 接收任务句柄 */
+    uint32_t rx_overflow_count = 0;                /**< 接收队列溢出计数 */
+    HXC_can_feedback_func all_callback_func = nullptr;  /**< 所有地址的回调函数 */
+
+    /**
+     * @description: TWAI接受数据的硬件中断回调，接收到数据后推入队列
      */
     static bool on_rx_done_callback(twai_node_handle_t handle, const twai_rx_done_event_data_t *edata, void *user_ctx);
+    
+    /**
+     * @description: TWAI处理数据的独立任务，从队列阻塞读取
+     */
     static void receive_task(void* arg);
-    void receive_callback();
+    
+    /**
+     * @description: 将队列取出的消息转换并分发给对应的应用层回调函数
+     */
+    void process_receive(HXC_CAN_message_t* msg);
 };
-extern uint32_t test_count;
 
 #endif

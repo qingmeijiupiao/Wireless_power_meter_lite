@@ -236,7 +236,7 @@ void CAN_test_task(void* arg){
     vTaskDelay(1000 / portTICK_PERIOD_MS);
     uint8_t send_count = 0;
     while (1){
-        ESP_LOGI("HXC_TWAI", "test_count: %d", test_count);
+        ESP_LOGI("HXC_TWAI", "send_count: %d", send_count++);
         auto ret = CAN_BUS.send(&send_message);
         if(ret != ESP_OK){
             ESP_LOGE("HXC_TWAI", "CAN send error: %s", esp_err_to_name(ret));
