@@ -1,5 +1,8 @@
 idf_component_register(
-    SRCS "app_main.cpp"
+    SRCS "app_main.cpp" 
+         "ulp_loader/ulp_loader.cpp"
+    INCLUDE_DIRS "." 
+                 "ulp_loader"
     REQUIRES
         spi_flash
         blackbox
@@ -23,10 +26,10 @@ idf_component_register(
 
 # LP核程序配置
 set(ulp_app_name ulp_main)
-set(ulp_sources "ulp/ulp_main.cpp" "ulp/ina226.hpp")
-set(ulp_exp_dep_srcs "main.cpp")
+set(ulp_sources "ulp_app/ulp_main.cpp")
+set(ulp_exp_dep_srcs "ulp_loader/ulp_loader.cpp")
 
-ulp_embed_binary(${ulp_app_name} "${ulp_sources}" "${ulp_exp_dep_srcs}" REQUIRES ulp_lp_core)
+ulp_embed_binary(${ulp_app_name} "${ulp_sources}" "${ulp_exp_dep_srcs}")
 
 # 构建脚本目录
 set(SCRIPT_DIR "${CMAKE_SOURCE_DIR}/scripts")

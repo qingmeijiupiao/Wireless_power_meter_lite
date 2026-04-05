@@ -15,7 +15,7 @@
 #include "esp_littlefs.h"
 #include "blackbox.h"
 #include "esp_log.h"
-#include "load_lp.hpp"
+#include "ulp_loader.h"
 #include "st7735.h"
 
 #include "ui_static.h"

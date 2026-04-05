@@ -1,25 +1,12 @@
-/*
- * @version: no version
- * @LastEditors: qingmeijiupiao
- * @Description:  LP 核加载模块，负责加载 LP 核二进制文件并启动 LP 核
- * @note:  这个文件不能作为component被其他文件引用，因为它依赖于ulp_main.h，放在components目录下链接时顺序有问题
- * @author: qingmeijiupiao
- * @LastEditTime: 2026-04-04 21:55:39
- */
-
-#ifndef LOAD_LP_HPP
-#define LOAD_LP_HPP
-
+#include "ulp_loader.h"
 #include "ulp_lp_core.h"
 #include "ulp_main.h"
-#include "esp_err.h"
 #include "esp_log.h"
 #include "esp_task.h"
 #include "lp_core_i2c.h"
-#include "ulp/ulp_state.h"
+#include "ulp_app/ulp_state.h"
 #include "soc/lp_clkrst_reg.h"
 #include "soc/lp_clkrst_struct.h"
-
 
 ulp_lp_core_cfg_t lp_core_init_cfg={
     .wakeup_source = ULP_LP_CORE_WAKEUP_SOURCE_HP_CPU,
@@ -101,5 +88,3 @@ esp_err_t LP_Core_Load(void){
     xTaskCreate(print_lp_core_log_task, "print_lp_core_log", 2048, NULL, 4, NULL);
     return ESP_OK;
 }
-
-#endif
