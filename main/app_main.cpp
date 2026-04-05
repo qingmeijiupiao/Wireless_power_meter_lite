@@ -220,23 +220,6 @@ void test_callback(HXC_CAN_message_t* can_message){
     ESP_LOGI("HXC_TWAI", "ID=%08lX", can_message->identifier);
 }
 
-const uint8_t send_data[8] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
-const twai_frame_t send_message = {
-    .header = {
-        .id = 0x123,
-        .dlc = 8,
-        .ide = false,
-        .rtr = false,
-        .fdf = false,
-        .brs = false,
-        .esi = false,
-        .timestamp = 0,
-    },
-    .buffer = const_cast<uint8_t*>(send_data),
-    .buffer_len = sizeof(send_data),
-};
-
-
 void CAN_test_task(void* arg){
     CAN_register.set(true);
     ESP_ERROR_CHECK(CAN_BUS.setup());
@@ -244,32 +227,20 @@ void CAN_test_task(void* arg){
     vTaskDelay(1000 / portTICK_PERIOD_MS);
 
     CAN_BUS.add_can_receive_callback_func(0x123,test_callback);
-
-
-    // send_message.data_length_code = 8;
-    // send_message.identifier = 0x123;
-    // send_message.extd = false;
-    // send_message.rtr = false;
-    // send_message.data[0] = 0x01;
-    // send_message.data[1] = 0x02;
-    // send_message.data[2] = 0x03;
-    // send_message.data[3] = 0x04;
-    // send_message.data[4] = 0x05;
-    // send_message.data[5] = 0x06;
-    // send_message.data[6] = 0x07;
-    // send_message.data[7] = 0x08;
+    HXC_CAN_message_t send_message={};
+    send_message.identifier = 0x123;
+    send_message.data_length_code = 8;
+    for(int i=0;i<8;i++){
+        send_message.data[i] = i;
+    }
     vTaskDelay(1000 / portTICK_PERIOD_MS);
     uint8_t send_count = 0;
     while (1){
         ESP_LOGI("HXC_TWAI", "test_count: %d", test_count);
-        auto ret = twai_node_transmit(CAN_BUS.twai_node_handle, &send_message, 0);
+        auto ret = CAN_BUS.send(&send_message);
         if(ret != ESP_OK){
-            ESP_LOGE("HXC_TWAI", "twai_node_transmit failed %s", esp_err_to_name(ret));
-        }else{
-            send_count++;
-            ESP_LOGI("HXC_TWAI", "send_count: %d", send_count);
+            ESP_LOGE("HXC_TWAI", "CAN send error: %s", esp_err_to_name(ret));
         }
-        //ESP_ERROR_CHECK(CAN_BUS.send(&send_message));
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }
@@ -289,7 +260,7 @@ extern "C" void app_main(void){
     xTaskCreate(OUTPUT_ctrl_task, "OUTPUT_ctrl_task", 2048, NULL, 5, NULL);
     xTaskCreate(protect_task, "protect_task", 2048, NULL, 5, NULL);
 
-    //xTaskCreate(CAN_test_task, "CAN_test_task", 8192, NULL, 6, NULL);
+    xTaskCreate(CAN_test_task, "CAN_test_task", 8192, NULL, 6, NULL);
     uint32_t test_count = 0;
     while (1){
         ESP_LOGI("app_main", "NOW LOGS COUNT: %ld", BlackBox::get_count());

@@ -25,7 +25,6 @@ HXC_TWAI::~HXC_TWAI() {
     //     twai_stop_v2(twai_node_handle);
     //     twai_driver_uninstall_v2(twai_node_handle);
     // }
-    // 线性数组无需手动清理，自动析构
 }
 uint32_t test_count = 0;
 void HXC_TWAI::receive_callback(){
@@ -89,14 +88,11 @@ esp_err_t HXC_TWAI::setup() {
     node_config.bit_timing = {};
     node_config.clk_src = TWAI_CLK_SRC_DEFAULT;
     node_config.timestamp_resolution_hz = 0;
-    node_config.fail_retry_cnt = 1;
+    node_config.fail_retry_cnt = 5;
     node_config.flags.enable_self_test = false;
     node_config.flags.enable_loopback = false;
     node_config.flags.enable_listen_only = false;
     node_config.flags.no_receive_rtr = false;
-    // /* 测试模式 */
-    node_config.flags.enable_self_test = true;
-    node_config.flags.enable_loopback = true;
 
     switch (can_rate){
         case CAN_RATE::CAN_RATE_1MBIT:
@@ -137,7 +133,7 @@ esp_err_t HXC_TWAI::setup() {
         }
     }
     have_new_receive = false;
-    twai_event_callbacks_t user_cbs;
+    twai_event_callbacks_t user_cbs={};
     user_cbs.on_rx_done = on_rx_done_callback;
     ret = twai_node_register_event_callbacks(twai_node_handle, &user_cbs,NULL);
     if(ret != ESP_OK){
