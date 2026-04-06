@@ -3,7 +3,7 @@
  * @LastEditors: qingmeijiupiao
  * @Description: HXC ESP32 twai封装类
  * @Author: qingmeijiupiao
- * @LastEditTime: 2026-04-06
+ * @LastEditTime: 2026-04-06 13:14:18
  */
 #ifndef HXC_TWAI_H
 #define HXC_TWAI_H
@@ -26,6 +26,9 @@ constexpr UBaseType_t TWAI_RECEIVE_TASK_PRIO = 2;
 /** 接收任务栈大小：4096 字节足以应对大多数包含打印逻辑的回调 */
 constexpr uint32_t TWAI_RECEIVE_TASK_STACK = 4096;
 
+/** 接收中断优先级[0-3]：默认设为 0*/
+constexpr uint32_t TWAI_RECEIVE_INTR_PRIORITY = 0;
+
 /** 软件接收队列深度：在 8000fps 负载下，深度 50-100 可提供更稳健的系统抖动缓冲 */
 constexpr uint32_t TWAI_RX_QUEUE_LEN = 20;
 
@@ -34,6 +37,9 @@ constexpr TickType_t TWAI_SEND_TIMEOUT_MS = pdMS_TO_TICKS(100);
 
 /** 硬件发送队列深度：ESP-IDF 驱动内部的暂存队列深度 */
 constexpr uint32_t TWAI_HW_TX_QUEUE_LEN = 5;
+
+/** 硬件发送重试次数：在发送失败时，尝试重试的次数 */
+constexpr uint32_t TWAI_HW_TX_RETRY_CNT = 5;
 
 /** 最大TWAI节点数量：决定了你能同时管理多少个TWAI节点 */
 constexpr uint8_t MAX_TWAI_NODE_NUM = 3;
@@ -50,16 +56,6 @@ struct HXC_CAN_message_t{
   uint8_t data[8]={0};               /**< 数据字节（在RTR帧中无关） */
 } __attribute__((packed));
 
-//CAN速率枚举
-enum CAN_RATE{
-  CAN_RATE_1MBIT,
-  CAN_RATE_800KBIT,
-  CAN_RATE_500KBIT,
-  CAN_RATE_250KBIT,
-  CAN_RATE_125KBIT,
-  CAN_RATE_100KBIT
-};
-
 //CAN消息接收回调函数
 using HXC_can_feedback_func= std::function<void(HXC_CAN_message_t* can_message)>;
 
@@ -69,6 +65,16 @@ struct callback_map_t {
     HXC_can_feedback_func func;
     bool used;
 };
+
+constexpr uint32_t 
+operator""_Mbps(unsigned long long x) {
+  return static_cast<uint32_t>(x * 1'000'000);
+}
+
+constexpr uint32_t 
+operator""_Kbps(unsigned long long x) {
+  return static_cast<uint32_t>(x * 1'000);
+}
 
 // TWAI封装类
 class HXC_TWAI {
@@ -87,7 +93,7 @@ public:
      * @param {uint8_t} rx 连接can收发芯片RX引脚的IO号
      * @param {CAN_RATE} rate CAN速率
      */
-    HXC_TWAI(uint8_t tx = 8, uint8_t rx = 18, CAN_RATE rate = CAN_RATE_1MBIT);
+    HXC_TWAI(uint8_t tx = 8, uint8_t rx = 18, uint32_t rate = 1000000);
 
     /**
      * @description: 析构函数
@@ -166,7 +172,7 @@ protected:
     uint8_t TX_PIN, RX_PIN;                         /**< 连接CAN收发芯片的TX和RX引脚IO号 */
     twai_mask_filter_config_t filter_config;         /**< 过滤器配置 */ 
     bool user_set_filter = false;                    /**< 用户是否设置了过滤器 */
-    CAN_RATE can_rate;                              /**< CAN速率 */
+    uint32_t can_rate=1000000;                       /**< CAN速率 */
     callback_map_t callback_maps[MAX_TWAI_CALLBACK_NUM];  /**< 回调函数线性映射表 */
     uint8_t callback_count = 0;                     /**< 当前回调函数数量 */
     

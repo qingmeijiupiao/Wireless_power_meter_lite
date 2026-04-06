@@ -44,7 +44,7 @@ CppGpioDriver<GPIO_NUM_16, GpioMode::OUTPUT> CAN_register;
 auto& global_state   = get_global_state();
 auto& protect_states = global_state.protect_states.states_bit;
 
-HXC_TWAI CAN_BUS(18,14,CAN_RATE::CAN_RATE_1MBIT);
+HXC_TWAI CAN_BUS(18,14,1_Mbps);
 
 TemperatureSensor_t Chip_Temperature_Sensor;
 

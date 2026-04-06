@@ -12,7 +12,7 @@ struct twai_node_map_t{
 };
 static twai_node_map_t twai_node_maps[MAX_TWAI_NODE_NUM];
 
-HXC_TWAI::HXC_TWAI(uint8_t tx, uint8_t rx, CAN_RATE rate): TX_PIN(tx), RX_PIN(rx), can_rate(rate){
+HXC_TWAI::HXC_TWAI(uint8_t tx, uint8_t rx, uint32_t rate): TX_PIN(tx), RX_PIN(rx), can_rate(rate){
     // 初始化回调函数数组
     for (int i = 0; i < MAX_TWAI_CALLBACK_NUM; i++) {
         callback_maps[i].used = false;
@@ -76,8 +76,7 @@ bool HXC_TWAI::on_rx_done_callback(twai_node_handle_t handle, const twai_rx_done
         if(twai_node_maps[i].handle == handle){
             BaseType_t xTaskWoken = pdFALSE;
 
-            // 【抗突发负载优化】：在一次中断中循环读取硬件FIFO内所有现存帧
-            while (ESP_OK == twai_node_receive_from_isr(handle, &rx_frame)){
+            if(ESP_OK == twai_node_receive_from_isr(handle, &rx_frame)){
                 
                 // 组装应用层消息结构体
                 HXC_CAN_message_t rx_msg;
@@ -115,38 +114,11 @@ esp_err_t HXC_TWAI::setup() {
     node_config.io_cfg.quanta_clk_out = GPIO_NUM_NC;
     node_config.io_cfg.bus_off_indicator = GPIO_NUM_NC;
     node_config.tx_queue_depth = TWAI_HW_TX_QUEUE_LEN; // 使用constexpr变量
-    node_config.intr_priority = 1;
-    node_config.bit_timing = {};
+    node_config.intr_priority = TWAI_RECEIVE_INTR_PRIORITY;
     node_config.clk_src = TWAI_CLK_SRC_DEFAULT;
-    node_config.timestamp_resolution_hz = 0;
-    node_config.fail_retry_cnt = 5;
-    node_config.flags.enable_self_test = false;
-    node_config.flags.enable_loopback = false;
-    node_config.flags.enable_listen_only = false;
-    node_config.flags.no_receive_rtr = false;
+    node_config.fail_retry_cnt = TWAI_HW_TX_RETRY_CNT;
+    node_config.bit_timing.bitrate = can_rate;
 
-    switch (can_rate){
-        case CAN_RATE::CAN_RATE_1MBIT:
-            node_config.bit_timing.bitrate = 1000000;
-            break;
-        case CAN_RATE::CAN_RATE_800KBIT:
-            node_config.bit_timing.bitrate = 800000;
-            break;
-        case CAN_RATE::CAN_RATE_500KBIT:
-            node_config.bit_timing.bitrate = 500000;
-            break;
-        case CAN_RATE::CAN_RATE_250KBIT:
-            node_config.bit_timing.bitrate = 250000;
-            break;
-        case CAN_RATE::CAN_RATE_125KBIT:
-            node_config.bit_timing.bitrate = 125000;
-            break;
-        case CAN_RATE::CAN_RATE_100KBIT:
-            node_config.bit_timing.bitrate = 100000;
-            break;
-        default:
-            node_config.bit_timing.bitrate = 1000000;
-    }
 
     esp_err_t ret = twai_new_node_onchip(&node_config, &twai_node_handle);
     if(ret != ESP_OK){
