@@ -21,6 +21,7 @@ idf_component_register(
         freertos
         littlefs
         ui_resources
+        Button
     INCLUDE_DIRS ""
 )
 

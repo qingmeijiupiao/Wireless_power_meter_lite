@@ -30,6 +30,7 @@
 #include "HXC_TWAI.h"
 
 #include "global_state.h"
+#include "Button.h"
 
 #include "DENGB20.h"
 #include "DENGB16.h"
@@ -38,8 +39,10 @@
 #include "WarningRectangle.h"
 
 CppGpioDriver<GPIO_NUM_21, GpioMode::OUTPUT> POWER_OUT;
-CppGpioDriver<GPIO_NUM_17, GpioMode::INPUT_PULLUP> Main_Button;
+Button Main_Button(GPIO_NUM_17, true);
 CppGpioDriver<GPIO_NUM_16, GpioMode::OUTPUT> CAN_register;
+
+
 
 auto& global_state   = get_global_state();
 auto& protect_states = global_state.protect_states.states_bit;
@@ -105,8 +108,8 @@ void screen_task(void* arg){
         ST7735::fill_rect(28, 2, 106-29, 61, ST7735::BLACK); // 清除W文字显示区域防止位数变化导致的显示错误
 
         now.update(ticks);
-        float voltage = ulp_voltage_uv/1e6;
-        float current = std::abs(*(int32_t*)&ulp_current_nA/1e6);
+        float voltage = global_state.voltage_mV/1000.0f;
+        float current = std::abs(*(int32_t*)&global_state.current_nA/1e6);
         snprintf(temp_str, sizeof(temp_str), "%.3fV", voltage);
         ST7735::draw_string(28, 2, temp_str,ST7735::color_t(0xef2a2a),background_color,DENGB20);
         snprintf(temp_str, sizeof(temp_str), "%.3fA", current);
@@ -141,16 +144,26 @@ void screen_task(void* arg){
             ST7735::fill_rect(113, 18, WARNINGRECTANGLE_WIDTH, WARNINGRECTANGLE_HEIGHT, background_color);
         }
         
-        ProtectState_t voltage_protect_state = protect_states.voltage_protect_state;
-        if(voltage_protect_state != PROTECT_STATE_NORMAL){
-            if(voltage_protect_state == PROTECT_STATE_PROTECT){
+        ProtectState_t high_voltage_protect_state = protect_states.high_voltage_protect_state;
+        ProtectState_t low_voltage_protect_state = protect_states.low_voltage_protect_state;
+
+        if(high_voltage_protect_state != PROTECT_STATE_NORMAL){
+            if(high_voltage_protect_state == PROTECT_STATE_PROTECT){
                 ST7735::draw_image(113,18+21,ERRORRECTANGLE_WIDTH,ERRORRECTANGLE_HEIGHT,ErrorRectangle_data);
                 ST7735::draw_string(113+5, 18+21, "OVP",ST7735::color_t(0x000000),error_background_color,DENGB16);
-            }else if(voltage_protect_state == PROTECT_STATE_WARNING){
+            }else if(high_voltage_protect_state == PROTECT_STATE_WARNING){
                 ST7735::draw_image(113,18+21,WARNINGRECTANGLE_WIDTH,WARNINGRECTANGLE_HEIGHT,WarningRectangle_data);
                 ST7735::draw_string(113+5, 18+21, "OVP",ST7735::color_t(0x000000),warning_background_color,DENGB16);
             }
 
+        }else if(low_voltage_protect_state != PROTECT_STATE_NORMAL){
+            if(low_voltage_protect_state == PROTECT_STATE_PROTECT){
+                ST7735::draw_image(113,18+21,ERRORRECTANGLE_WIDTH,ERRORRECTANGLE_HEIGHT,ErrorRectangle_data);
+                ST7735::draw_string(113+5, 18+21, "UVP",ST7735::color_t(0x000000),error_background_color,DENGB16);
+            }else if(low_voltage_protect_state == PROTECT_STATE_WARNING){
+                ST7735::draw_image(113,18+21,WARNINGRECTANGLE_WIDTH,WARNINGRECTANGLE_HEIGHT,WarningRectangle_data);
+                ST7735::draw_string(113+5, 18+21, "UVP",ST7735::color_t(0x000000),warning_background_color,DENGB16);
+            }
         }else{
             ST7735::fill_rect(113, 18+21, WARNINGRECTANGLE_WIDTH, WARNINGRECTANGLE_HEIGHT, background_color);
         }
@@ -180,7 +193,8 @@ void update_main_state_task(void* arg){
     auto ticks = xTaskGetTickCount();
     constexpr int update_HZ = 200;
     while (1){
-        global_state.voltage_mV = ulp_voltage_uv/1e3;
+        //global_state.voltage_mV = ulp_voltage_uv/1e3;
+        global_state.voltage_mV = 12000;
         global_state.current_nA = ulp_current_nA;
         global_state.NTC_temperature = NTC::getTemperature();
         global_state.chip_temperature = Chip_Temperature_Sensor.getTemperature()*100.0f;
@@ -189,31 +203,17 @@ void update_main_state_task(void* arg){
 }
 
 
-void OUTPUT_ctrl_task(void* arg){
-    bool last_button_state = Main_Button.get();
-    bool now_button_state = Main_Button.get();
-    const uint32_t button_check_HZ = 100;
-    auto ticks = xTaskGetTickCount();
-    while (1){
-        now_button_state = Main_Button.get();
-        if (now_button_state != last_button_state){
-            if(!now_button_state){
-                ESP_LOGI("OUTPUT_ctrl_task", "Button pressed");
-                global_state.global_state_bits.state_bit.out_put_state = !global_state.global_state_bits.state_bit.out_put_state;
-            }
-            last_button_state = now_button_state;
-        }
-
-        // 保护状态判断, 有保护状态时, 输出关闭
-        if(protect_states.voltage_protect_state == PROTECT_STATE_PROTECT || 
-           protect_states.current_protect_state == PROTECT_STATE_PROTECT || 
-           protect_states.temperature_protect_state == PROTECT_STATE_PROTECT){
-            global_state.global_state_bits.state_bit.out_put_state = false;
-        }
-
-        POWER_OUT.set(global_state.global_state_bits.state_bit.out_put_state);
-        xTaskDelayUntil(&ticks, configTICK_RATE_HZ / button_check_HZ);
+void OUTPUT_ctrl(){
+    // 保护状态判断, 有保护状态时, 输出关闭
+    if(have_protect()){
+        ESP_LOGI("OUTPUT_ctrl", "has_protect disable to output");
+        global_state.global_state_bits.state_bit.out_put_state = false;
+    }else{
+        ESP_LOGI("OUTPUT_ctrl", "button toggle output");
+        global_state.global_state_bits.state_bit.out_put_state = !global_state.global_state_bits.state_bit.out_put_state;
     }
+
+    POWER_OUT.set(global_state.global_state_bits.state_bit.out_put_state);
 }
 
 void test_callback(HXC_CAN_message_t* can_message){
@@ -249,16 +249,24 @@ void CAN_test_task(void* arg){
 extern "C" void app_main(void){
     ESP_ERROR_CHECK(CAN_register.init());
     ESP_ERROR_CHECK(POWER_OUT.init());
-    ESP_ERROR_CHECK(Main_Button.init());
+    Main_Button.bind_event(ButtonEvent::SHORT_PRESS, OUTPUT_ctrl);
+    ESP_ERROR_CHECK(Main_Button.setup());
     ESP_ERROR_CHECK(Chip_Temperature_Sensor.init());
     ESP_ERROR_CHECK(NTC::init(ADC_CHANNEL_5));
     ESP_ERROR_CHECK(LP_Core_Load());
     ESP_ERROR_CHECK(BlackBox::init());
-    POWER_OUT.set(true);
+    POWER_OUT.set(false);
+
+    add_on_protect_change_callback([](ProtectState_t last_state, ProtectState_t new_state){
+        ESP_LOGI("protect_callback", "protect state changed: %d -> %d", last_state, new_state);
+        if(new_state == PROTECT_STATE_PROTECT){
+            OUTPUT_ctrl();
+        }
+    });
+
     xTaskCreate(update_main_state_task, "update_main_state_task", 2048, NULL, 6, NULL);
     xTaskCreate(screen_task, "screen_task", 4096, NULL, 4, NULL);
-    xTaskCreate(OUTPUT_ctrl_task, "OUTPUT_ctrl_task", 2048, NULL, 5, NULL);
-    xTaskCreate(protect_task, "protect_task", 2048, NULL, 5, NULL);
+    ESP_ERROR_CHECK(protect_init());
 
     xTaskCreate(CAN_test_task, "CAN_test_task", 8192, NULL, 6, NULL);
     uint32_t test_count = 0;

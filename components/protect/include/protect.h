@@ -1,6 +1,8 @@
 #ifndef PROTECT_H
 #define PROTECT_H
 #include <stdint.h>
+#include <functional>
+#include "esp_err.h"
 enum ProtectState_t : uint8_t{
     PROTECT_STATE_NORMAL = 0,
     PROTECT_STATE_WARNING = 1,
@@ -20,12 +22,17 @@ union protect_states_t{
     uint8_t protect_states_raw;
     struct {
     ProtectState_t temperature_protect_state : 2;
-    ProtectState_t voltage_protect_state : 2;
+    ProtectState_t high_voltage_protect_state : 2;
+    ProtectState_t low_voltage_protect_state : 2;
     ProtectState_t current_protect_state : 2;
-    ProtectState_t reverse : 2;
     } states_bit; //1字节对齐
 } __attribute__((packed));
 
-void protect_task(void* pvParameters);
+void add_on_protect_change_callback(std::function<void(ProtectState_t last_state, ProtectState_t new_state)> cb);
+
+bool have_protect();
+
+esp_err_t protect_init();
+esp_err_t protect_deinit();
 
 #endif

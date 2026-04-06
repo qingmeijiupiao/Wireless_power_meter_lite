@@ -19,7 +19,7 @@
 #define PROTECT_LOGI(fmt, ...)  (void)
 #endif
 
-
+TaskHandle_t protect_task_handle = nullptr;
 
 GlobalState& glb_states = get_global_state();
 
@@ -31,13 +31,22 @@ protect_threshold_t temperature_threshold ={
     .is_asc = true,
 };
 
-protect_threshold_t voltage_threshold ={
+protect_threshold_t high_voltage_threshold ={
     .warning_threshold = 25.5f,
     .warning_recovery_threshold = 25.3f,
     .protect_threshold = 27.5f,
     .protect_recovery_threshold = 27.0f,
     .is_asc = true,
 };
+
+protect_threshold_t low_voltage_threshold ={
+    .warning_threshold = 6.6f,
+    .warning_recovery_threshold = 7.2f,
+    .protect_threshold = 4.7f,
+    .protect_recovery_threshold = 5.0f,
+    .is_asc = false,
+};
+
 
 protect_threshold_t current_threshold ={
     .warning_threshold = 15.0f,
@@ -94,21 +103,82 @@ ProtectState_t check_now_state(protect_threshold_t threshold, ProtectState_t las
     }
 }
 
+static std::vector<std::function<void(ProtectState_t, ProtectState_t)>> protect_change_callbacks;
+
+void add_on_protect_change_callback(std::function<void(ProtectState_t last_state, ProtectState_t new_state)> cb){
+    protect_change_callbacks.push_back(cb);
+}
+
+bool have_protect(){
+    auto& global_state_protects = glb_states.protect_states.states_bit; 
+    return global_state_protects.temperature_protect_state == PROTECT_STATE_PROTECT || 
+        global_state_protects.high_voltage_protect_state == PROTECT_STATE_PROTECT || 
+        global_state_protects.low_voltage_protect_state == PROTECT_STATE_PROTECT ||  
+        global_state_protects.current_protect_state == PROTECT_STATE_PROTECT;
+}
 
 void protect_task(void* pvParameters){
     auto ticks = xTaskGetTickCount();
     constexpr int protect_check_HZ = 10;
     auto& global_state_protects = glb_states.protect_states.states_bit; 
+    ProtectState_t temp_state;
+    
     while(1){
         //检查温度保护状态
-        global_state_protects.temperature_protect_state = check_now_state(temperature_threshold, global_state_protects.temperature_protect_state, glb_states.NTC_temperature/ 100.0f);
+        temp_state= check_now_state(temperature_threshold, global_state_protects.temperature_protect_state, glb_states.NTC_temperature/ 100.0f);
+        if(temp_state != global_state_protects.temperature_protect_state){
+            for(auto& cb : protect_change_callbacks){
+                cb(global_state_protects.temperature_protect_state, temp_state);
+            }
+            global_state_protects.temperature_protect_state = temp_state;
+        }
 
         //检查电压保护状态
-        global_state_protects.voltage_protect_state = check_now_state(voltage_threshold, global_state_protects.voltage_protect_state, glb_states.voltage_mV/ 1e3);
-
+        temp_state= check_now_state(high_voltage_threshold, global_state_protects.high_voltage_protect_state, glb_states.voltage_mV/ 1e3);
+        if(temp_state != global_state_protects.high_voltage_protect_state){
+            for(auto& cb : protect_change_callbacks){
+                cb(global_state_protects.high_voltage_protect_state, temp_state);
+            }
+            global_state_protects.high_voltage_protect_state = temp_state;
+        }
+        
+        temp_state= check_now_state(low_voltage_threshold, global_state_protects.low_voltage_protect_state, glb_states.voltage_mV/ 1e3);
+        if(temp_state != global_state_protects.low_voltage_protect_state){
+            for(auto& cb : protect_change_callbacks){
+                cb(global_state_protects.low_voltage_protect_state, temp_state);
+            }
+            global_state_protects.low_voltage_protect_state = temp_state;
+        }
+        
         //检查电流保护状态
-        global_state_protects.current_protect_state = check_now_state(current_threshold, global_state_protects.current_protect_state, glb_states.current_nA / 1e9);
+        temp_state= check_now_state(current_threshold, global_state_protects.current_protect_state, glb_states.current_nA / 1e9);
+        if(temp_state != global_state_protects.current_protect_state){
+            for(auto& cb : protect_change_callbacks){
+                cb(global_state_protects.current_protect_state, temp_state);
+            }
+            global_state_protects.current_protect_state = temp_state;
+        }
 
         xTaskDelayUntil(&ticks, configTICK_RATE_HZ / protect_check_HZ);
     }
+}
+
+esp_err_t protect_init(){
+    if(protect_task_handle){
+        ESP_LOGW(PROTECT_LOG_TAG, "protect task already running");
+        return ESP_OK;
+    }
+    xTaskCreate(protect_task, "protect_task", 2048, nullptr, 5, &protect_task_handle);
+    return ESP_OK;
+}
+
+esp_err_t protect_deinit(){
+    if(protect_task_handle){
+        glb_states.protect_states.protect_states_raw = 0; //清除保护状态
+        vTaskDelete(protect_task_handle);
+        protect_task_handle = nullptr;
+    }else{
+        ESP_LOGW(PROTECT_LOG_TAG, "protect task not running");
+    }
+    return ESP_OK;
 }
