@@ -193,8 +193,7 @@ void update_main_state_task(void* arg){
     auto ticks = xTaskGetTickCount();
     constexpr int update_HZ = 200;
     while (1){
-        //global_state.voltage_mV = ulp_voltage_uv/1e3;
-        global_state.voltage_mV = 12000;
+        global_state.voltage_mV = ulp_voltage_uv/1e3;
         global_state.current_nA = ulp_current_nA;
         global_state.NTC_temperature = NTC::getTemperature();
         global_state.chip_temperature = Chip_Temperature_Sensor.getTemperature()*100.0f;
