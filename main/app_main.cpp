@@ -109,7 +109,7 @@ void screen_task(void* arg){
 
         now.update(ticks);
         float voltage = global_state.voltage_mV/1000.0f;
-        float current = std::abs(*(int32_t*)&global_state.current_nA/1e6);
+        float current = std::abs(global_state.current_nA/1e6);
         snprintf(temp_str, sizeof(temp_str), "%.3fV", voltage);
         ST7735::draw_string(28, 2, temp_str,ST7735::color_t(0xef2a2a),background_color,DENGB20);
         snprintf(temp_str, sizeof(temp_str), "%.3fA", current);
@@ -205,7 +205,7 @@ void update_main_state_task(void* arg){
 void OUTPUT_ctrl(){
     // 保护状态判断, 有保护状态时, 输出关闭
     if(have_protect()){
-        ESP_LOGI("OUTPUT_ctrl", "has_protect disable to output");
+        ESP_LOGW("OUTPUT_ctrl", "has_protect disable to output");
         global_state.global_state_bits.state_bit.out_put_state = false;
     }else{
         ESP_LOGI("OUTPUT_ctrl", "button toggle output");
@@ -248,13 +248,15 @@ void CAN_test_task(void* arg){
 extern "C" void app_main(void){
     ESP_ERROR_CHECK(CAN_register.init());
     ESP_ERROR_CHECK(POWER_OUT.init());
+    POWER_OUT.set(false);
+    global_state.global_state_bits.state_bit.out_put_state = false;
     Main_Button.bind_event(ButtonEvent::SHORT_PRESS, OUTPUT_ctrl);
     ESP_ERROR_CHECK(Main_Button.setup());
     ESP_ERROR_CHECK(Chip_Temperature_Sensor.init());
     ESP_ERROR_CHECK(NTC::init(ADC_CHANNEL_5));
     ESP_ERROR_CHECK(LP_Core_Load());
     ESP_ERROR_CHECK(BlackBox::init());
-    POWER_OUT.set(false);
+
 
     add_on_protect_change_callback([](ProtectState_t last_state, ProtectState_t new_state){
         ESP_LOGI("protect_callback", "protect state changed: %d -> %d", last_state, new_state);

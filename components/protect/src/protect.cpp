@@ -2,7 +2,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "global_state.h"
-
+#include <vector>
 #ifndef ENABLE_PROTECT_LOG
 #define ENABLE_PROTECT_LOG 1
 #endif
@@ -122,41 +122,47 @@ void protect_task(void* pvParameters){
     constexpr int protect_check_HZ = 10;
     auto& global_state_protects = glb_states.protect_states.states_bit; 
     ProtectState_t temp_state;
+    ProtectState_t last_state;
     
     while(1){
         //检查温度保护状态
         temp_state= check_now_state(temperature_threshold, global_state_protects.temperature_protect_state, glb_states.NTC_temperature/ 100.0f);
         if(temp_state != global_state_protects.temperature_protect_state){
-            for(auto& cb : protect_change_callbacks){
-                cb(global_state_protects.temperature_protect_state, temp_state);
-            }
+            last_state = global_state_protects.temperature_protect_state;
             global_state_protects.temperature_protect_state = temp_state;
+            for(auto& cb : protect_change_callbacks){
+                cb(last_state, temp_state);
+            }
         }
 
         //检查电压保护状态
         temp_state= check_now_state(high_voltage_threshold, global_state_protects.high_voltage_protect_state, glb_states.voltage_mV/ 1e3);
         if(temp_state != global_state_protects.high_voltage_protect_state){
-            for(auto& cb : protect_change_callbacks){
-                cb(global_state_protects.high_voltage_protect_state, temp_state);
-            }
+            last_state = global_state_protects.high_voltage_protect_state;
             global_state_protects.high_voltage_protect_state = temp_state;
+            for(auto& cb : protect_change_callbacks){
+                cb(last_state, temp_state);
+            }
+
         }
         
         temp_state= check_now_state(low_voltage_threshold, global_state_protects.low_voltage_protect_state, glb_states.voltage_mV/ 1e3);
         if(temp_state != global_state_protects.low_voltage_protect_state){
-            for(auto& cb : protect_change_callbacks){
-                cb(global_state_protects.low_voltage_protect_state, temp_state);
-            }
+            last_state = global_state_protects.low_voltage_protect_state;
             global_state_protects.low_voltage_protect_state = temp_state;
+            for(auto& cb : protect_change_callbacks){
+                cb(last_state, temp_state);
+            }
         }
         
         //检查电流保护状态
-        temp_state= check_now_state(current_threshold, global_state_protects.current_protect_state, glb_states.current_nA / 1e9);
+        temp_state= check_now_state(current_threshold, global_state_protects.current_protect_state, std::abs(glb_states.current_nA) / 1e9);
         if(temp_state != global_state_protects.current_protect_state){
-            for(auto& cb : protect_change_callbacks){
-                cb(global_state_protects.current_protect_state, temp_state);
-            }
+            last_state = global_state_protects.current_protect_state;
             global_state_protects.current_protect_state = temp_state;
+            for(auto& cb : protect_change_callbacks){
+                cb(last_state, temp_state);
+            }
         }
 
         xTaskDelayUntil(&ticks, configTICK_RATE_HZ / protect_check_HZ);

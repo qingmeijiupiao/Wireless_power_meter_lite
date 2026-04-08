@@ -12,7 +12,7 @@ constexpr int voltage_scale = 1250;
 
 constexpr uint32_t LP_CPU_FREQ_HZ = 20000000;
 constexpr lp_io_num_t Alert_Pin = LP_IO_NUM_1;
-
+constexpr uint32_t current_dead_zone_uv = 3000;
 
 #define MS_TO_US(ms) ((ms) * 1000)
 
@@ -71,7 +71,6 @@ uint16_t bus_voltage = 0;
 int16_t shunt_voltage = 0;
 uint32_t last_ina226_run_ms = 0;
 void ina226_run(){
-    ulp_state_p.ulp_state_bits.ulp_run = true;
     if(ulp_lp_core_gpio_get_level(Alert_Pin) == 1){
         if((now_time_ms - last_ina226_run_ms) > 1000){
             ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout = true;
@@ -82,7 +81,7 @@ void ina226_run(){
     INA226::read_register(INA226::Register_enum::INA226_SHUNT_VOLTAGE, reinterpret_cast<uint16_t*>(&shunt_voltage));
     INA226::read_register(INA226::Register_enum::INA226_MASK_ENABLE,nullptr);
     voltage_uv = bus_voltage*voltage_scale;
-    if(shunt_voltage*current_scale<3000){ //死区3mA
+    if(std::abs(shunt_voltage*current_scale)<current_dead_zone_uv){ //死区，避免无输出时的噪声
         current_nA = 0;
     }else{
         current_nA = shunt_voltage*current_scale;
@@ -136,7 +135,7 @@ void app_loop_every_ms(uint32_t interval_ms, F&& action) {
 int main(void){
     ulp_gpio_init();
     ulp_i2c_init();
-
+    ulp_state_p.ulp_state_bits.ulp_run = true;
     while (1) {
         ina226_run();
         timer_run();

@@ -60,7 +60,7 @@ esp_err_t LP_Core_Load(void){
 
     ESP_LOGI(LPTAG, "main core start init i2c...");
     ESP_ERROR_CHECK(lp_core_i2c_master_init(LP_I2C_NUM_0, &i2c_cfg));
-    ESP_LOGI(LPTAG, "lp core init i2c success...");
+    ESP_LOGI(LPTAG, "main core init i2c success...");
 
     // 加载 LP 核二进制文件
     ESP_ERROR_CHECK(ulp_lp_core_load_binary(bin_start, bin_end - bin_start));
@@ -76,6 +76,12 @@ esp_err_t LP_Core_Load(void){
             break;
         }
         vTaskDelay(10/ portTICK_PERIOD_MS);
+    }
+
+    if(ulp_state.ulp_state_bits.ulp_i2c_init_err){
+        ESP_LOGE(LPTAG, "lp core i2c init error");
+    }else{
+        ESP_LOGI(LPTAG, "lp core i2c init success...");
     }
 
     if(timeout <= 0){
