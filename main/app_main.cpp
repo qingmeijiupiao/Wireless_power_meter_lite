@@ -109,7 +109,7 @@ void screen_task(void* arg){
 
         now.update(ticks);
         float voltage = global_state.voltage_mV/1000.0f;
-        float current = std::abs(global_state.current_nA/1e6);
+        float current = std::abs(global_state.current_uA/1e6);
         snprintf(temp_str, sizeof(temp_str), "%.3fV", voltage);
         ST7735::draw_string(28, 2, temp_str,ST7735::color_t(0xef2a2a),background_color,DENGB20);
         snprintf(temp_str, sizeof(temp_str), "%.3fA", current);
@@ -194,7 +194,7 @@ void update_main_state_task(void* arg){
     constexpr int update_HZ = 200;
     while (1){
         global_state.voltage_mV = ulp_voltage_uv/1e3;
-        global_state.current_nA = ulp_current_nA;
+        global_state.current_uA = ulp_current_uA;
         global_state.NTC_temperature = NTC::getTemperature();
         global_state.chip_temperature = Chip_Temperature_Sensor.getTemperature()*100.0f;
         xTaskDelayUntil(&ticks, configTICK_RATE_HZ / update_HZ);
@@ -276,7 +276,7 @@ extern "C" void app_main(void){
         //BlackBox::add_log("test log %d", test_count++);
         for (size_t i = 0; i < BlackBox::get_count(); i++){
             auto log = BlackBox::get_log(i);
-            ESP_LOGI("app_main", "datas voltage: %d, current: %ld, temp: %d, chip temp: %d, Log_str%d: %s", log.global_state.voltage_mV, log.global_state.current_nA, log.global_state.NTC_temperature, log.global_state.chip_temperature, i, log.strlog);
+            ESP_LOGI("app_main", "datas voltage: %d, current: %ld, temp: %d, chip temp: %d, Log_str%d: %s", log.global_state.voltage_mV, log.global_state.current_uA, log.global_state.NTC_temperature, log.global_state.chip_temperature, i, log.strlog);
         }
         
         //ESP_LOGI("app_main", "protect_states: temp=%d, voltage=%d, current=%d", global_state.protect_states.temperature_protect_state, global_state.protect_states.voltage_protect_state, global_state.protect_states.current_protect_state);

@@ -156,7 +156,7 @@ void protect_task(void* pvParameters){
         }
         
         //检查电流保护状态
-        temp_state= check_now_state(current_threshold, global_state_protects.current_protect_state, std::abs(glb_states.current_nA) / 1e9);
+        temp_state= check_now_state(current_threshold, global_state_protects.current_protect_state, std::abs(glb_states.current_uA) / 1e6);
         if(temp_state != global_state_protects.current_protect_state){
             last_state = global_state_protects.current_protect_state;
             global_state_protects.current_protect_state = temp_state;

@@ -21,7 +21,7 @@ constexpr uint32_t current_dead_zone_uv = 3000;
 volatile uint32_t ulp_state LP_VAR;
 volatile uint32_t log_data LP_VAR;
 volatile uint32_t voltage_uv LP_VAR;
-volatile uint32_t current_nA LP_VAR;
+volatile uint32_t current_uA LP_VAR;
 volatile uint32_t now_time_ms = 0;
 
 ULP_CORE_STATE& ulp_state_p = *(ULP_CORE_STATE*)&(ulp_state);
@@ -82,9 +82,9 @@ void ina226_run(){
     INA226::read_register(INA226::Register_enum::INA226_MASK_ENABLE,nullptr);
     voltage_uv = bus_voltage*voltage_scale;
     if(std::abs(shunt_voltage*current_scale)<current_dead_zone_uv){ //死区，避免无输出时的噪声
-        current_nA = 0;
+        current_uA = 0;
     }else{
-        current_nA = shunt_voltage*current_scale;
+        current_uA = shunt_voltage*current_scale;
     }
 
     last_ina226_run_ms = now_time_ms;
