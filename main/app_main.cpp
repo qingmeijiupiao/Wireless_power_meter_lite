@@ -17,6 +17,7 @@
 #include "esp_log.h"
 #include "ulp_loader.h"
 #include "st7735.h"
+#include "HXC_NVS.h"
 
 #include "ui_static.h"
 #include "ui_open.h"
@@ -41,7 +42,6 @@
 CppGpioDriver<GPIO_NUM_21, GpioMode::OUTPUT> POWER_OUT;
 Button Main_Button(GPIO_NUM_17, true);
 CppGpioDriver<GPIO_NUM_16, GpioMode::OUTPUT> CAN_register;
-
 
 
 auto& global_state   = get_global_state();
@@ -270,17 +270,10 @@ extern "C" void app_main(void){
     ESP_ERROR_CHECK(protect_init());
 
     xTaskCreate(CAN_test_task, "CAN_test_task", 8192, NULL, 6, NULL);
-    uint32_t test_count = 0;
     while (1){
-        ESP_LOGI("app_main", "NOW LOGS COUNT: %ld", BlackBox::get_count());
-        //BlackBox::add_log("test log %d", test_count++);
-        for (size_t i = 0; i < BlackBox::get_count(); i++){
-            auto log = BlackBox::get_log(i);
-            ESP_LOGI("app_main", "datas voltage: %d, current: %ld, temp: %d, chip temp: %d, Log_str%d: %s", log.global_state.voltage_mV, log.global_state.current_uA, log.global_state.NTC_temperature, log.global_state.chip_temperature, i, log.strlog);
-        }
+        //test code
         
-        //ESP_LOGI("app_main", "protect_states: temp=%d, voltage=%d, current=%d", global_state.protect_states.temperature_protect_state, global_state.protect_states.voltage_protect_state, global_state.protect_states.current_protect_state);
-        vTaskDelay(2000/ portTICK_PERIOD_MS);
+        vTaskDelay(1000/ portTICK_PERIOD_MS);
     }
     
 }

@@ -7,7 +7,7 @@
 #include "ulp_state.h"
 
 //校准系数，实测来的
-constexpr int current_scale = 1106;
+constexpr int current_scale = 1114;
 constexpr int voltage_scale = 1250;
 
 constexpr uint32_t LP_CPU_FREQ_HZ = 20000000;

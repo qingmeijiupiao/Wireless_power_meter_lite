@@ -22,6 +22,7 @@ idf_component_register(
         littlefs
         ui_resources
         Button
+        HXC_NVS
     INCLUDE_DIRS ""
 )
 
