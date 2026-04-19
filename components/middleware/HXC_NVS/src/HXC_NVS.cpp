@@ -1,4 +1,4 @@
-#include "hxc_nvs.h"
+#include "HXC_NVS.h"
 
 namespace HXC {
 
