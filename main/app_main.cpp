@@ -39,6 +39,10 @@
 #include "ErrorRectangle.h"
 #include "WarningRectangle.h"
 
+#include "shell.h"
+
+auto& shell_instance = Shell::instance();
+
 CppGpioDriver<GPIO_NUM_21, GpioMode::OUTPUT> POWER_OUT;
 Button Main_Button(GPIO_NUM_17, true);
 CppGpioDriver<GPIO_NUM_16, GpioMode::OUTPUT> CAN_register;
@@ -240,7 +244,7 @@ void CAN_test_task(void* arg){
         if(ret != ESP_OK){
             ESP_LOGE("HXC_TWAI", "CAN send error: %s", esp_err_to_name(ret));
         }
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        vTaskDelay(2000 / portTICK_PERIOD_MS);
     }
 }
 
@@ -270,9 +274,13 @@ extern "C" void app_main(void){
     ESP_ERROR_CHECK(protect_init());
 
     xTaskCreate(CAN_test_task, "CAN_test_task", 8192, NULL, 6, NULL);
+
+    ESP_LOGI("app_main", "CAN_test_task started");
+    
+    shell_instance.init();
+
     while (1){
-        //test code
-        
+        // Main loop - shell runs in background
         vTaskDelay(1000/ portTICK_PERIOD_MS);
     }
     

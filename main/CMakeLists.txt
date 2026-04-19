@@ -23,6 +23,7 @@ idf_component_register(
         ui_resources
         Button
         HXC_NVS
+        shell
     INCLUDE_DIRS ""
 )
 

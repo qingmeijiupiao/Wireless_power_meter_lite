@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>简易网页命令行</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #1e1e1e;
+            color: #fff;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #007acc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+
+        button:hover {
+            background: #005999;
+        }
+
+        #terminal {
+            flex: 1;
+            border: 1px solid #333;
+            border-radius: 4px;
+            overflow: hidden;
+            padding: 5px;
+            background: #000;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h2>简易网页命令行</h2>
+        <button id="connectBtn">连接串口设备</button>
+    </div>
+    <div id="terminal"></div>
+
+    <script>
+        // 初始化终端界面
+        const term = new Terminal({
+            cursorBlink: true,
+            convertEol: true, // 自动转换换行符
+            theme: { background: '#000000' }
+        });
+        const fitAddon = new FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
+        term.open(document.getElementById('terminal'));
+        fitAddon.fit();
+        term.writeln('\x1b[33m欢迎使用 Web 串口终端！请点击右上角按钮连接设备。\x1b[0m\r\n');
+
+        let port = null;
+        let reader = null;
+        let writer = null;
+        // 新增：用于跟踪管道状态的 Promise
+        let readableStreamClosed = null;
+        let writableStreamClosed = null;
+        // 新增：用于管理终端按键监听器，防止多次连接导致输入重复
+        let onDataDisposable = null;
+
+        // 彻底清理并重置 UI 状态
+        function resetUI() {
+            port = null;
+            reader = null;
+            writer = null;
+            readableStreamClosed = null;
+            writableStreamClosed = null;
+            if (onDataDisposable) {
+                onDataDisposable.dispose(); // 注销按键监听事件
+                onDataDisposable = null;
+            }
+            document.getElementById('connectBtn').innerText = "连接串口设备";
+        }
+
+        // 监听设备物理拔出
+        navigator.serial.addEventListener('disconnect', (event) => {
+            term.writeln('\x1b[31m\r\n--- 设备已物理断开 ---\x1b[0m\r\n');
+            resetUI();
+        });
+
+        document.getElementById('connectBtn').addEventListener('click', async () => {
+            try {
+                if (port) {
+                    // === 优雅断开流程：必须严格按照 1~5 的顺序进行！ ===
+
+                    // 1. 通知 reader 取消读取
+                    if (reader) {
+                        await reader.cancel();
+                    }
+                    // 2. 等待读管道完全关闭 (忽略 cancel 抛出的预期异常)
+                    if (readableStreamClosed) {
+                        await readableStreamClosed.catch(() => { });
+                    }
+                    // 3. 通知 writer 关闭写入
+                    if (writer) {
+                        await writer.close();
+                    }
+                    // 4. 等待写管道完全关闭
+                    if (writableStreamClosed) {
+                        await writableStreamClosed;
+                    }
+                    // 5. 解除所有管道锁定后，安全关闭物理端口
+                    await port.close();
+
+                    term.writeln('\x1b[33m\r\n--- 已手动断开连接 ---\x1b[0m\r\n');
+                    resetUI();
+                    return;
+                }
+
+                // === 连接流程 ===
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 115200 });
+
+                document.getElementById('connectBtn').innerText = "断开连接";
+                term.writeln('\x1b[32m\r\n--- 串口已连接 ---\x1b[0m\r\n');
+
+                const textEncoder = new TextEncoderStream();
+                writableStreamClosed = textEncoder.readable.pipeTo(port.writable);
+                writer = textEncoder.writable.getWriter();
+
+                const textDecoder = new TextDecoderStream();
+                readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
+                reader = textDecoder.readable.getReader();
+
+                // 绑定按键输入事件，并保存句柄以便断开时注销
+                onDataDisposable = term.onData((data) => {
+                    if (writer) writer.write(data);
+                });
+
+                // 启动持续读取循环
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) {
+                        // 当触发 reader.cancel() 时，会进入这里
+                        reader.releaseLock();
+                        break;
+                    }
+                    if (value) {
+                        term.write(value);
+                    }
+                }
+            } catch (error) {
+                term.writeln(`\x1b[31m\r\n[串口异常] ${error}\x1b[0m\r\n`);
+                resetUI(); // 发生任何异常，确保 UI 按钮恢复
+            }
+        });
+
+        window.addEventListener('resize', () => fitAddon.fit());
+    </script>
+</body>
+
+</html>
