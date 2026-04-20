@@ -41,6 +41,8 @@
 
 #include "shell.h"
 
+#include "web_file.h"
+
 auto& shell_instance = Shell::instance();
 
 CppGpioDriver<GPIO_NUM_21, GpioMode::OUTPUT> POWER_OUT;
@@ -261,7 +263,6 @@ extern "C" void app_main(void){
     ESP_ERROR_CHECK(LP_Core_Load());
     ESP_ERROR_CHECK(BlackBox::init());
 
-
     add_on_protect_change_callback([](ProtectState_t last_state, ProtectState_t new_state){
         ESP_LOGI("protect_callback", "protect state changed: %d -> %d", last_state, new_state);
         if(new_state == PROTECT_STATE_PROTECT){
@@ -281,6 +282,8 @@ extern "C" void app_main(void){
 
     while (1){
         // Main loop - shell runs in background
+        ESP_LOGI("app_main", "index_html_file_size: %d", index_html_file.size);
+        ESP_LOGI("app_main", "index_html_file_first: %c", index_html_file.data[0]);
         vTaskDelay(1000/ portTICK_PERIOD_MS);
     }
     

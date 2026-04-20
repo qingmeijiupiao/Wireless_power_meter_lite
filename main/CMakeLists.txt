@@ -19,11 +19,11 @@ idf_component_register(
         soc
         log
         freertos
-        littlefs
         ui_resources
         Button
         HXC_NVS
         shell
+        web_file
     INCLUDE_DIRS ""
 )
 
