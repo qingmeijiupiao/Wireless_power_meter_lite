@@ -14,6 +14,3 @@ set(EXTRA_COMPONENT_DIRS
 )
 
 project(Wireless_power_meter_lite)
-
-# 创建 LittleFS 分区镜像
-littlefs_create_partition_image(storage flash_storage_data)

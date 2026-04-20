@@ -12,7 +12,6 @@
 #include "esp_chip_info.h"
 #include "esp_flash.h"
 #include "esp_system.h"
-#include "esp_littlefs.h"
 #include "blackbox.h"
 #include "esp_log.h"
 #include "ulp_loader.h"
