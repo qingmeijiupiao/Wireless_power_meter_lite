@@ -40,9 +40,13 @@
 
 #include "shell.h"
 
+#include "wifi_manager.h"
+
 #include "web_file.h"
 
 auto& shell_instance = Shell::instance();
+
+auto& wifi_manager = WiFiManager::instance();
 
 CppGpioDriver<GPIO_NUM_21, GpioMode::OUTPUT> POWER_OUT;
 Button Main_Button(GPIO_NUM_17, true);
@@ -259,8 +263,9 @@ extern "C" void app_main(void){
     ESP_ERROR_CHECK(Main_Button.setup());
     ESP_ERROR_CHECK(Chip_Temperature_Sensor.init());
     ESP_ERROR_CHECK(NTC::init(ADC_CHANNEL_5));
-    ESP_ERROR_CHECK(LP_Core_Load());
+    //ESP_ERROR_CHECK(LP_Core_Load());
     ESP_ERROR_CHECK(BlackBox::init());
+    HXC::NVS_Base::setup();
 
     add_on_protect_change_callback([](ProtectState_t last_state, ProtectState_t new_state){
         ESP_LOGI("protect_callback", "protect state changed: %d -> %d", last_state, new_state);
@@ -277,12 +282,10 @@ extern "C" void app_main(void){
 
     ESP_LOGI("app_main", "CAN_test_task started");
     
-    shell_instance.init();
-
+    //shell_instance.init();
+    wifi_manager.init();
     while (1){
-        // Main loop - shell runs in background
-        ESP_LOGI("app_main", "index_html_file_size: %d", index_html_file.size);
-        ESP_LOGI("app_main", "index_html_file_first: %c", index_html_file.data[0]);
+        // Main loop only use for debug
         vTaskDelay(1000/ portTICK_PERIOD_MS);
     }
     

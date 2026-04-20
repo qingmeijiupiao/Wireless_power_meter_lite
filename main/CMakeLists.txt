@@ -24,6 +24,7 @@ idf_component_register(
         HXC_NVS
         shell
         web_file
+        wifi_manager
     INCLUDE_DIRS ""
 )
 

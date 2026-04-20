@@ -20,10 +20,12 @@ namespace HXC {
 
 // 基类，用于共享静态变量及 NVS 句柄
 class NVS_Base {
+public:
+    static void setup(); // 初始化函数
 protected:
     static bool is_setup;
     static nvs_handle_t _handle;
-    static void setup(); // 初始化函数
+
 };
 
 // ---------------------------------------------------------
