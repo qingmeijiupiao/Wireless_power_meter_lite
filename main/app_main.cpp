@@ -39,9 +39,8 @@
 #include "WarningRectangle.h"
 
 #include "shell.h"
-
 #include "wifi_manager.h"
-
+#include "json.hpp"
 #include "web_file.h"
 
 auto& shell_instance = Shell::instance();
@@ -59,6 +58,7 @@ auto& protect_states = global_state.protect_states.states_bit;
 HXC_TWAI CAN_BUS(18,14,1_Mbps);
 
 auto& Chip_Temperature_Sensor = TemperatureSensor_t::instance();
+
 
 ST7735::Config cfg = {
     .mosi_io_num = 4,
@@ -264,9 +264,10 @@ extern "C" void app_main(void){
     ESP_ERROR_CHECK(Chip_Temperature_Sensor.init());
     ESP_ERROR_CHECK(NTC::init(ADC_CHANNEL_5));
     //ESP_ERROR_CHECK(LP_Core_Load());
+    LP_Core_Load();
     ESP_ERROR_CHECK(BlackBox::init());
     HXC::NVS_Base::setup();
-
+    ESP_ERROR_CHECK(shell_instance.init());
     add_on_protect_change_callback([](ProtectState_t last_state, ProtectState_t new_state){
         ESP_LOGI("protect_callback", "protect state changed: %d -> %d", last_state, new_state);
         if(new_state == PROTECT_STATE_PROTECT){
@@ -281,8 +282,7 @@ extern "C" void app_main(void){
     xTaskCreate(CAN_test_task, "CAN_test_task", 8192, NULL, 6, NULL);
 
     ESP_LOGI("app_main", "CAN_test_task started");
-    
-    //shell_instance.init();
+ 
     wifi_manager.init();
     while (1){
         // Main loop only use for debug

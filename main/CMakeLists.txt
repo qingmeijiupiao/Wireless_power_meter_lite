@@ -25,6 +25,7 @@ idf_component_register(
         shell
         web_file
         wifi_manager
+        json
     INCLUDE_DIRS ""
 )
 
