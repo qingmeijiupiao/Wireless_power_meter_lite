@@ -58,7 +58,7 @@ auto& protect_states = global_state.protect_states.states_bit;
 
 HXC_TWAI CAN_BUS(18,14,1_Mbps);
 
-TemperatureSensor_t Chip_Temperature_Sensor;
+auto& Chip_Temperature_Sensor = TemperatureSensor_t::instance();
 
 ST7735::Config cfg = {
     .mosi_io_num = 4,

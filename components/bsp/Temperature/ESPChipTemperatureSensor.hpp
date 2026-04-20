@@ -23,13 +23,26 @@
 
 
 /**
- * @brief ESP芯片内置温度传感器类
+ * @brief ESP芯片内置温度传感器类(单例模式)
  * 
  * 该类封装了ESP芯片内置温度传感器的功能，支持自动切换温度范围
  * 以提高测量精度。当温度接近当前范围的边界时，会自动切换到更合适的范围。
  */
 class TemperatureSensor_t{
-    public:
+public:
+    /**
+     * @brief 获取单例实例
+     * 
+     * @return TemperatureSensor_t& 单例引用
+     */
+    static TemperatureSensor_t& instance() {
+        static TemperatureSensor_t inst;
+        return inst;
+    }
+
+    TemperatureSensor_t(const TemperatureSensor_t&) = delete;
+    TemperatureSensor_t& operator=(const TemperatureSensor_t&) = delete;
+
     /**
      * @brief 初始化温度传感器
      * 
@@ -39,21 +52,21 @@ class TemperatureSensor_t{
     esp_err_t init() {
         uint8_t default_range_index = 2; // 默认使用范围90(-10°C到80°C)
         current_range_index = default_range_index;
-        
+
         // 初始化默认范围的温度边界值
         absolute_max_temperature = temperature_sensor_attributes[0].range_max;
         absolute_min_temperature = temperature_sensor_attributes[TEMPERATURE_SENSOR_ATTR_RANGE_NUM-1].range_min;
 
         // 配置温度传感器参数
         tsens_config = TEMPERATURE_SENSOR_CONFIG_DEFAULT(
-            temperature_sensor_attributes[default_range_index].range_min, 
+            temperature_sensor_attributes[default_range_index].range_min,
             temperature_sensor_attributes[default_range_index].range_max
         );
-        
+
         // 安装并启用温度传感器
         ESP_ERROR_CHECK(temperature_sensor_install(reinterpret_cast<temperature_sensor_config_t*>(&tsens_config), &tsens));
         ESP_ERROR_CHECK(temperature_sensor_enable(tsens));
-        
+
         // 记录当前范围的边界值
         current_range_min = temperature_sensor_attributes[default_range_index].range_min;
         current_range_max = temperature_sensor_attributes[default_range_index].range_max;
@@ -69,7 +82,7 @@ class TemperatureSensor_t{
     float getTemperature() {
         // 读取当前温度值
         ESP_ERROR_CHECK(temperature_sensor_get_celsius(tsens, &temp_data));
-        
+
         // 检查是否需要切换温度范围
         int8_t switch_result = checkswitchRange();
         if (switch_result != 0) {
@@ -78,10 +91,12 @@ class TemperatureSensor_t{
             // 重新读取温度值
             ESP_ERROR_CHECK(temperature_sensor_get_celsius(tsens, &temp_data));
         }
-        
+
         return temp_data;
     }
-    protected:
+private:
+    TemperatureSensor_t() = default;
+
     /**
      * @brief 切换温度传感器范围
      * 
@@ -95,23 +110,23 @@ class TemperatureSensor_t{
             ESP_LOGE("TemperatureSensor", "无效的温度范围索引: %d", range_index);
             return;
         }
-        
+
         ESP_LOGD("TemperatureSensor", "切换温度范围: %d -> %d", current_range_index, range_index);
-        
+
         // 先禁用并卸载当前传感器
         ESP_ERROR_CHECK(temperature_sensor_disable(tsens));
         ESP_ERROR_CHECK(temperature_sensor_uninstall(tsens));
-        
+
         // 重新配置新的温度范围
         tsens_config = TEMPERATURE_SENSOR_CONFIG_DEFAULT(
-            temperature_sensor_attributes[range_index].range_min, 
+            temperature_sensor_attributes[range_index].range_min,
             temperature_sensor_attributes[range_index].range_max
         );
-        
+
         // 重新安装并启用传感器
         ESP_ERROR_CHECK(temperature_sensor_install(reinterpret_cast<temperature_sensor_config_t*>(&tsens_config), &tsens));
         ESP_ERROR_CHECK(temperature_sensor_enable(tsens));
-        
+
         // 更新当前范围信息
         current_range_min = temperature_sensor_attributes[range_index].range_min;
         current_range_max = temperature_sensor_attributes[range_index].range_max;
@@ -126,29 +141,29 @@ class TemperatureSensor_t{
      */
     int8_t checkswitchRange() {
         constexpr int range_threshold = 10; // 范围切换阈值(°C)
-        
+
         // 检查是否需要切换到更低温度范围
         if (temp_data < current_range_min + range_threshold && current_range_index != 0) {
             ESP_LOGD("TemperatureSensor", "温度%.1f°C接近下限，建议切换到更低范围", temp_data);
             return -1; // 需要切换到lower range
         }
-        
+
         // 检查是否需要切换到更高温度范围
         if (temp_data > current_range_max - range_threshold && current_range_index != TEMPERATURE_SENSOR_ATTR_RANGE_NUM - 1) {
             ESP_LOGD("TemperatureSensor", "温度%.1f°C接近上限，建议切换到更高范围", temp_data);
             return 1; // 需要切换到upper range
         }
-        
+
         return 0; // 不需要切换范围
     }
-    private:
-        temperature_sensor_handle_t tsens;           // 温度传感器句柄
-        int16_t current_range_min = 0;                // 当前温度范围最小值
-        int16_t current_range_max = 0;                // 当前温度范围最大值
-        uint8_t current_range_index = 0;             // 当前温度范围索引
-        int16_t absolute_max_temperature;  // 传感器支持的最大温度(°C)
-        int16_t absolute_min_temperature;  // 传感器支持的最小温度(°C)
-        float temp_data = 0.0f;                      // 临时存储的温度数据
-        temperature_sensor_config_t tsens_config;    // 温度传感器配置
+
+    temperature_sensor_handle_t tsens;           // 温度传感器句柄
+    int16_t current_range_min = 0;                // 当前温度范围最小值
+    int16_t current_range_max = 0;                // 当前温度范围最大值
+    uint8_t current_range_index = 0;             // 当前温度范围索引
+    int16_t absolute_max_temperature;  // 传感器支持的最大温度(°C)
+    int16_t absolute_min_temperature;  // 传感器支持的最小温度(°C)
+    float temp_data = 0.0f;                      // 临时存储的温度数据
+    temperature_sensor_config_t tsens_config;    // 温度传感器配置
 };
 #endif
