@@ -13,7 +13,7 @@ union GlobalState_bit{
 struct GlobalState{
     uint16_t voltage_mV; 
     int32_t current_uA;
-    int16_t NTC_temperature;    //单位为0.01摄氏度
+    int16_t board_temperature;  //单位为0.01摄氏度
     int16_t chip_temperature;   //单位为0.01摄氏度
     protect_states_t protect_states;
     GlobalState_bit global_state_bits;

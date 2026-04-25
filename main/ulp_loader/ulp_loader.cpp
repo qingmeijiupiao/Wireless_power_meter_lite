@@ -1,3 +1,10 @@
+/*
+ * @Description: LP 核加载器
+ * @Author: qingmeijiupiao
+ * @version: 1.0.0
+ * @Date: 2026-04-20 00:48:01
+ * @LastEditTime: 2026-04-25 17:08:17
+ */
 #include "ulp_loader.h"
 #include "ulp_lp_core.h"
 #include "ulp_main.h"

@@ -39,18 +39,16 @@ using ButtonCallback = std::function<void()>;
 
 class Button {
 public:
-    /**
-     * @param gpio_num GPIO引脚号
-     * @param active_low 是否低电平有效 (默认true)
-     */
-    Button(gpio_num_t gpio_num, bool active_low = true);
+    Button();
     ~Button();
 
     /**
-     * @description: 启动按键驱动并创建处理任务
+     * @description: 初始化GPIO并启动按键驱动
+     * @param gpio_num GPIO引脚号
+     * @param active_low 是否低电平有效 (默认true)
      * @return ESP_OK on success, or an error code on failure
      */
-    esp_err_t setup();
+    esp_err_t setup(gpio_num_t gpio_num, bool active_low = true);
 
     /**
      * @description: 动态绑定事件回调 (替换 std::map)

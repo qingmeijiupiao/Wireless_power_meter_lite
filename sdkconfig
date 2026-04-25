@@ -1112,6 +1112,13 @@ CONFIG_GDMA_OBJ_DRAM_SAFE=y
 # end of ESP-Driver:I2S Configurations
 
 #
+# ESP-Driver:LEDC Configurations
+#
+# default:
+# CONFIG_LEDC_CTRL_FUNC_IN_IRAM is not set
+# end of ESP-Driver:LEDC Configurations
+
+#
 # ESP-Driver:SPI Configurations
 #
 # default:

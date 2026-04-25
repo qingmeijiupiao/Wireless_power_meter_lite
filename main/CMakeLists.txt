@@ -9,9 +9,7 @@ idf_component_register(
         hal
         cpp_gpio_driver
         esp_timer
-        st7735_driver
         Temperature
-        Fonts
         HXC_TWAI
         global_state
         protect
@@ -19,13 +17,15 @@ idf_component_register(
         soc
         log
         freertos
-        ui_resources
         Button
         HXC_NVS
         shell
         web_file
         wifi_manager
         json
+        hardware
+        screen
+        PWM
     INCLUDE_DIRS ""
 )
 

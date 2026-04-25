@@ -49,6 +49,7 @@ void ulp_i2c_init(){
     INA226::read_register(INA226::Register_enum::INA226_MANUFACTURER,&temp_value);
     if(temp_value == 0){
         ulp_state_p.ulp_state_bits.ulp_ina226_init_err = true;
+        lp_log(100);
     }
 
     INA226::set_configuration(
@@ -70,16 +71,20 @@ void ulp_i2c_init(){
 uint16_t bus_voltage = 0;
 int16_t shunt_voltage = 0;
 uint32_t last_ina226_run_ms = 0;
+uint16_t mask_enable = 0;
 void ina226_run(){
-    if(ulp_lp_core_gpio_get_level(Alert_Pin) == 1){
-        if((now_time_ms - last_ina226_run_ms) > 1000){
-            ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout = true;
-        }
+    // if(ulp_lp_core_gpio_get_level(Alert_Pin) == 1){
+    //     if((now_time_ms - last_ina226_run_ms) > 1000){
+    //         ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout = true;
+    //     }
+    //     return;
+    // }
+    INA226::read_register(INA226::Register_enum::INA226_MASK_ENABLE,&mask_enable);
+    if(!(mask_enable & (1 << 3))){ //CNVR位为0，说明没有转换完成
         return;
     }
     INA226::read_register(INA226::Register_enum::INA226_BUS_VOLTAGE, &bus_voltage);
     INA226::read_register(INA226::Register_enum::INA226_SHUNT_VOLTAGE, reinterpret_cast<uint16_t*>(&shunt_voltage));
-    INA226::read_register(INA226::Register_enum::INA226_MASK_ENABLE,nullptr);
     voltage_uv = bus_voltage*voltage_scale;
     if(std::abs(shunt_voltage*current_scale)<current_dead_zone_uv){ //死区，避免无输出时的噪声
         current_uA = 0;

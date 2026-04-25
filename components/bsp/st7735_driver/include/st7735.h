@@ -59,6 +59,7 @@ struct Config {
     int dc_io_num;             /**< 数据/命令的GPIO引脚（DC） */
     int rst_io_num;            /**< 复位的GPIO引脚（RST） */
     int bl_io_num;             /**< 背光的GPIO引脚（Lite），-1表示未使用 */
+    bool bl_active_state;      /**< 背光开启时引脚的电平状态 */
     spi_host_device_t host_id; /**< SPI主机（SPI2_HOST或SPI3_HOST） */
 };
 

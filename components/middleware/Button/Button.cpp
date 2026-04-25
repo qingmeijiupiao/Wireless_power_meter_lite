@@ -1,20 +1,12 @@
 #include "Button.h"
 #include "esp_log.h"
 
-Button::Button(gpio_num_t gpio_num, bool active_low) 
-    : _pin(gpio_num), _active_low(active_low), _ticks(0), _gap_ticks(0) {
+Button::Button()
+    : _pin(GPIO_NUM_NC), _active_low(true), _ticks(0), _gap_ticks(0) {
     
     _state.click_count = 0;
     _state.is_long_sent = 0;
     _state.is_super_sent = 0;
-
-    gpio_config_t io_conf = {};
-    io_conf.intr_type = GPIO_INTR_DISABLE;
-    io_conf.mode = GPIO_MODE_INPUT;
-    io_conf.pin_bit_mask = (1ULL << _pin);
-    io_conf.pull_down_en = active_low ? GPIO_PULLDOWN_DISABLE : GPIO_PULLDOWN_ENABLE;
-    io_conf.pull_up_en = active_low ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE;
-    gpio_config(&io_conf);
 }
 
 Button::~Button() {
@@ -30,8 +22,18 @@ Button::~Button() {
     }
 }
 
-esp_err_t Button::setup() {
-    // 1. 创建事件队列，深度为5
+esp_err_t Button::setup(gpio_num_t gpio_num, bool active_low) {
+    _pin = gpio_num;
+    _active_low = active_low;
+
+    gpio_config_t io_conf = {};
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    io_conf.mode = GPIO_MODE_INPUT;
+    io_conf.pin_bit_mask = (1ULL << _pin);
+    io_conf.pull_down_en = active_low ? GPIO_PULLDOWN_DISABLE : GPIO_PULLDOWN_ENABLE;
+    io_conf.pull_up_en = active_low ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE;
+    gpio_config(&io_conf);
+
     _evt_queue = xQueueCreate(5, sizeof(ButtonEvent));
     if (_evt_queue == nullptr) {
         ESP_LOGE("Button", "Failed to create event queue");

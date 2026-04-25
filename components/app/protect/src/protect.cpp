@@ -126,7 +126,7 @@ void protect_task(void* pvParameters){
     
     while(1){
         //检查温度保护状态
-        temp_state= check_now_state(temperature_threshold, global_state_protects.temperature_protect_state, glb_states.NTC_temperature/ 100.0f);
+        temp_state= check_now_state(temperature_threshold, global_state_protects.temperature_protect_state, glb_states.board_temperature/ 100.0f);
         if(temp_state != global_state_protects.temperature_protect_state){
             last_state = global_state_protects.temperature_protect_state;
             global_state_protects.temperature_protect_state = temp_state;
