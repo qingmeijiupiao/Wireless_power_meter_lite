@@ -65,7 +65,7 @@ void screen_task(void* arg) {
     warning_background_color.set_color_raw(0xFE60);
     ST7735::color_t error_background_color;
     error_background_color.set_color_raw(0xB123);
-
+    
     while (1) {
         char temp_str[16];
         auto& global_state = get_global_state();
@@ -147,6 +147,7 @@ void screen_task(void* arg) {
         }
 
         ST7735::sync_buffers();
+        ST7735::set_backlight(30*255/100);
         vTaskDelayUntil(&ticks, configTICK_RATE_HZ / fps);
     }
 }

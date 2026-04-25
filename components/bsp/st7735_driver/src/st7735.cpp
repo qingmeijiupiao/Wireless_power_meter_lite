@@ -10,6 +10,9 @@
 #include "esp_heap_caps.h"
 #include "st7735.h"
 #include "st7735_commands.h"
+#include "pwm.h"
+#include "Interp.hpp"
+#include "backlight_lut.h"
 #include <algorithm>
 
 #define U16_LITTLE_TO_BIG(x) ((((x) >> 8)&0xFF) | (((x) << 8)&0xFF))
@@ -27,6 +30,12 @@ static uint8_t colstart = COLSTART;
 static uint8_t rowstart = ROWSTART;
 static uint16_t display_width = WIDTH;
 static uint16_t display_height = HEIGHT;
+
+static pwm_t backlight_pwm;
+static EquidistantInterp<uint8_t, uint16_t> *backlight_interp = nullptr;
+static uint8_t current_brightness = 0;
+static bool backlight_initialized = false;
+static bool bl_active_low = false;
 
 struct double_buffer_t{
     uint16_t data[2][WIDTH*HEIGHT];
@@ -95,12 +104,12 @@ esp_err_t init(const Config *cfg, Rotation rotation) {
     gpio_config(&io_conf);
     
     if (cfg->bl_io_num >= 0) {
-        gpio_config_t bl_conf = {};
-        bl_conf.pin_bit_mask = (1ULL << cfg->bl_io_num);
-        bl_conf.mode = GPIO_MODE_OUTPUT;
-        gpio_config(&bl_conf);
-        gpio_set_level(static_cast<gpio_num_t>(cfg->bl_io_num), 1);
-        ESP_LOGD(TAG, "Backlight enabled");
+        bl_active_low = !cfg->bl_active_state;
+        backlight_interp = new EquidistantInterp<uint8_t, uint16_t>(backlight_lut);
+        backlight_pwm.init(static_cast<gpio_num_t>(cfg->bl_io_num));
+        backlight_initialized = true;
+        set_backlight(0);
+        ESP_LOGD(TAG, "Backlight PWM enabled (active %s)", bl_active_low ? "low" : "high");
     }
     
     spi_bus_config_t buscfg = {};
@@ -268,6 +277,29 @@ void draw_string(uint16_t x, uint16_t y, const char *str, color_t color, color_t
 
 uint16_t get_width(void) { return display_width; }
 uint16_t get_height(void) { return display_height; }
+
+esp_err_t set_backlight(uint8_t brightness) {
+    if (!backlight_initialized) {
+        ESP_LOGE("ST7735", "backlight not supported");
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+
+    if(brightness == current_brightness){
+        return ESP_OK;
+    }
+
+    current_brightness = brightness;
+    uint16_t duty = backlight_interp->interpolate(brightness);
+    float percent = (float)duty / 65535.0f * 100.0f;
+    if (bl_active_low) {
+        percent = 100.0f - percent;
+    }
+    return backlight_pwm.set_duty_percent(percent);
+}
+
+uint8_t get_backlight() {
+    return current_brightness;
+}
 
 void draw_image(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t *data) {
     if (x >= display_width || y >= display_height) return;

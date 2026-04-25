@@ -158,6 +158,19 @@ void draw_image(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t *
  */
 void sync_buffers();
 
+/**
+ * @brief 设置背光亮度
+ * @param brightness 亮度值 0-255，0为关闭，255为最亮
+ * @return 成功返回ESP_OK，未初始化背光返回ESP_ERR_INVALID_STATE
+ */
+esp_err_t set_backlight(uint8_t brightness);
+
+/**
+ * @brief 获取当前背光亮度
+ * @return 亮度值 0-255
+ */
+uint8_t get_backlight();
+
 } // namespace ST7735
 
 #endif

@@ -143,9 +143,6 @@ extern "C" void app_main(void){
  
     // wifi_manager.init();
 
-    
-    blk.init(hardware.TFT_BLK);
-    blk.set_duty_percent(0.0f);
     while (1){
         // Main loop only use for debug
         //ESP_LOGI("app_main", "ina226_run state: %d");
