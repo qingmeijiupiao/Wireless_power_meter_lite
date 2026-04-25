@@ -4,35 +4,23 @@
  * SPDX-License-Identifier: CC0-1.0
  */
 
-#include <stdio.h>
-#include <inttypes.h>
-#include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp_chip_info.h"
-#include "esp_flash.h"
-#include "esp_system.h"
-#include "blackbox.h"
 #include "esp_log.h"
+
+#include "blackbox.h"
 #include "ulp_loader.h"
 #include "HXC_NVS.h"
 #include "hardware.h"
-
 #include "cpp_gpio_driver.hpp"
-#include "esp_timer.h"
-
 #include "TMP235.h"
 #include "ESPChipTemperatureSensor.h"
 #include "HXC_TWAI.h"
-
 #include "global_state.h"
 #include "Button.h"
-
 #include "shell.h"
 #include "screen.h"
 #include "wifi_manager.h"
-#include "json.hpp"
-#include "web_file.h"
 #include "pwm.h"
 
 auto& shell_instance = Shell::instance();

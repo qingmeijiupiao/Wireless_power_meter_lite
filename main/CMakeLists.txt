@@ -4,11 +4,8 @@ idf_component_register(
     INCLUDE_DIRS "." 
                  "ulp_loader"
     REQUIRES
-        spi_flash
         blackbox
-        hal
         cpp_gpio_driver
-        esp_timer
         Temperature
         HXC_TWAI
         global_state
@@ -20,9 +17,7 @@ idf_component_register(
         Button
         HXC_NVS
         shell
-        web_file
         wifi_manager
-        json
         hardware
         screen
         PWM
