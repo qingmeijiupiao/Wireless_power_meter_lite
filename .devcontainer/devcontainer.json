@@ -1,0 +1,27 @@
+{
+    "name": "My ESP-IDF Project",
+    // 使用本地目录下的 Dockerfile 来构建开发环境
+    "build": {
+        "dockerfile": "Dockerfile",
+        // 在这里指定 ESP-IDF 的版本标签，请务必核实准确性！
+        "args": { "IDF_VERSION": "v6.0" }
+    },
+    // 定制 VS Code 在容器中的行为
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "terminal.integrated.defaultProfile.linux": "bash",
+                "idf.gitPath": "/usr/bin/git",
+                "idf.showOnboardingOnInit": false,
+                "extensions.ignoreRecommendations": true
+            },
+            // 安装必需的 VS Code 扩展
+            "extensions": [
+                "espressif.esp-idf-extension",
+                "espressif.esp-idf-web"
+            ]
+        }
+    },
+    // 必要的权限参数，使设备直通等操作可用
+    "runArgs": ["--privileged"]
+}
