@@ -50,14 +50,18 @@ esp_err_t Shell::init() {
     // ==========================================
     
     // 注册基础命令
-    esp_console_register_help_command();
-    esp_console_cmd_t exit_cmd = {};
-    exit_cmd.command = "exit";
-    exit_cmd.help = "Exit interactive shell mode";
-    exit_cmd.func = &Shell::exit_command;
-    esp_console_cmd_register(&exit_cmd);
+    initialized_ = true;
+    register_command(ShellCommand_t("help", "Print the summary of all registered commands", "[<command>]",
+        [](int argc, char** argv) -> int {
+            return Shell::instance().help_command(argc, argv);
+        }));
+    register_command(ShellCommand_t("exit", "Exit interactive shell mode", "",
+        [](int argc, char** argv) -> int {
+            Shell::instance().stop_interactive();
+            return 0;
+        }));
 
-    // 2. 安装 USB 驱动并挂载 VFS
+    // 安装 USB 驱动并挂载 VFS
     usb_serial_jtag_driver_config_t usj_config = USB_SERIAL_JTAG_DRIVER_CONFIG_DEFAULT();
     esp_err_t err = usb_serial_jtag_driver_install(&usj_config);
     if (err == ESP_OK || err == ESP_ERR_INVALID_STATE) {
@@ -72,13 +76,12 @@ esp_err_t Shell::init() {
         #endif
     }
 
-    initialized_ = true;
-    xTaskCreate(listener_task, "listener_task", 8192, this, 6, &listener_task_handle_);
+    xTaskCreate(listener_task, "listener_task", SHELL_TASK_STACK_SIZE, this, SHELL_TASK_PRIORITY, &listener_task_handle_);
     ESP_LOGI("Shell", "Shell initialized successfully");
     return ESP_OK;
 }
 
-esp_err_t Shell::register_command(const ShellCommand& cmd) {
+esp_err_t Shell::register_command(const ShellCommand_t& cmd) {
     if (!initialized_) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -89,16 +92,13 @@ esp_err_t Shell::register_command(const ShellCommand& cmd) {
             return ESP_ERR_INVALID_ARG;
         }
     }
-    // 创建ESP控制台命令结构
-    esp_console_cmd_t esp_cmd = {};
-    esp_cmd.command = cmd.name().c_str();
-    esp_cmd.help = cmd.help().empty() ? nullptr : cmd.help().c_str();
-    esp_cmd.hint = cmd.hint().empty() ? nullptr : cmd.hint().c_str();
-    // 创建命令包装器
-    auto wrapper = std::make_shared<ShellCommand>(cmd);
+    auto wrapper = std::make_shared<ShellCommand_t>(cmd);
     commands_.push_back(wrapper);
 
-    // 设置命令处理函数
+    esp_console_cmd_t esp_cmd = {};
+    esp_cmd.command = wrapper->name().c_str();
+    esp_cmd.help = wrapper->help().empty() ? nullptr : wrapper->help().c_str();
+    esp_cmd.hint = wrapper->hint().empty() ? nullptr : wrapper->hint().c_str();
     esp_cmd.func_w_context = &Shell::esp_console_wrapper_with_context;
     esp_cmd.context = wrapper.get();
     esp_err_t ret = esp_console_cmd_register(&esp_cmd);
@@ -129,7 +129,7 @@ esp_err_t Shell::deregister_command(const std::string& name) {
 
     // 从内部列表中移除
     auto it = std::remove_if(commands_.begin(), commands_.end(),
-        [&name](const std::shared_ptr<ShellCommand>& cmd) {
+        [&name](const std::shared_ptr<ShellCommand_t>& cmd) {
             return cmd->name() == name;
         });
 
@@ -182,7 +182,8 @@ void Shell::listener_task(void* arg) {
     Shell* shell = static_cast<Shell*>(arg);
     struct timeval timeout;
     fd_set read_fds;
-    
+    constexpr int LISTENER_DELAY_MS = 50;
+
     while (1) {
         if (shell->get_mode() == Mode::ESP_LOG) {
             // [状态1] Log 模式：静默监听键盘中断
@@ -199,7 +200,7 @@ void Shell::listener_task(void* arg) {
                     shell->start_interactive();
                 }
             }
-            vTaskDelay(pdMS_TO_TICKS(10));
+            vTaskDelay(pdMS_TO_TICKS(LISTENER_DELAY_MS));
         } else {
             // [状态2] 交互模式：直接接管终端交互
             // linenoise 会阻塞在这里等待用户输入并按下回车
@@ -227,14 +228,28 @@ void Shell::listener_task(void* arg) {
     }
 }
 
-int Shell::exit_command(int argc, char** argv) {
-    // 用户输入 exit 后，切回 Log 模式
-    Shell::instance().stop_interactive();
+int Shell::help_command(int argc, char** argv) {
+    if (argc > 1) {
+        for (const auto& cmd : commands_) {
+            if (cmd->name() == argv[1]) {
+                printf("%s %s\n  %s\n\n", cmd->name().c_str(),
+                       cmd->hint().empty() ? "" : cmd->hint().c_str(),
+                       cmd->help().empty() ? "" : cmd->help().c_str());
+                return 0;
+            }
+        }
+        printf("Unknown command '%s'\n", argv[1]);
+        return 1;
+    }
+    for (const auto& cmd : commands_) {
+        printf("%-16s %s\n", cmd->name().c_str(),
+               cmd->help().empty() ? "" : cmd->help().c_str());
+    }
     return 0;
 }
 
 int Shell::esp_console_wrapper(int argc, char** argv) { return -1; }
 int Shell::esp_console_wrapper_with_context(void* context, int argc, char** argv) {
-    ShellCommand* cmd = static_cast<ShellCommand*>(context);
+    ShellCommand_t* cmd = static_cast<ShellCommand_t*>(context);
     return cmd->execute(argc, argv);
 }

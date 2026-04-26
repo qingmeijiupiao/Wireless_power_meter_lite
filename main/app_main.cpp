@@ -18,7 +18,7 @@
 #include "HXC_TWAI.h"
 #include "global_state.h"
 #include "Button.h"
-#include "shell.h"
+#include "shell_command.h"
 #include "screen.h"
 #include "wifi_manager.h"
 #include "pwm.h"
@@ -113,7 +113,7 @@ extern "C" void app_main(void){
     LP_Core_Load();
     ESP_ERROR_CHECK(BlackBox::init());
     HXC::NVS_Base::setup();
-    ESP_ERROR_CHECK(shell_instance.init());
+    ESP_ERROR_CHECK(ShellCommand::init());
     add_on_protect_change_callback([](ProtectState_t last_state, ProtectState_t new_state){
         ESP_LOGI("protect_callback", "protect state changed: %d -> %d", last_state, new_state);
         if(new_state == PROTECT_STATE_PROTECT){

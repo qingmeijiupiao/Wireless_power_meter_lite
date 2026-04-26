@@ -3,7 +3,6 @@
 cmake_minimum_required(VERSION 3.16)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-# "Trim" the build. Include the minimal set of components, main, and anything it depends on.
 idf_build_set_property(MINIMAL_BUILD ON)
 
 set(EXTRA_COMPONENT_DIRS 
@@ -14,4 +13,22 @@ set(EXTRA_COMPONENT_DIRS
     "components/middleware"
 )
 
+# 版本号 MAJOR.MINOR 由开发者修改，PATCH 区分本地/CD
+set(VERSION_MAJOR 1 CACHE STRING "Major version")
+set(VERSION_MINOR 0 CACHE STRING "Minor version")
+set(VERSION_PATCH 99 CACHE STRING "Patch version (99=local, 0=CD)")
+
 project(Wireless_power_meter_lite)
+
+# 将版本号注入所有目标的编译定义
+idf_build_set_property(COMPILE_DEFINITIONS 
+    "VERSION_MAJOR=${VERSION_MAJOR}" APPEND)
+idf_build_set_property(COMPILE_DEFINITIONS 
+    "VERSION_MINOR=${VERSION_MINOR}" APPEND)
+idf_build_set_property(COMPILE_DEFINITIONS 
+    "VERSION_PATCH=${VERSION_PATCH}" APPEND)
+
+# 注入编译时间
+string(TIMESTAMP BUILD_TIME "%Y-%m-%d %H:%M:%S" UTC)
+idf_build_set_property(COMPILE_DEFINITIONS 
+    "BUILD_TIME=\"${BUILD_TIME}\"" APPEND)

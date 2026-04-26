@@ -21,6 +21,7 @@ idf_component_register(
         hardware
         screen
         PWM
+        shell_command
     INCLUDE_DIRS ""
 )
 

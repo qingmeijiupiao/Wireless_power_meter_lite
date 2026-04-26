@@ -13,12 +13,20 @@ extern "C" {
 #include "esp_err.h"
 }
 
-class ShellCommand {
+#ifndef SHELL_TASK_STACK_SIZE
+#define SHELL_TASK_STACK_SIZE 8192
+#endif
+
+#ifndef SHELL_TASK_PRIORITY
+#define SHELL_TASK_PRIORITY 6
+#endif
+
+class ShellCommand_t {
 public:
     using CommandFunc = std::function<int(int, char**)>;
     using CommandFuncWithContext = std::function<int(void*, int, char**)>;
     
-    ShellCommand(const std::string& name, 
+    ShellCommand_t(const std::string& name, 
                  const std::string& help = "", 
                  const std::string& hint = "",
                  CommandFunc func = nullptr,
@@ -67,7 +75,7 @@ public:
     esp_err_t init();
     
     // 注册命令
-    esp_err_t register_command(const ShellCommand& cmd);
+    esp_err_t register_command(const ShellCommand_t& cmd);
     
     // 注销命令
     esp_err_t deregister_command(const std::string& name);
@@ -98,8 +106,8 @@ private:
     // 监听任务函数
     static void listener_task(void* arg);
     
-    // 退出命令处理函数
-    static int exit_command(int argc, char** argv);
+    // 帮助命令处理函数
+    int help_command(int argc, char** argv);
     
     // ESP控制台命令包装函数
     static int esp_console_wrapper(int argc, char** argv);
@@ -108,7 +116,7 @@ private:
     Mode mode_;
     esp_console_repl_t* repl_;
     TaskHandle_t listener_task_handle_;
-    std::vector<std::shared_ptr<ShellCommand>> commands_;
+    std::vector<std::shared_ptr<ShellCommand_t>> commands_;
     esp_log_level_t original_log_level_;
     bool initialized_;
     
