@@ -59,14 +59,14 @@ void screen_task(void* arg) {
     ST7735::fill_rect(106, 0, 2, 80, ST7735::YELLOW);
     ST7735::fill_rect(108, 13, 52, 2, ST7735::YELLOW);
     now_time_t now;
-    now.update(ticks);
-
+    
     ST7735::color_t warning_background_color;
     warning_background_color.set_color_raw(0xFE60);
     ST7735::color_t error_background_color;
     error_background_color.set_color_raw(0xB123);
-    
+    ST7735::set_backlight(30 * 255 / 100);
     while (1) {
+        now.update(ticks);
         char temp_str[16];
         auto& global_state = get_global_state();
         auto& global_state_bits = global_state.global_state_bits;
@@ -74,7 +74,6 @@ void screen_task(void* arg) {
 
         ST7735::fill_rect(28, 2, 106 - 29, 61, ST7735::BLACK);
 
-        now.update(ticks);
         float voltage = global_state.voltage_mV / 1000.0f;
         float current = std::abs(global_state.current_uA / 1e6);
         snprintf(temp_str, sizeof(temp_str), "%.3fV", voltage);
@@ -85,16 +84,21 @@ void screen_task(void* arg) {
         snprintf(temp_str, sizeof(temp_str), "%.3fW", current * voltage);
         ST7735::draw_string(28, 47, temp_str, ST7735::color_t(0x003ED0), background_color, DENGB16);
 
-        snprintf(temp_str, sizeof(temp_str), "%.1fC", global_state.board_temperature / 100.0f);
+        float temperature = global_state.board_temperature / 100.0f;
+        if(temperature >= 100.0f || temperature < 0.00f){
+            snprintf(temp_str, sizeof(temp_str), "%dC", (int)temperature);
+        }else{
+            snprintf(temp_str, sizeof(temp_str), "%.1fC", temperature);
+        }
         ST7735::draw_string(28, 67, temp_str, ST7735::color_t(0xb3261e), background_color, DENGB12);
 
         snprintf(temp_str, sizeof(temp_str), "%02d:%02d:%02d", now.hour, now.minute, now.second);
         ST7735::draw_string(111, 0, temp_str, ST7735::color_t(0xffffff), background_color, DENGB12);
 
         if (global_state_bits.state_bit.out_put_state) {
-            ST7735::draw_image(65, 66, OPEN_WIDTH, OPEN_HEIGHT, open_data);
+            ST7735::draw_image(62, 66, OPEN_WIDTH, OPEN_HEIGHT, open_data);
         } else {
-            ST7735::draw_image(65, 66, CLOSE_WIDTH, CLOSE_HEIGHT, close_data);
+            ST7735::draw_image(62, 66, CLOSE_WIDTH, CLOSE_HEIGHT, close_data);
         }
 
         ProtectState_t temp_protect_state = protect_states.temperature_protect_state;
@@ -147,7 +151,6 @@ void screen_task(void* arg) {
         }
 
         ST7735::sync_buffers();
-        ST7735::set_backlight(30*255/100);
         vTaskDelayUntil(&ticks, configTICK_RATE_HZ / fps);
     }
 }
