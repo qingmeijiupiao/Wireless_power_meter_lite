@@ -33,6 +33,7 @@ void add_on_protect_change_callback(std::function<void(ProtectState_t last_state
 bool have_protect();
 
 esp_err_t protect_init();
+bool protect_init_ok();
 esp_err_t protect_deinit();
 
 #endif

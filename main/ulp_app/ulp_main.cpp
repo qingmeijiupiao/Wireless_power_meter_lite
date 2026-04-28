@@ -11,7 +11,6 @@ constexpr int current_scale = 1114;
 constexpr int voltage_scale = 1250;
 
 constexpr uint32_t LP_CPU_FREQ_HZ = 20000000;
-constexpr lp_io_num_t Alert_Pin = LP_IO_NUM_1;
 constexpr uint32_t current_dead_zone_uv = 3000;
 
 #define MS_TO_US(ms) ((ms) * 1000)
@@ -31,54 +30,11 @@ static void lp_log(uint32_t log){
     ulp_state_p.ulp_state_bits.ulp_have_log = true;
 }
 
-
-void ulp_gpio_init(){
-    ulp_lp_core_gpio_init(Alert_Pin);
-    ulp_lp_core_gpio_pullup_enable(Alert_Pin);
-    ulp_lp_core_gpio_input_enable(Alert_Pin);
-};
-
-
-// I2C 初始化
-void ulp_i2c_init(){
-    INA226::reset();
-
-    ulp_lp_core_delay_us(MS_TO_US(5));
-
-    uint16_t temp_value = 0;
-    INA226::read_register(INA226::Register_enum::INA226_MANUFACTURER,&temp_value);
-    if(temp_value == 0){
-        ulp_state_p.ulp_state_bits.ulp_ina226_init_err = true;
-        lp_log(100);
-    }
-
-    INA226::set_configuration(
-        INA226::Avg_times_enum::INA226_64_samples,
-        INA226::Timing_enum::INA226_1100_us,
-        INA226::Timing_enum::INA226_1100_us,
-        INA226::Mode_enum::INA226_SHUNT_AND_BUS_CONTINUOUS
-    );
-
-    INA226::MaskEnable_reg_t MaskEnable_reg;
-    MaskEnable_reg.raw = 0;
-    MaskEnable_reg.bits.LEN=1;
-    MaskEnable_reg.bits.APOL=0;
-    MaskEnable_reg.bits.CNVR=1;
-    INA226::write_register(INA226::Register_enum::INA226_MASK_ENABLE,MaskEnable_reg.raw);
-};
-
-    
 uint16_t bus_voltage = 0;
 int16_t shunt_voltage = 0;
 uint32_t last_ina226_run_ms = 0;
 uint16_t mask_enable = 0;
 void ina226_run(){
-    // if(ulp_lp_core_gpio_get_level(Alert_Pin) == 1){
-    //     if((now_time_ms - last_ina226_run_ms) > 1000){
-    //         ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout = true;
-    //     }
-    //     return;
-    // }
     INA226::read_register(INA226::Register_enum::INA226_MASK_ENABLE,&mask_enable);
     if(!(mask_enable & (1 << 3))){ //CNVR位为0，说明没有转换完成
         return;
@@ -95,6 +51,41 @@ void ina226_run(){
     last_ina226_run_ms = now_time_ms;
 }
 
+// INA226初始化
+void ulp_ina226_init(){
+    INA226::reset();
+
+    ulp_lp_core_delay_us(MS_TO_US(5));
+
+    uint16_t temp_value = 0;
+    INA226::read_register(INA226::Register_enum::INA226_MANUFACTURER,&temp_value);
+    if(temp_value == 0){
+        while(1){
+            lp_log(0x11111111);
+            ulp_lp_core_delay_us(MS_TO_US(3000));
+        };
+    }
+
+    INA226::set_configuration(
+        INA226::Avg_times_enum::INA226_64_samples,
+        INA226::Timing_enum::INA226_1100_us,
+        INA226::Timing_enum::INA226_1100_us,
+        INA226::Mode_enum::INA226_SHUNT_AND_BUS_CONTINUOUS
+    );
+
+    INA226::MaskEnable_reg_t MaskEnable_reg;
+    MaskEnable_reg.raw = 0;
+    MaskEnable_reg.bits.LEN=1;
+    MaskEnable_reg.bits.APOL=0;
+    MaskEnable_reg.bits.CNVR=1;
+    INA226::write_register(INA226::Register_enum::INA226_MASK_ENABLE,MaskEnable_reg.raw);
+    while(voltage_uv == 0){
+        ina226_run();
+    }
+    ulp_state_p.ulp_state_bits.ulp_ina226_init_ok = true;
+};
+
+    
 /**
  * @brief : 定时器运行函数,更新ulp_core的内部时间计数器,单位为ms
  * @note  : 需要这个函数是因为ulp_lp_core_get_cpu_cycles返回的是cpu周期数,大约215s就会溢出，必须处理溢出情况
@@ -138,8 +129,7 @@ void app_loop_every_ms(uint32_t interval_ms, F&& action) {
 }
 
 int main(void){
-    ulp_gpio_init();
-    ulp_i2c_init();
+    ulp_ina226_init();
     ulp_state_p.ulp_state_bits.ulp_run = true;
     while (1) {
         ina226_run();

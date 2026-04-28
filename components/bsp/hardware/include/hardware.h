@@ -3,7 +3,7 @@
  * @Author: qingmeijiupiao
  * @version: 1.0.0
  * @Date: 2026-04-25 00:49:51
- * @LastEditTime: 2026-04-25 03:01:14
+ * @LastEditTime: 2026-04-29 00:34:58
  */
 #ifndef HRADWARE_H
 #define HRADWARE_H
@@ -43,6 +43,7 @@ struct hardware_config{
 
     // 按键引脚配置
     gpio_num_t MAIN_BUTTON;   // 主按键引脚
+    gpio_num_t SIDE_BUTTON;   // 侧边上的按键引脚
 
 };
 

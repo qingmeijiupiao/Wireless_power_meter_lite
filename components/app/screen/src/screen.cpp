@@ -32,6 +32,7 @@ public:
     };
 };
 
+bool screen_can_display = false; //屏幕等待其他任务初始化一些变量后再显示第一个界面
 void screen_task(void* arg) {
     auto hardware_config = get_hardware_config();
     static ST7735::Config cfg = {};
@@ -65,6 +66,10 @@ void screen_task(void* arg) {
     ST7735::color_t error_background_color;
     error_background_color.set_color_raw(0xB123);
     ST7735::set_backlight(30 * 255 / 100);
+    while(!screen_can_display){
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+    ESP_LOGI("screen_task", "Screen task started");
     while (1) {
         now.update(ticks);
         char temp_str[16];

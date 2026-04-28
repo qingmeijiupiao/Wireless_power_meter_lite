@@ -7,6 +7,8 @@
 #include "st7735.h"
 #include <cstdio>
 #include <cstdlib>
+#include "esp_app_desc.h"
+
 
 namespace ShellCommand {
 
@@ -49,15 +51,14 @@ esp_err_t init() {
      */
     shell.register_command(ShellCommand_t("version", "Get firmware version and build time", "",
         [](int argc, char** argv) -> int {
+            printf("Hardware: v%d\n", get_hardware_version());
             if (VERSION_PATCH == 99) {
                 printf("Firmware: %d.%d.%d (Local build not official firmware!)\n", VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
             }else{
                 printf("Firmware: %d.%d.%d\n", VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
             }
-            
-            printf("Build:    UTC+0:%s\n", BUILD_TIME);
-            printf("Hardware: v%d\n", get_hardware_version());
-   
+            const esp_app_desc_t *app_desc = esp_app_get_description();
+            printf("Build:    %s %s\n", app_desc->date, app_desc->time);
             return 0;
         }));
 

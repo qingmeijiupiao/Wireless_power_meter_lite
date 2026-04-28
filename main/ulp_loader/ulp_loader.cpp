@@ -3,7 +3,7 @@
  * @Author: qingmeijiupiao
  * @version: 1.0.0
  * @Date: 2026-04-20 00:48:01
- * @LastEditTime: 2026-04-25 17:08:17
+ * @LastEditTime: 2026-04-29 01:15:20
  */
 #include "ulp_loader.h"
 #include "ulp_lp_core.h"
@@ -75,9 +75,9 @@ esp_err_t LP_Core_Load(void){
 
     ESP_ERROR_CHECK(ulp_lp_core_run(&lp_core_init_cfg)); 
 
-    int32_t timeout = 200;
+    int32_t timeout = 600;
     while (timeout-=10){
-        if(ulp_state.ulp_state_bits.ulp_run){
+        if(ulp_state.ulp_state_bits.ulp_run && ulp_state.ulp_state_bits.ulp_ina226_init_ok){
             break;
         }
         vTaskDelay(10/ portTICK_PERIOD_MS);
@@ -94,6 +94,7 @@ esp_err_t LP_Core_Load(void){
         return ESP_ERR_TIMEOUT;
     }else{
         ESP_LOGI(LPTAG, "lp core run success...");
+        ESP_LOGI(LPTAG, "first read value: voltageuV=%d currentuA=%d", ulp_voltage_uv, ulp_current_uA);
     }
 
     xTaskCreate(print_lp_core_log_task, "print_lp_core_log", 2048, NULL, 4, NULL);

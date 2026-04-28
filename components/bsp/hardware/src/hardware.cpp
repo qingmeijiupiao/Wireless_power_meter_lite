@@ -3,7 +3,7 @@
  * @Author: qingmeijiupiao
  * @version: 
  * @Date: 2026-04-25 00:50:00
- * @LastEditTime: 2026-04-25 03:05:35
+ * @LastEditTime: 2026-04-29 00:34:50
  */
 #include "hardware.h"
 #include "adc.h"
@@ -27,6 +27,7 @@ const hardware_config version_1={
     .INAA226_ALERT = GPIO_NUM_20,
     .OUTPUT_CTRL = GPIO_NUM_21,
     .MAIN_BUTTON = GPIO_NUM_17,
+    .SIDE_BUTTON = GPIO_NUM_9,
 };
 
 #define TAG "hardware"

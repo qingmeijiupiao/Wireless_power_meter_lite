@@ -18,6 +18,8 @@ set(VERSION_MAJOR 1 CACHE STRING "Major version")
 set(VERSION_MINOR 0 CACHE STRING "Minor version")
 set(VERSION_PATCH 99 CACHE STRING "Patch version (99=local, 0=CD)")
 
+set(PROJECT_VER "v${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}")
+
 project(Wireless_power_meter_lite)
 
 # 将版本号注入所有目标的编译定义

@@ -1,9 +1,3 @@
-/*
- * SPDX-FileCopyrightText: 2010-2022 Espressif Systems (Shanghai) CO LTD
- *
- * SPDX-License-Identifier: CC0-1.0
- */
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -29,8 +23,8 @@ auto& wifi_manager = WiFiManager::instance();
 
 CppGpioDriver<GPIO_NUM_NC, GpioMode::OUTPUT> POWER_OUT;
 CppGpioDriver<GPIO_NUM_NC, GpioMode::OUTPUT> CAN_register;
-Button Main_Button;
-
+Button Main_Button; // 主按键
+Button Side_Button; // 侧边上的按键
 pwm_t blk;
 
 auto& global_state   = get_global_state();
@@ -42,17 +36,11 @@ auto& Chip_Temperature_Sensor = ESPChipTemperatureSensor_t::instance();
 auto& Board_Temperature_sensor = TMP235_t::instance();
 
 
-
-void update_main_state_task(void* arg){
-    auto ticks = xTaskGetTickCount();
-    constexpr int update_HZ = 200;
-    while (1){
-        global_state.voltage_mV = ulp_voltage_uv/1e3;
-        global_state.current_uA = ulp_current_uA;
-        global_state.board_temperature = Board_Temperature_sensor.getTemperature();
-        global_state.chip_temperature = Chip_Temperature_Sensor.getTemperature()*100.0f;
-        xTaskDelayUntil(&ticks, configTICK_RATE_HZ / update_HZ);
-    }
+void update_main_state(TimerHandle_t xTimer){
+    global_state.voltage_mV = ulp_voltage_uv/1e3;
+    global_state.current_uA = ulp_current_uA;
+    global_state.board_temperature = Board_Temperature_sensor.getTemperature();
+    global_state.chip_temperature = Chip_Temperature_Sensor.getTemperature()*100.0f;
 }
 
 
@@ -101,19 +89,16 @@ void CAN_test_task(void* arg){
 
 extern "C" void app_main(void){
     ESP_ERROR_CHECK(hardware_config_init());
-    auto& hardware = get_hardware_config();
-    ESP_ERROR_CHECK(CAN_register.init(hardware.CAN_RESISTOR_ENABLE));
-    ESP_ERROR_CHECK(POWER_OUT.init(hardware.OUTPUT_CTRL));
-    POWER_OUT.set(false);
-    global_state.global_state_bits.state_bit.out_put_state = false;
-    Main_Button.bind_event(ButtonEvent::SHORT_PRESS, OUTPUT_ctrl);
-    ESP_ERROR_CHECK(Main_Button.setup(hardware.MAIN_BUTTON, true));
-    ESP_ERROR_CHECK(Chip_Temperature_Sensor.init());
-    ESP_ERROR_CHECK(Board_Temperature_sensor.init(hardware.temperature_channel));
-    LP_Core_Load();
     ESP_ERROR_CHECK(BlackBox::init());
     HXC::NVS_Base::setup();
-    ESP_ERROR_CHECK(ShellCommand::init());
+
+    ESP_ERROR_CHECK(Chip_Temperature_Sensor.init());
+    ESP_ERROR_CHECK(Board_Temperature_sensor.init(get_hardware_config().temperature_channel));
+    TimerHandle_t xMyTimer = xTimerCreate("update_main_state", pdMS_TO_TICKS(5), pdTRUE, NULL, update_main_state); xTimerStart( xMyTimer, 0 );
+    xTaskCreate(SCREEN::screen_task, "screen_task", 4096, NULL, 4, NULL);
+
+    LP_Core_Load();
+    ESP_ERROR_CHECK(protect_init());
     add_on_protect_change_callback([](ProtectState_t last_state, ProtectState_t new_state){
         ESP_LOGI("protect_callback", "protect state changed: %d -> %d", last_state, new_state);
         if(new_state == PROTECT_STATE_PROTECT){
@@ -121,9 +106,24 @@ extern "C" void app_main(void){
         }
     });
 
-    xTaskCreate(update_main_state_task, "update_main_state_task", 2048, NULL, 6, NULL);
-    xTaskCreate(SCREEN::screen_task, "screen_task", 4096, NULL, 4, NULL);
-    ESP_ERROR_CHECK(protect_init());
+
+    Main_Button.bind_event(ButtonEvent::SHORT_PRESS, OUTPUT_ctrl);
+    Side_Button.bind_event(ButtonEvent::SHORT_PRESS, [](){
+        ESP_LOGI("Side_Button", "button toggle");
+    });
+    ESP_ERROR_CHECK(Main_Button.setup(get_hardware_config().MAIN_BUTTON, true));
+    ESP_ERROR_CHECK(Side_Button.setup(get_hardware_config().SIDE_BUTTON, true));
+    ESP_ERROR_CHECK(CAN_register.init(get_hardware_config().CAN_RESISTOR_ENABLE));
+    ESP_ERROR_CHECK(POWER_OUT.init(get_hardware_config().OUTPUT_CTRL));
+    POWER_OUT.set(false);
+
+    while (!protect_init_ok()){// 等待保护状态刷新
+        vTaskDelay(5);
+    }
+    SCREEN::screen_can_display = true;
+    ESP_ERROR_CHECK(ShellCommand::init());
+
+
 
     // xTaskCreate(CAN_test_task, "CAN_test_task", 8192, NULL, 6, NULL);
 

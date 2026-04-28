@@ -7,7 +7,7 @@ union GlobalState_bit{
     struct {
         uint32_t out_put_state : 1;
         uint32_t reverse : 31;
-    } state_bit;
+    } state_bit; // 需要保证所有字段的默认值为0
 } __attribute__((packed)); //4字节对齐
 
 struct GlobalState{

@@ -20,7 +20,7 @@ namespace ST7735 {
 
 static const char *TAG = "ST7735";
 
-static constexpr uint32_t SPI_CLOCK_SPEED_HZ = 40 * 1000 * 1000;
+static constexpr uint32_t SPI_CLOCK_SPEED_HZ = 50 * 1000 * 1000;
 static constexpr uint32_t MAX_TRANSFER_SIZE = 160 * 80 * 2 + 8;
 
 static spi_device_handle_t spi = NULL;
@@ -101,7 +101,11 @@ esp_err_t init(const Config *cfg, Rotation rotation) {
     io_conf.pin_bit_mask = (1ULL << dc_pin) | (1ULL << rst_pin);
     io_conf.mode = GPIO_MODE_OUTPUT;
 
-    gpio_config(&io_conf);
+    ret = gpio_config(&io_conf);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "GPIO config failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
     
     if (cfg->bl_io_num >= 0) {
         bl_active_low = !cfg->bl_active_state;
@@ -139,12 +143,12 @@ esp_err_t init(const Config *cfg, Rotation rotation) {
     }
     ESP_LOGD(TAG, "SPI @ %d MHz", SPI_CLOCK_SPEED_HZ / 1000000);
     
-    gpio_set_level(rst_pin, 1); vTaskDelay(pdMS_TO_TICKS(50));
-    gpio_set_level(rst_pin, 0); vTaskDelay(pdMS_TO_TICKS(100));
-    gpio_set_level(rst_pin, 1); vTaskDelay(pdMS_TO_TICKS(200));
-    
-    write_command(ST7735_SWRESET); vTaskDelay(pdMS_TO_TICKS(150));
-    write_command(ST7735_SLPOUT); vTaskDelay(pdMS_TO_TICKS(500));
+    /*这里的启动时序已经优化过，非必要勿动*/
+    gpio_set_level(rst_pin, 1); vTaskDelay(pdMS_TO_TICKS(5));
+    gpio_set_level(rst_pin, 0); vTaskDelay(pdMS_TO_TICKS(1));
+    gpio_set_level(rst_pin, 1); vTaskDelay(pdMS_TO_TICKS(5));
+    //write_command(ST7735_SWRESET); vTaskDelay(pdMS_TO_TICKS(120));
+    write_command(ST7735_SLPOUT); vTaskDelay(pdMS_TO_TICKS(120));
     
     write_command(ST7735_FRMCTR1);
     write_data_byte(0x01); write_data_byte(0x2C); write_data_byte(0x2D);
@@ -172,10 +176,10 @@ esp_err_t init(const Config *cfg, Rotation rotation) {
     write_command(ST7735_GMCTRN1);
     { uint8_t d[] = {0x03,0x1D,0x07,0x06,0x2E,0x2C,0x29,0x2D,0x2E,0x2E,0x37,0x3F,0x00,0x00,0x02,0x10}; write_data(d,16); }
     
-    write_command(ST7735_NORON); vTaskDelay(pdMS_TO_TICKS(10));
-    write_command(ST7735_DISPON); vTaskDelay(pdMS_TO_TICKS(100));
+    write_command(ST7735_NORON);
+    write_command(ST7735_DISPON);
     
-    ESP_LOGD(TAG, "显示屏正常: %dx%d 像素", display_width, display_height);
+    ESP_LOGD(TAG, "screen setup success: %dx%d pixels", display_width, display_height);
     return ESP_OK;
 }
 

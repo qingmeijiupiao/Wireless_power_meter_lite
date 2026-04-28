@@ -117,13 +117,15 @@ bool have_protect(){
         global_state_protects.current_protect_state == PROTECT_STATE_PROTECT;
 }
 
+static bool _protect_init_ok = false;
 void protect_task(void* pvParameters){
     auto ticks = xTaskGetTickCount();
-    constexpr int protect_check_HZ = 10;
+    constexpr int protect_check_HZ = 20;
     auto& global_state_protects = glb_states.protect_states.states_bit; 
     ProtectState_t temp_state;
     ProtectState_t last_state;
-    
+    static bool first_check = true;
+
     while(1){
         //检查温度保护状态
         temp_state= check_now_state(temperature_threshold, global_state_protects.temperature_protect_state, glb_states.board_temperature/ 100.0f);
@@ -165,6 +167,12 @@ void protect_task(void* pvParameters){
             }
         }
 
+        if(first_check){
+            first_check = false;
+            _protect_init_ok = true;
+            ESP_LOGI(PROTECT_LOG_TAG, "protect first check complete");
+        }
+
         xTaskDelayUntil(&ticks, configTICK_RATE_HZ / protect_check_HZ);
     }
 }
@@ -177,7 +185,9 @@ esp_err_t protect_init(){
     xTaskCreate(protect_task, "protect_task", 2048, nullptr, 5, &protect_task_handle);
     return ESP_OK;
 }
-
+bool protect_init_ok(){
+    return _protect_init_ok;
+}
 esp_err_t protect_deinit(){
     if(protect_task_handle){
         glb_states.protect_states.protect_states_raw = 0; //清除保护状态

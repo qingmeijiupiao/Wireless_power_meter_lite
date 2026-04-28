@@ -3,7 +3,7 @@
  * @Author: qingmeijiupiao
  * @version: 2.0.0
  * @Date: 2024-09-06 18:38:48
- * @LastEditTime: 2026-04-25 23:47:58
+ * @LastEditTime: 2026-04-29 01:22:25
  */
 #include "ESPChipTemperatureSensor.h"
 
@@ -33,6 +33,10 @@ esp_err_t ESPChipTemperatureSensor_t::init() {
 }
 
 float ESPChipTemperatureSensor_t::getTemperature() {
+    if (tsens == nullptr) {
+        ESP_LOGE("ESPChipTemperatureSensor", "temperature sensor not initialized");
+        return 0;
+    }
     ESP_ERROR_CHECK(temperature_sensor_get_celsius(tsens, &temp_data));
 
     int8_t switch_result = checkswitchRange();

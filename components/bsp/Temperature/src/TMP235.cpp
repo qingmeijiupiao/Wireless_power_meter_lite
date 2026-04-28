@@ -3,7 +3,7 @@
  * @Author: qingmeijiupiao
  * @version: 2.0.0
  * @Date: 2026-04-20 00:48:01
- * @LastEditTime: 2026-04-26 00:40:50
+ * @LastEditTime: 2026-04-29 01:22:58
  */
 #include "TMP235.h"
 #include "esp_log.h"
@@ -21,6 +21,10 @@ esp_err_t TMP235_t::init(adc_channel_t channel) {
 }
 
 int16_t TMP235_t::getTemperature() {
+    if (adc == nullptr) {
+        ESP_LOGE("TMP235", "adc not initialized");
+        return 0;
+    }
     int adc_value_mv = 0;
     adc->read_voltage_mV(adc_value_mv);
     int16_t raw_temp;

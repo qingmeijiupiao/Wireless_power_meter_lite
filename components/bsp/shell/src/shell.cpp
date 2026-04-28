@@ -104,12 +104,12 @@ esp_err_t Shell::register_command(const ShellCommand_t& cmd) {
     esp_err_t ret = esp_console_cmd_register(&esp_cmd);
 
     if (ret != ESP_OK) {
-        ESP_LOGE("Shell", "Failed to register command '%s': %s",cmd.name().c_str(), esp_err_to_name(ret));
+        ESP_LOGW("Shell", "Failed to register command '%s': %s",cmd.name().c_str(), esp_err_to_name(ret));
         commands_.pop_back();
         return ret;
     }
 
-    ESP_LOGI("Shell", "Command '%s' registered successfully", cmd.name().c_str());
+    ESP_LOGD("Shell", "Command '%s' registered successfully", cmd.name().c_str());
 
     return ESP_OK;
 
