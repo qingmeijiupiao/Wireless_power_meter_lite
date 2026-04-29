@@ -12,6 +12,7 @@
 #else
     #include "esp_vfs_usb_serial_jtag.h"
 #endif
+constexpr char shell_header[] = "ESP@wireless_power_meter_lite> ";
 
 Shell::Shell() 
     : mode_(Mode::ESP_LOG), 
@@ -204,7 +205,7 @@ void Shell::listener_task(void* arg) {
         } else {
             // [状态2] 交互模式：直接接管终端交互
             // linenoise 会阻塞在这里等待用户输入并按下回车
-            char* line = linenoise("esp> ");
+            char* line = linenoise(shell_header);
             
             if (line == NULL) {
                 continue; // 忽略空行或读取错误

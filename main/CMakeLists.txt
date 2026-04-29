@@ -5,7 +5,6 @@ idf_component_register(
                  "ulp_loader"
     REQUIRES
         blackbox
-        cpp_gpio_driver
         Temperature
         HXC_TWAI
         global_state
@@ -22,6 +21,8 @@ idf_component_register(
         screen
         PWM
         shell_command
+        can_callback
+        power_output
     INCLUDE_DIRS ""
 )
 

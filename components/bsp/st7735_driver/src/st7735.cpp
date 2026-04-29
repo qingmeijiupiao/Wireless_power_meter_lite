@@ -80,10 +80,20 @@ static void set_address_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y
     write_command(ST7735_RAMWR);
 }
 
+void switch_buffers() {
+    double_buffer.current_buffer = 1 - double_buffer.current_buffer;
+}
+
+void copy_buffers() {
+    memcpy(double_buffer.data[1-double_buffer.current_buffer], double_buffer.data[double_buffer.current_buffer], display_width*display_height*2);
+}
+
+
+
 void sync_buffers() {
     set_address_window(0, 0, display_width-1, display_height-1);
     write_data((uint8_t *)double_buffer.data[double_buffer.current_buffer], display_width*display_height*2);
-    double_buffer.current_buffer = 1 - double_buffer.current_buffer;
+    switch_buffers();
 }
 
 
@@ -93,7 +103,7 @@ esp_err_t init(const Config *cfg, Rotation rotation) {
     rst_pin = static_cast<gpio_num_t>(cfg->rst_io_num);
     
     ESP_LOGD(TAG, "ST7735 Driver - Adafruit Mini TFT 0.96");
-    ESP_LOGD(TAG, "引脚: MOSI=%d CLK=%d CS=%d DC=%d RST=%d BL=%d",
+    ESP_LOGD(TAG, "PINS: MOSI=%d CLK=%d CS=%d DC=%d RST=%d BL=%d",
              cfg->mosi_io_num, cfg->sclk_io_num, cfg->cs_io_num,
              cfg->dc_io_num, cfg->rst_io_num, cfg->bl_io_num);
     

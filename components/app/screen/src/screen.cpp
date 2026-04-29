@@ -55,10 +55,7 @@ void screen_task(void* arg) {
     ST7735::draw_image(4, 4, STATIC_WIDTH, STATIC_HEIGHT, static_data);
     ST7735::fill_rect(106, 0, 2, 80, ST7735::YELLOW);
     ST7735::fill_rect(108, 13, 52, 2, ST7735::YELLOW);
-    ST7735::sync_buffers();
-    ST7735::draw_image(4, 4, STATIC_WIDTH, STATIC_HEIGHT, static_data);
-    ST7735::fill_rect(106, 0, 2, 80, ST7735::YELLOW);
-    ST7735::fill_rect(108, 13, 52, 2, ST7735::YELLOW);
+    ST7735::copy_buffers();
     now_time_t now;
     
     ST7735::color_t warning_background_color;
