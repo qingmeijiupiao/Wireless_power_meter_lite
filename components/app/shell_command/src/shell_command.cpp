@@ -5,8 +5,10 @@
 #include "esp_timer.h"
 #include "hardware.h"
 #include "st7735.h"
+#include "can_callback.h"
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include "esp_app_desc.h"
 
 
@@ -88,6 +90,47 @@ esp_err_t init() {
                 return 1;
             }
             printf("Backlight set to %d\n", brightness);
+            return 0;
+        }));
+
+    /**
+     * @brief  can_baudrate - 设置CAN波特率
+     * @usage  can_baudrate [baudrate]
+     * @param  baudrate - 波特率值(10进制)，如 1000000
+     * @note   不带参数时显示当前波特率
+     */
+    shell.register_command(ShellCommand_t("can_baudrate", "Set CAN baudrate (decimal)", "<baudrate>",
+        [](int argc, char** argv) -> int {
+            if (argc < 2) {
+                printf("Current CAN baudrate: %lu\n", (uint32_t)CanCallback::CAN_BAUDRATE);
+                return 0;
+            }
+            uint32_t baudrate = (uint32_t)strtoul(argv[1], nullptr, 10);
+            if (baudrate == 0) {
+                printf("Error: invalid baudrate\n");
+                return 1;
+            }
+            CanCallback::CAN_BAUDRATE = baudrate;
+            printf("CAN baudrate set to %lu\n", baudrate);
+            return 0;
+        }));
+
+    /**
+     * @brief  can_id - 设置CAN ID
+     * @usage  can_id [id]
+     * @param  id - CAN ID，支持10进制和16进制(0x前缀)，如 0x400 或 1024
+     * @note   不带参数时显示当前CAN ID(同时显示10进制和16进制)
+     */
+    shell.register_command(ShellCommand_t("can_id", "Set CAN ID (decimal or 0x hex)", "<id>",
+        [](int argc, char** argv) -> int {
+            if (argc < 2) {
+                uint32_t id = CanCallback::CAN_ID;
+                printf("Current CAN ID: %lu (0x%lX)\n", id, id);
+                return 0;
+            }
+            uint32_t id = (uint32_t)strtoul(argv[1], nullptr, 0);
+            CanCallback::CAN_ID = id;
+            printf("CAN ID set to %lu (0x%lX)\n", id, id);
             return 0;
         }));
 

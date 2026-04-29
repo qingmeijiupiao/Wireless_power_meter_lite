@@ -70,10 +70,6 @@ extern "C" void app_main(void){
 
     ESP_ERROR_CHECK(CanCallback::init());
 
-    while (!protect_init_ok()){
-        vTaskDelay(5);
-    }
-    SCREEN::screen_can_display = true;
     ESP_ERROR_CHECK(ShellCommand::init());
 
     // wifi_manager.init();
