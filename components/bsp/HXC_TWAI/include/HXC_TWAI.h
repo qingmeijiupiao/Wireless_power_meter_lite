@@ -1,9 +1,9 @@
 /*
  * @version: 2.2
- * @LastEditors: qingmeijiupiao
+ * @LastEditors: Please set LastEditors
  * @Description: HXC ESP32 twai封装类
  * @Author: qingmeijiupiao
- * @LastEditTime: 2026-04-06 13:14:18
+ * @LastEditTime: 2026-04-29 04:12:41
  */
 #ifndef HXC_TWAI_H
 #define HXC_TWAI_H
@@ -102,10 +102,6 @@ public:
 
     /**
      * @description: TWAI初始化
-     * @param {twai_mode_t} twai_mode TWAI模式默认为
-     * TWAI_MODE_NORMAL 该模式下如果CAN总线无设备时发送消息函数会阻塞 
-     * TWAI_MODE_NO_ACK 该模式下如果CAN总线发送消息不会检测ACK
-     * TWAI_MODE_LISTEN_ONLY 该模式下只能接收消息
      * @return {esp_err_t} 成功返回ESP_OK
      * @Author: qingmeijiupiao
      */
