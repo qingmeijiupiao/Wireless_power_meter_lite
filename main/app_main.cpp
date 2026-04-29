@@ -117,10 +117,6 @@ extern "C" void app_main(void){
     ESP_ERROR_CHECK(POWER_OUT.init(get_hardware_config().OUTPUT_CTRL));
     POWER_OUT.set(false);
 
-    while (!protect_init_ok()){// 等待保护状态刷新
-        vTaskDelay(5);
-    }
-    SCREEN::screen_can_display = true;
     ESP_ERROR_CHECK(ShellCommand::init());
 
 
