@@ -5,10 +5,21 @@
 #include "esp_log.h"
 #include "ina226.hpp"
 #include "ulp_state.h"
-
+#include "ulp_interp.hpp"
 //校准系数，实测来的
 constexpr int current_scale = 1114;
 constexpr int voltage_scale = 1250;
+//电流校准点 <寄存器值,电流值uA>
+const UlpNonEquidistantInterp<int16_t,int32_t,7>::Point current_interp_points[] = {
+    {0,0},
+    {1000,1000*current_scale},
+    {2000,2000*current_scale},
+    {3000,3000*current_scale},
+    {4000,4000*current_scale},
+    {5000,5000*current_scale},
+    {32767,32767*current_scale},
+};
+UlpNonEquidistantInterp<int16_t,int32_t,7> current_interp;
 
 constexpr uint32_t LP_CPU_FREQ_HZ = 20000000;
 constexpr uint32_t current_dead_zone_uv = 3000;
@@ -45,7 +56,7 @@ void ina226_run(){
     if(std::abs(shunt_voltage*current_scale)<current_dead_zone_uv){ //死区，避免无输出时的噪声
         current_uA = 0;
     }else{
-        current_uA = shunt_voltage*current_scale;
+        current_uA = current_interp.interpolate((int16_t)shunt_voltage);
     }
 
     last_ina226_run_ms = now_time_ms;
@@ -129,6 +140,7 @@ void app_loop_every_ms(uint32_t interval_ms, F&& action) {
 }
 
 int main(void){
+    current_interp.load(current_interp_points);
     ulp_ina226_init();
     ulp_state_p.ulp_state_bits.ulp_run = true;
     while (1) {

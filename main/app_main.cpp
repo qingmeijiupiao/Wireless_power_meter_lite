@@ -41,7 +41,7 @@ void update_main_state(TimerHandle_t xTimer){
 
 
 void OUTPUT_ctrl(){
-    PowerOutput::change();
+    PowerOutput::toggle();
 }
 
 
