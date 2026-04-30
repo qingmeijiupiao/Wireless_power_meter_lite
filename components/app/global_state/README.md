@@ -15,7 +15,7 @@
 |------|------|------|
 | `voltage_mV` | `uint16_t` | 电压，单位 mV |
 | `current_uA` | `int32_t` | 电流，单位 μA |
-| `NTC_temperature` | `int16_t` | NTC 温度，单位 0.01°C |
+| `board_temperature` | `int16_t` | 板载温度，单位 0.01°C |
 | `chip_temperature` | `int16_t` | 芯片内部温度，单位 0.01°C |
 | `protect_states` | `protect_states_t` | 保护状态位域 |
 | `global_state_bits` | `GlobalState_bit` | 通用状态位域（当前仅 `out_put_state`） |

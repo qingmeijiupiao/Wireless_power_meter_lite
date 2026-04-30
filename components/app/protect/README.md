@@ -1,6 +1,6 @@
 # protect
 
-过流 / 过压 / 欠压 / 过温保护模块，基于 FreeRTOS 任务以 10 Hz 轮询 `global_state` 中的实时数据，按双阈值（告警 + 保护）及滞回逻辑判定状态跃迁，并通过回调通知外部模块。
+过流 / 过压 / 欠压 / 过温保护模块，基于 FreeRTOS 任务以 20 Hz 轮询 `global_state` 中的实时数据，按双阈值（告警 + 保护）及滞回逻辑判定状态跃迁，并通过回调通知外部模块。
 
 ## 模块特点
 
@@ -52,6 +52,7 @@ add_on_protect_change_callback([](ProtectState_t last, ProtectState_t now) {
 |-----|------|
 | `protect_init()` | 启动保护检测任务（优先级 5，2KB 栈） |
 | `protect_deinit()` | 停止任务并清除保护状态 |
+| `protect_init_ok()` | 返回是否完成首次检测 |
 | `add_on_protect_change_callback(cb)` | 注册状态变化回调 |
 | `have_protect()` | 是否有任一维度处于 PROTECT 状态 |
 

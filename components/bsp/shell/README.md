@@ -52,6 +52,7 @@ shell.deregister_command("hello");
 | 成员 | 说明 |
 |------|------|
 | `ShellCommand_t(name, help, hint, func)` | 构造命令对象，`func` 为 `int(int, char**)` |
+| `ShellCommand_t(name, help, hint, func_with_ctx, context)` | 构造带上下文的命令对象，`func_with_ctx` 为 `int(void*, int, char**)` |
 | `name()` | 命令名称 |
 | `help()` | 帮助文本（`help` 命令显示） |
 | `hint()` | 参数提示（补全时显示） |
@@ -69,6 +70,8 @@ shell.deregister_command("hello");
 | `start_interactive()` | 切换到交互模式 |
 | `stop_interactive()` | 切换回日志模式 |
 | `get_mode()` | 获取当前模式 |
+| `set_log_level(level)` | 设置日志级别 |
+| `get_repl()` | 获取原始 REPL 句柄 |
 
 ## 内置命令
 

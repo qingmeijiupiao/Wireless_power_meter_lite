@@ -80,9 +80,12 @@ classDiagram
         
         +HXC_TWAI(uint8_t tx, uint8_t rx, uint32_t rate)
         +setup() esp_err_t
+        +get_setup_flag() bool
         +set_filter(twai_mask_filter_config_t filter) esp_err_t
         +send(HXC_CAN_message_t* message) esp_err_t
         +add_can_receive_callback_func(int addr, HXC_can_feedback_func func) void
+        +remove_can_receive_callback_func(int addr) void
+        +exist_can_receive_callback_func(int addr) bool
         +get_rx_overflow_count() uint32_t
         
         <<static>> #on_rx_done_callback() bool

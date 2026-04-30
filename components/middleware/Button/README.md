@@ -80,8 +80,8 @@ stateDiagram-v2
 ```cpp
 #include "Button.h"
 
-// 1. 实例化 — GPIO0, 低电平有效 (默认)
-Button btn(GPIO_NUM_0);
+// 1. 实例化
+Button btn;
 
 // 2. 绑定事件回调
 btn.bind_event(ButtonEvent::SHORT_PRESS, []() {
@@ -103,8 +103,8 @@ btn.bind_event(ButtonEvent::RELEASE, []() {
     printf("按键松开\n");
 });
 
-// 3. 启动驱动（创建定时器、队列、任务）
-btn.setup();
+// 3. 启动驱动：GPIO0, 低电平有效 (默认)
+btn.setup(GPIO_NUM_0);
 
 // 4. 运行期间可动态解绑
 // btn.unbind_event(ButtonEvent::DOUBLE_CLICK);
@@ -114,13 +114,13 @@ btn.setup();
 
 ## API 参考
 
-### `Button(gpio_num_t gpio_num, bool active_low = true)`
+### `Button()`
 
-构造按键对象并配置 GPIO。`active_low=true` 时启用内部上拉，按下为低电平；`active_low=false` 时启用内部下拉，按下为高电平。
+默认构造按键对象，此时不绑定 GPIO。
 
-### `esp_err_t setup()`
+### `esp_err_t setup(gpio_num_t gpio_num, bool active_low = true)`
 
-创建事件队列（深度 5）、事件处理任务（优先级 3，栈 4096 字节）及 10 ms 轮询定时器并启动。返回 `ESP_OK` 或 `ESP_ERR_NO_MEM`。
+初始化 GPIO 并启动按键驱动。`active_low=true` 时启用内部上拉，按下为低电平；`active_low=false` 时启用内部下拉，按下为高电平。创建事件队列（深度 5）、事件处理任务（优先级 3，栈 4096 字节）及 10 ms 轮询定时器并启动。返回 `ESP_OK` 或 `ESP_ERR_NO_MEM`。
 
 ### `void bind_event(ButtonEvent event, ButtonCallback cb)`
 

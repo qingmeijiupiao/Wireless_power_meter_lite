@@ -60,9 +60,12 @@ shell.register_command(ShellCommand_t("echo", "Echo input text", "<text>",
 |------|------|------|
 | `reboot` | 重启设备 | 无 |
 | `timestamp` | 获取系统时间戳(微秒) | 无 |
-| `version` | 获取固件版本号 | 无 |
+| `version` | 获取固件版本号与编译时间 | 无 |
+| `backlight` | 设置/查询屏幕背光亮度 | `[0-255]` |
+| `can_baudrate` | 设置/查询 CAN 波特率 | `[baudrate]` |
+| `can_id` | 设置/查询 CAN ID | `[id]` |
 
 ## 环境与依赖
 
 - **软件**：ESP-IDF v5.x、C++11
-- **组件依赖**：`shell`
+- **组件依赖**：`shell`、`hardware`、`st7735_driver`、`can_callback`、`esp_app_desc`

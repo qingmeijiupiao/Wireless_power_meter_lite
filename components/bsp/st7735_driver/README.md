@@ -32,12 +32,13 @@ flowchart LR
 ST7735::Config cfg = {
     .mosi_io_num = 19, .sclk_io_num = 21, .cs_io_num = 22,
     .dc_io_num = 2, .rst_io_num = 3, .bl_io_num = 15,
-    .host_id = SPI2_HOST
+    .bl_active_state = true, .host_id = SPI2_HOST
 };
 ST7735::init(&cfg);
 ST7735::fill_screen(ST7735::BLACK);
 ST7735::draw_string(0, 0, "Hello!", ST7735::WHITE, ST7735::BLACK, DENGB16);
 ST7735::sync_buffers();
+ST7735::set_backlight(200);
 ```
 
 ## API 参考
@@ -48,12 +49,16 @@ ST7735::sync_buffers();
 | `draw_pixel(x, y, color)` | 绘制单像素 |
 | `fill_rect(x, y, w, h, color)` | 填充矩形 |
 | `fill_screen(color)` | 全屏填充 |
-| `draw_char(x, y, c, color, bg, font)` | 绘制单字符 |
-| `draw_string(x, y, str, color, bg, font)` | 绘制字符串 |
+| `draw_char(x, y, c, color, bg, font)` | 绘制单字符（`const Font_t&`） |
+| `draw_string(x, y, str, color, bg, font)` | 绘制字符串（`const Font_t&`） |
 | `draw_image(x, y, w, h, data)` | 绘制 RGB565 图像 |
 | `sync_buffers()` | 将当前缓冲区刷至屏幕，切换缓冲区 |
+| `switch_buffers()` | 切换当前显示缓冲区 |
+| `copy_buffers()` | 复制当前缓冲区内容到另一个缓冲区 |
 | `set_rotation(rotation)` | 设置旋转方向 |
 | `invert_display(invert)` | 颜色反转 |
+| `set_backlight(brightness)` | 设置背光亮度（0-255） |
+| `get_backlight()` | 获取当前背光亮度 |
 | `get_width() / get_height()` | 获取当前分辨率 |
 
 ## 环境与依赖
