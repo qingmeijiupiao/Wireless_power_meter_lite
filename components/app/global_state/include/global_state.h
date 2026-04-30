@@ -21,4 +21,7 @@ struct GlobalState{
 
 GlobalState& get_global_state();
 
+extern int16_t* current_register_raw;
+extern uint16_t* voltage_register_raw;
+
 #endif

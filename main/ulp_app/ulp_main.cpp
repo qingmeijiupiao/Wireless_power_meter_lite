@@ -5,21 +5,12 @@
 #include "esp_log.h"
 #include "ina226.hpp"
 #include "ulp_state.h"
-#include "ulp_interp.hpp"
+#include "ulp_Interp.hpp"
+#include "../../components/app/current_calibration/include/CurrentCalib.h"
+
 //校准系数，实测来的
 constexpr int current_scale = 1114;
 constexpr int voltage_scale = 1250;
-//电流校准点 <寄存器值,电流值uA>
-const UlpNonEquidistantInterp<int16_t,int32_t,7>::Point current_interp_points[] = {
-    {0,0},
-    {1000,1000*current_scale},
-    {2000,2000*current_scale},
-    {3000,3000*current_scale},
-    {4000,4000*current_scale},
-    {5000,5000*current_scale},
-    {32767,32767*current_scale},
-};
-UlpNonEquidistantInterp<int16_t,int32_t,7> current_interp;
 
 constexpr uint32_t LP_CPU_FREQ_HZ = 20000000;
 constexpr uint32_t current_dead_zone_uv = 3000;
@@ -30,10 +21,16 @@ constexpr uint32_t current_dead_zone_uv = 3000;
 /* 定义共享变量，存放在RTC内存中（.rtc.bss段） */
 volatile uint32_t ulp_state LP_VAR;
 volatile uint32_t log_data LP_VAR;
+volatile uint32_t core_run_freq_hz LP_VAR;
 volatile uint32_t voltage_uv LP_VAR;
+volatile uint16_t voltage_register_raw LP_VAR;
 volatile uint32_t current_uA LP_VAR;
-volatile uint32_t now_time_ms = 0;
+volatile int16_t  shunt_register_raw LP_VAR;
+volatile int32_t  Board_temperature LP_VAR; //单位0.01℃
+volatile CurrentCalib::params_t current_calib_params LP_VAR;
 
+volatile uint32_t now_time_ms = 0;
+UlpNonEquidistantInterp<int16_t,int16_t,6> current_interp;
 ULP_CORE_STATE& ulp_state_p = *(ULP_CORE_STATE*)&(ulp_state);
 
 static void lp_log(uint32_t log){
@@ -41,8 +38,6 @@ static void lp_log(uint32_t log){
     ulp_state_p.ulp_state_bits.ulp_have_log = true;
 }
 
-uint16_t bus_voltage = 0;
-int16_t shunt_voltage = 0;
 uint32_t last_ina226_run_ms = 0;
 uint16_t mask_enable = 0;
 void ina226_run(){
@@ -50,13 +45,24 @@ void ina226_run(){
     if(!(mask_enable & (1 << 3))){ //CNVR位为0，说明没有转换完成
         return;
     }
-    INA226::read_register(INA226::Register_enum::INA226_BUS_VOLTAGE, &bus_voltage);
-    INA226::read_register(INA226::Register_enum::INA226_SHUNT_VOLTAGE, reinterpret_cast<uint16_t*>(&shunt_voltage));
-    voltage_uv = bus_voltage*voltage_scale;
-    if(std::abs(shunt_voltage*current_scale)<current_dead_zone_uv){ //死区，避免无输出时的噪声
+    /* 读取电压寄存器 */
+    INA226::read_register(INA226::Register_enum::INA226_BUS_VOLTAGE, (uint16_t*)&voltage_register_raw);
+    voltage_uv = voltage_register_raw*voltage_scale;
+
+    /* 读取电流寄存器 */
+    INA226::read_register(INA226::Register_enum::INA226_SHUNT_VOLTAGE, (uint16_t*)&shunt_register_raw);
+    if(std::abs((int32_t)shunt_register_raw * current_calib_params.current_base_K) < current_dead_zone_uv){ 
         current_uA = 0;
-    }else{
-        current_uA = current_interp.interpolate((int16_t)shunt_voltage);
+    } else {
+        //插值补偿映射
+        int32_t no_temp_cali_current_uA = current_calib_params.current_base_K * (int16_t)shunt_register_raw + current_interp.interpolate(shunt_register_raw);
+        
+        //温漂补偿
+        int32_t delta_temp = (Board_temperature - CurrentCalib::BASE_TEMPERATURE) / 100;
+        int32_t temp_comp_uA = (no_temp_cali_current_uA / 1000) * current_calib_params.temperature_K * delta_temp / 1000;
+        
+        //最终电流
+        current_uA = no_temp_cali_current_uA - temp_comp_uA;
     }
 
     last_ina226_run_ms = now_time_ms;
@@ -96,6 +102,16 @@ void ulp_ina226_init(){
     ulp_state_p.ulp_state_bits.ulp_ina226_init_ok = true;
 };
 
+/**
+ * @brief : 加载电流校准参数
+ * @return  {*}
+ */
+void load_current_calib_params(){
+    for(int i = 0;i<sizeof(current_calib_params.points)/sizeof(current_calib_params.points[0]);i++){
+        current_interp.set_point(i,current_calib_params.points[i].register_value,current_calib_params.points[i].offset_current_uA);
+    }
+    current_interp.finish_load();
+}
     
 /**
  * @brief : 定时器运行函数,更新ulp_core的内部时间计数器,单位为ms
@@ -124,6 +140,13 @@ void timer_run(void) {
     last_raw_ms = current_ms;
 }
 
+void check_reload_current_calib_params(){
+    if(ulp_state_p.ulp_state_bits.ulp_reload_calib_params){
+        load_current_calib_params();
+        ulp_state_p.ulp_state_bits.ulp_reload_calib_params = false;
+    }
+}
+
 /**
  * @brief : APP 循环函数,每interval_ms执行一次action
  * @return  {*}
@@ -139,15 +162,27 @@ void app_loop_every_ms(uint32_t interval_ms, F&& action) {
     }
 }
 
+uint32_t loop_times = 0;
+uint32_t last_loop_times = 0;
+
 int main(void){
-    current_interp.load(current_interp_points);
+    load_current_calib_params();
     ulp_ina226_init();
     ulp_state_p.ulp_state_bits.ulp_run = true;
     while (1) {
         ina226_run();
         timer_run();
-        app_loop_every_ms(5000, [](){
-            // lp_log(now_time_ms);
+
+        app_loop_every_ms(1000, [](){ // 每1s计算一次运行频率
+            core_run_freq_hz = loop_times - last_loop_times;
+            last_loop_times = loop_times;
+            //lp_log(core_run_freq_hz);
         });
+
+        app_loop_every_ms(20, [](){ // 每20ms检查一次是否需要加载校准参数
+            check_reload_current_calib_params();
+        });
+
+        ++loop_times;
     }
 }

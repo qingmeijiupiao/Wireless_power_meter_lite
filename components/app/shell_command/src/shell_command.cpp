@@ -6,6 +6,9 @@
 #include "hardware.h"
 #include "st7735.h"
 #include "can_callback.h"
+#include "current_calibration.h"
+#include "global_state.h"
+#include "HXC_NVS.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -134,18 +137,97 @@ esp_err_t init() {
             return 0;
         }));
 
-    // --- 添加新命令模板 ---
-    // /**
-    //  * @brief  <命令名> - <简要描述>
-    //  * @usage  <命令名> [参数列表]
-    //  * @param  <参数1> - <参数说明>
-    //  * @note   <注意事项>
-    //  */
-    // shell.register_command(ShellCommand_t("<命令名>", "<help文本>", "<hint文本>",
-    //     [](int argc, char** argv) -> int {
-    //         printf("output with printf, not ESP_LOG\n");
-    //         return 0;
-    //     }));
+    /**
+     * @brief  ina226_register - 获取ina226寄存器值
+     * @usage  ina226_register <register_addr>
+     * @note   显示当前ina226电压电流寄存器值
+     */
+    shell.register_command(ShellCommand_t("ina226_register", "Get ina226 register value", "",
+        [](int argc, char** argv) -> int {
+            printf("ina226_register_raw current: %d, voltage: %d\n", *current_register_raw, *voltage_register_raw);
+            return 0;
+        }));
+
+    /**
+     * @brief  calibration_params - 获取校准参数
+     * @usage  calibration_params
+     * @note   显示当前校准参数
+     */
+    shell.register_command(ShellCommand_t("calibration_params", "Get calibration params", "",
+        [](int argc, char** argv) -> int {
+            auto params = CurrentCalib::params_data.read();
+            printf("Current calibration params:\n");
+            printf("Calibration current basek: %d\n", params.current_base_K);
+            printf("Calibration current current points:\n");
+            for(int i = 0; i < sizeof(params.points)/sizeof(params.points[0]); i++){
+                printf("Calibration index %d: reg_raw_value %d,no_offset_mA %d, cali_offset_uA %d\n", i, params.points[i].register_value,params.points[i].register_value*params.current_base_K/1000, params.points[i].offset_current_uA);
+            }
+            printf("Calibration current temperatureK: %d\n", params.temperature_K);
+            return 0;
+        }));
+
+    /*============工厂模式命令==================*/
+    // 校准基准电流K值
+    static ShellCommand_t calibration_basek("calibration_basek", "Calibration current basek Value","<basek>",
+        [](int argc, char** argv) -> int {
+            if (argc < 2) {
+                printf("Error: basek must be specified\n");
+                return 1;
+            }
+            auto params = CurrentCalib::params_data.read();
+            int basek = atoi(argv[1]);
+            params.current_base_K = basek;
+            CurrentCalib::params_data = params;
+            printf("Calibration basek set to %d restart required\n", basek);
+            return 0;
+        });
+
+    // 校准温度K值
+    static ShellCommand_t calibration_current_temperatureK("calibration_current_temperatureK", "Calibration current current temperatureK Value","<temperatureK>",
+        [](int argc, char** argv) -> int {
+            if (argc < 2) {
+                printf("Error: temperatureK must be specified\n");
+                return 1;
+            }
+            auto params = CurrentCalib::params_data.read();
+            int temperatureK = atoi(argv[1]);
+            params.temperature_K = temperatureK;
+            CurrentCalib::params_data = params;
+            printf("Calibration temperatureK set to %d restart required\n", temperatureK);
+            return 0;
+        });
+    // 校准电流校点
+    static ShellCommand_t calibration_current_points("calibration_current_points", "Calibration current current points Value","<point_index> <register_value> <offset_current_uA>",
+        [](int argc, char** argv) -> int {
+            if (argc < 4) {
+                printf("Error: point_index, register_value, voltage_uv must be specified\n");
+                return 1;
+            }
+            auto params = CurrentCalib::params_data.read();
+            int point_index = atoi(argv[1]);
+            if(point_index < 0 || point_index >= sizeof(params.points)/sizeof(params.points[0])) {
+                printf("Error: point_index out of range\n");
+                return 1;
+            }
+
+            int register_value = atoi(argv[2]);
+            int new_offset_current_uA = atoi(argv[3]);
+            params.points[point_index].register_value = register_value;
+            params.points[point_index].offset_current_uA = new_offset_current_uA;
+            CurrentCalib::params_data = params;
+            printf("Calibration current points set to %d, %d restart required\n", register_value, new_offset_current_uA);
+            return 0;
+        });
+
+    shell.register_command(ShellCommand_t("factory_mode", "Enter factory mode", "",
+        [](int argc, char** argv) -> int {
+            auto& _shell = Shell::instance();
+            _shell.register_command(calibration_basek);
+            _shell.register_command(calibration_current_temperatureK);
+            _shell.register_command(calibration_current_points);
+            printf("Factory mode enabled\n");
+            return 0;
+        }));
 
     ESP_LOGI(TAG, "Shell commands registered");
     return ESP_OK;

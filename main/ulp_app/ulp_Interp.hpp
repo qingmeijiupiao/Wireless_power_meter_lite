@@ -30,7 +30,7 @@ public:
      * @param {const Point (&)[N]} pts 校准点数组，需严格单调（递增或递减）
      * @note 加载完成后自动推导单调性，无需手动调用finish_load
      */
-    void load(const Point (&pts)[N]) noexcept {
+    void load(Point (&pts)[N]) noexcept {
         for (int i = 0; i < N; ++i) {
             inputs_[i] = pts[i].x;
             outputs_[i] = pts[i].y;
@@ -46,7 +46,7 @@ public:
      * @param {const OutputType*} ys 对应的输出值数组
      * @note 加载完成后自动推导单调性，无需手动调用finish_load
      */
-    void load(const InputType* xs, const OutputType* ys) noexcept {
+    void load(InputType* xs, OutputType* ys) noexcept {
         for (int i = 0; i < N; ++i) {
             inputs_[i] = xs[i];
             outputs_[i] = ys[i];

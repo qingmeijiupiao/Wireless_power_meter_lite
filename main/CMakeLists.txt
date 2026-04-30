@@ -23,6 +23,7 @@ idf_component_register(
         shell_command
         can_callback
         power_output
+        current_calibration
     INCLUDE_DIRS ""
 )
 

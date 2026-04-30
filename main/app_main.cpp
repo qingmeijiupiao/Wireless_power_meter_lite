@@ -37,6 +37,7 @@ void update_main_state(TimerHandle_t xTimer){
     global_state.current_uA = ulp_current_uA;
     global_state.board_temperature = Board_Temperature_sensor.getTemperature();
     global_state.chip_temperature = Chip_Temperature_Sensor.getTemperature()*100.0f;
+    *(int32_t*)&(ulp_Board_temperature) = global_state.board_temperature;
 }
 
 
@@ -76,7 +77,7 @@ extern "C" void app_main(void){
 
     while (1){
         // Main loop only use for debug
-        //ESP_LOGI("app_main", "ina226_run state: %d");
+        //ESP_LOGI("app_main", "ina226_run register: %d %d", *current_register_raw, *voltage_register_raw);
 
         vTaskDelay(1000/ portTICK_PERIOD_MS);
     }

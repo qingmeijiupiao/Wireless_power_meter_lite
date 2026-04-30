@@ -3,7 +3,7 @@
  * @Author: qingmeijiupiao
  * @version: 1.0.0
  * @Date: 2026-04-20 00:48:01
- * @LastEditTime: 2026-04-29 15:53:22
+ * @LastEditTime: 2026-04-30 18:29:00
  */
 #include "ulp_loader.h"
 #include "ulp_lp_core.h"
@@ -14,7 +14,8 @@
 #include "ulp_app/ulp_state.h"
 #include "soc/lp_clkrst_reg.h"
 #include "soc/lp_clkrst_struct.h"
-
+#include "current_calibration.h"
+#include "global_state.h"
 const char *LPTAG = "LP_CORE";
 
 ulp_lp_core_cfg_t lp_core_init_cfg={
@@ -34,6 +35,9 @@ const lp_core_i2c_cfg_t i2c_cfg={
     },
     .i2c_src_clk = LP_I2C_SCLK_DEFAULT,
 };
+
+HXC::NVS_DATA<CurrentCalib::params_t> CurrentCalib::params_data("CUR_CAL", CurrentCalib::DEFAULT);
+CurrentCalib::params_t* ulp_calib_params = reinterpret_cast<CurrentCalib::params_t*>(ulp_current_calib_params);
 
 extern "C" {
     extern const uint8_t bin_start[] asm("_binary_ulp_main_bin_start");
@@ -57,10 +61,21 @@ void print_lp_core_log_task(void* arg){
     }
 }
 
+/**
+ * @brief : 加载校准参数到 LP 核共享变量
+ * @return  {*}
+ * @param {bool} need_flag 是否需要设置校准参数标志位
+ */
+void load_current_calib_params(bool need_flag = true){
+    *ulp_calib_params = CurrentCalib::params_data.read();
+    if(need_flag){
+        ulp_state.ulp_state_bits.ulp_reload_calib_params = true;
+    }
+}
+
 
 esp_err_t LP_Core_Load(void){
     ESP_LOGI(LPTAG, "main core start init lp core...");
-
     ulp_state.ulp_state_raw = 0; // 初始化 LP 核状态
     LP_CLKRST.lp_clk_conf.fast_clk_sel = 1; //IDF 6.0版本默认是内部RC时钟(17.5MHz)，且没有API可以切换到外部时钟源，需要手动操作寄存器切换到外部时钟源(20MHz)
 
@@ -74,7 +89,7 @@ esp_err_t LP_Core_Load(void){
 
 
     ESP_ERROR_CHECK(ulp_lp_core_run(&lp_core_init_cfg)); 
-
+    load_current_calib_params(false);
     int32_t timeout = 600;
     while (timeout-=10){
         if(ulp_state.ulp_state_bits.ulp_run && ulp_state.ulp_state_bits.ulp_ina226_init_ok){
@@ -93,6 +108,8 @@ esp_err_t LP_Core_Load(void){
         ESP_LOGE(LPTAG, "lp core run timeout");
         return ESP_ERR_TIMEOUT;
     }else{
+        current_register_raw = (int16_t*)&ulp_shunt_register_raw;
+        voltage_register_raw = (uint16_t*)&ulp_voltage_register_raw;
         ESP_LOGI(LPTAG, "lp core run success...");
         ESP_LOGI(LPTAG, "first read value: voltageuV=%d currentuA=%d", ulp_voltage_uv, ulp_current_uA);
     }
