@@ -3,7 +3,7 @@
  * @LastEditors: qingmeijiupiao
  * @Description: 功率输出控制模块实现，基于策略链架构
  * @author: qingmeijiupiao
- * @LastEditTime: 2026-04-30
+ * @LastEditTime: 2026-05-01 01:51:17
  */
 #include "power_output.h"
 #include "protect_policy.hpp"
@@ -49,7 +49,6 @@ static void notify_change(bool new_state) {
 
 static void apply_state(bool state) {
     _output_gpio.set(state);
-    get_global_state().global_state_bits.state_bit.out_put_state = state;
     notify_change(state);
 }
 
@@ -82,8 +81,11 @@ esp_err_t init(gpio_num_t output_gpio_num) {
 
     // 初始化 GPIO，默认关闭输出
     ESP_ERROR_CHECK(_output_gpio.init(output_gpio_num));
+    _output_gpio.set_on_change_callback([](bool value){
+        auto& state = get_global_state();
+        state.global_state_bits.state_bit.out_put_state = value;
+    });
     _output_gpio.set(false);
-    get_global_state().global_state_bits.state_bit.out_put_state = false;
 
     // 初始化策略链：保护策略 -> 冷却策略（按注册顺序依次检查）
     _cooldown_policy = CooldownPolicy(OUTPUT_ON_COOLDOWN_MS, OUTPUT_OFF_COOLDOWN_MS);
@@ -174,7 +176,7 @@ OutputResult toggle() {
 // =====================================================================
 
 bool get_state() {
-    return get_global_state().global_state_bits.state_bit.out_put_state;
+    return _output_gpio.get();
 }
 
 void add_on_change_callback(OnOutputChangeCallback cb) {

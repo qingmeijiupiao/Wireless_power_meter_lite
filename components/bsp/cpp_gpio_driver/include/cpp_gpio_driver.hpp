@@ -34,6 +34,9 @@ public:
     esp_err_t set(bool value) {
         if(Mode == GpioMode::OUTPUT) {
             gpio_set_level(GPIO, value);
+            if(on_change_callback_ != nullptr){
+                on_change_callback_(value);
+            }
             return ESP_OK;
         }
         return ESP_FAIL;
@@ -42,6 +45,18 @@ public:
     bool get() const {
         return gpio_get_level(GPIO);
     }
+
+    /**
+     * @brief : 设置引脚状态改变回调函数
+     * @return  {*}
+     * @param {function<void(bool)>} callback
+     */
+    void set_on_change_callback(std::function<void(bool)> callback){
+        on_change_callback_=callback;
+    }
+
+private:
+    std::function<void(bool)> on_change_callback_=nullptr;
 };
 
 template <GpioMode Mode>
@@ -72,6 +87,9 @@ public:
     esp_err_t set(bool value) {
         if(Mode == GpioMode::OUTPUT && gpio_num_ != GPIO_NUM_NC) {
             gpio_set_level(gpio_num_, value);
+            if(on_change_callback_ != nullptr){
+                on_change_callback_(value);
+            }
             return ESP_OK;
         }
         return ESP_FAIL;
@@ -80,5 +98,17 @@ public:
     bool get() const {
         return gpio_get_level(gpio_num_);
     }
+    
+    /**
+     * @brief : 设置引脚状态改变回调函数
+     * @return  {*}
+     * @param {function<void(bool)>} callback
+     */
+    void set_on_change_callback(std::function<void(bool)> callback){
+        on_change_callback_=callback;
+    }
+
+private:
+    std::function<void(bool)> on_change_callback_=nullptr;
 };
 #endif // CPP_GPIO_DRIVER_HPP

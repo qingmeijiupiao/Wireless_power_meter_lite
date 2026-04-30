@@ -12,7 +12,7 @@ static HXC_TWAI* can_bus = nullptr;
 
 HXC::NVS_DATA<uint32_t> CAN_BAUDRATE("CAN_BAUDRATE", DEFAULT_CAN_BAUDRATE);
 HXC::NVS_DATA<uint32_t> CAN_ID("CAN_ID", DEFAULT_DEVICE_CAN_ID);
-CppGpioDriver<GPIO_NUM_NC, GpioMode::OUTPUT> can_register;
+CppGpioDriver<GPIO_NUM_NC, GpioMode::OUTPUT> can_resistor;
 
 HXC_TWAI& get_can_bus() {
     return *can_bus;
@@ -21,9 +21,14 @@ HXC_TWAI& get_can_bus() {
 esp_err_t init() {
     auto& hw = get_hardware_config();
 
-    ESP_ERROR_CHECK(can_register.init(hw.CAN_RESISTOR_ENABLE));
-    can_register.set(false);
+    ESP_ERROR_CHECK(can_resistor.init(hw.CAN_RESISTOR_ENABLE));
+    can_resistor.set(false);
+    can_resistor.set_on_change_callback([](bool value){
+        auto& state = get_global_state();
+        state.global_state_bits.state_bit.can_resistor_state = value;
+    });
 
+    
     can_bus = new HXC_TWAI(hw.CAN_TX, hw.CAN_RX, 1_Mbps);
     ESP_ERROR_CHECK(can_bus->setup());
 
@@ -52,6 +57,7 @@ esp_err_t init() {
         state_data.Chip_temperature  = state.chip_temperature/100;
         state_data.output_state      = state.global_state_bits.state_bit.out_put_state;
         state_data.current_direction = state.current_uA > 0 ? 1 : 0;
+        state_data.CAN_resistor      = can_resistor.get();
         state_data.UVP_flag          = state.protect_states.states_bit.low_voltage_protect_state;
         state_data.OVP_flag          = state.protect_states.states_bit.high_voltage_protect_state;
         state_data.OTP_flag          = state.protect_states.states_bit.temperature_protect_state;
@@ -80,6 +86,18 @@ esp_err_t init() {
             PowerOutput::on();
         } else {
             PowerOutput::off();
+        }
+    });
+    /**
+     * @brief  设置终端电阻 回调
+     * @action 设置终端电阻 回调，根据终端电阻状态设置终端电阻引脚
+     */
+    can_bus->add_can_receive_callback_func(CAN_ID+CALLBACK_SET_RESISTOR, [](HXC_CAN_message_t* msg) {
+        ESP_LOGI(TAG, "Setting CAN resistor");
+        if (msg->data[0] == 0x01) {
+            can_resistor.set(true);
+        } else {
+            can_resistor.set(false);
         }
     });
 

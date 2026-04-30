@@ -3,7 +3,7 @@
  * @LastEditors: qingmeijiupiao
  * @Description: 
  * @author: qingmeijiupiao
- * @LastEditTime: 2026-04-30 18:02:05
+ * @LastEditTime: 2026-05-01 01:43:34
  */
 #ifndef CAN_CALLBACK_H
 #define CAN_CALLBACK_H
@@ -20,6 +20,7 @@ enum CALLBACK_ID : uint8_t {
     CALLBACK_PING=0x00,
     CALLBACK_GET_STATE=0x01,
     CALLBACK_SET_OUTPUT=0x02,
+    CALLBACK_SET_RESISTOR=0x03,
 };
 
 // 获取状态CAN消息数据结构
@@ -32,7 +33,8 @@ struct CALLBACK_GET_STATE_DATA_t{
 
     uint8_t output_state:1;             // 输出状态     0: 关闭 1: 开启
     uint8_t current_direction:1;        // 当前电流方向 0: 正向 1: 反向
-    uint8_t reserved:6;                 // 保留位
+    uint8_t CAN_resistor:1;             // 终端电阻状态 0: 关闭 1: 开启
+    uint8_t reserved:5;                 // 保留位
 
     ProtectState_t UVP_flag:2;          // 低压保护状态
     ProtectState_t OVP_flag:2;          // 高压保护状态
@@ -46,11 +48,16 @@ struct CALLBACK_SET_OUTPUT_DATA_t{
     bool output_state;
 } __attribute__((packed));
 
+// 设置终端电阻CAN消息数据结构
+struct CALLBACK_SET_RESISTOR_DATA_t{
+    bool CAN_resistor_state;
+} __attribute__((packed));
+
 constexpr uint32_t DEFAULT_CAN_BAUDRATE = 1_Mbps;
 constexpr uint32_t DEFAULT_DEVICE_CAN_ID = 0x400;//默认设备ID 设备ID大于0x700时使用扩展帧，否则使用标准帧
 extern HXC::NVS_DATA<uint32_t> CAN_BAUDRATE;
 extern HXC::NVS_DATA<uint32_t> CAN_ID;
-extern CppGpioDriver<GPIO_NUM_NC, GpioMode::OUTPUT> can_register;
+extern CppGpioDriver<GPIO_NUM_NC, GpioMode::OUTPUT> can_resistor;
 
 /**
  * @brief : CAN回调功能初始化

@@ -24,9 +24,11 @@ volatile uint32_t log_data LP_VAR;
 volatile uint32_t core_run_freq_hz LP_VAR;
 volatile uint32_t voltage_uv LP_VAR;
 volatile uint16_t voltage_register_raw LP_VAR;
-volatile uint32_t current_uA LP_VAR;
+volatile int32_t  current_uA LP_VAR;
 volatile int16_t  shunt_register_raw LP_VAR;
 volatile int32_t  Board_temperature LP_VAR; //单位0.01℃
+volatile int32_t  meter_uah LP_VAR; //单位uAh
+volatile int32_t  meter_uwh LP_VAR; //单位uWh
 volatile CurrentCalib::params_t current_calib_params LP_VAR;
 
 volatile uint32_t now_time_ms = 0;
@@ -147,6 +149,48 @@ void check_reload_current_calib_params(){
     }
 }
 
+
+/**
+ * @brief : 更新电能值
+ * @return  {*}
+ */ 
+static int64_t charge_accum_uAms = 0;   // 电荷累加器，单位 uA·ms
+static int64_t energy_accum_uvAms = 0;  // 能量乘积累加器，单位 uA·uV·ms
+void update_meter() {
+    static uint32_t last_run_ms = 0;
+    uint32_t delta_ms = now_time_ms - last_run_ms;   // 不处理回绕，直接减
+    if (delta_ms == 0) return;
+
+    // ----- 电量积分 (uAh) -----
+    charge_accum_uAms += (int64_t)current_uA * delta_ms;
+    const int64_t UAH_THRESHOLD = 3600000LL;   // 1 uAh = 3,600,000 uA·ms
+    if (charge_accum_uAms >= UAH_THRESHOLD) {
+        int64_t whole = charge_accum_uAms / UAH_THRESHOLD;
+        meter_uah += (int32_t)whole;           // 更新 32 位电量变量
+        charge_accum_uAms %= UAH_THRESHOLD;    // 保留余数
+    } else if (charge_accum_uAms <= -UAH_THRESHOLD) {
+        int64_t whole = (-charge_accum_uAms) / UAH_THRESHOLD;
+        meter_uah -= (int32_t)whole;
+        charge_accum_uAms = -((-charge_accum_uAms) % UAH_THRESHOLD);
+    }
+
+    // ----- 能量积分 (uWh) -----
+    // 1 uWh = 3.6e12 uA·uV·ms
+    energy_accum_uvAms += (int64_t)current_uA * voltage_uv * delta_ms;
+    const int64_t UWH_THRESHOLD = 3600000000000LL;   // 3.6e12
+    if (energy_accum_uvAms >= UWH_THRESHOLD) {
+        int64_t whole = energy_accum_uvAms / UWH_THRESHOLD;
+        meter_uwh += (int32_t)whole;
+        energy_accum_uvAms %= UWH_THRESHOLD;
+    } else if (energy_accum_uvAms <= -UWH_THRESHOLD) {
+        int64_t whole = (-energy_accum_uvAms) / UWH_THRESHOLD;
+        meter_uwh -= (int32_t)whole;
+        energy_accum_uvAms = -((-energy_accum_uvAms) % UWH_THRESHOLD);
+    }
+
+    last_run_ms = now_time_ms;
+}
+
 /**
  * @brief : APP 循环函数,每interval_ms执行一次action
  * @return  {*}
@@ -173,16 +217,19 @@ int main(void){
         ina226_run();
         timer_run();
 
-        app_loop_every_ms(1000, [](){ // 每1s计算一次运行频率
+        //计算循环运行频率
+        app_loop_every_ms(1000, [](){
             core_run_freq_hz = loop_times - last_loop_times;
             last_loop_times = loop_times;
             //lp_log(core_run_freq_hz);
         });
 
-        app_loop_every_ms(20, [](){ // 每20ms检查一次是否需要加载校准参数
-            check_reload_current_calib_params();
-        });
+        //检查是否需要重新加载校准参数
+        app_loop_every_ms(20,check_reload_current_calib_params);
 
+        // 电量积分
+        app_loop_every_ms(10,update_meter);
+            
         ++loop_times;
     }
 }
