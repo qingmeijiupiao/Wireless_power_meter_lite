@@ -13,7 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "esp_app_desc.h"
-
+#include "power_output.h"
 
 namespace ShellCommand {
 
@@ -136,6 +136,49 @@ esp_err_t init() {
             printf("CAN ID set to %lu (0x%lX)\n", id, id);
             return 0;
         }));
+    
+    /**
+     * @brief  get_data - 获取当前数据
+     * @usage  get_data
+     * @note   显示当前电压V,电流A,温度°C
+     */
+    shell.register_command(ShellCommand_t("get_data", "Get current data (voltage, current, temperature)", "",
+        [](int argc, char** argv) -> int {
+            auto state = get_global_state();
+            float voltage = (float)state.voltage_mV/1e3;
+            float current = (float)state.current_uA/1e6;
+            float temperature = (float)state.board_temperature/100.0;
+            printf("Current voltage: %.3f V, current: %.3f A, temperature: %.2f C\n", voltage, current, temperature);
+            return 0;
+        }));
+        
+    /**
+     * @brief  output - 输出控制
+     * @param  state - 输出状态，0为关闭，1为开启
+     * @usage  output <state>
+     * @note   设置输出状态，0为关闭，1为开启
+     */
+    shell.register_command(ShellCommand_t("output", "Set output state (0-1)", "<state>",
+        [](int argc, char** argv) -> int {
+            if (argc < 2) {
+                printf("Now output state: %d\n", PowerOutput::get_state());
+                return 1;
+            }
+            int state = atoi(argv[1]);
+            if (state < 0 || state > 1) {
+                printf("Error: state must be 0-1\n");
+                return 1;
+            }
+            if(state == 0){
+                PowerOutput::off();
+                printf("Output off\n");
+            }else{
+                PowerOutput::on();
+                printf("Output on\n");
+            }
+            return 0;
+        }));
+
 
     /**
      * @brief  ina226_register - 获取ina226寄存器值
