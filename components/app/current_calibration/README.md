@@ -39,7 +39,7 @@ $$I = \frac{V_{ADC}}{R_0 \cdot (1 + E_{Gain})} - \frac{V_{Offset}}{R_0}$$
 可见 $I / V_{ADC}$ 不是常数，而是随电流变化的非线性函数。代码将其拆分为**线性基准 + 非线性偏移**：
 
 ```
-current_uA = current_base_K × shunt_register_raw + interpolate(shunt_register_raw)
+current_uA = current_base_K × shunt_register_raw + interpolate(shunt_register_raw) × 100
 ```
 
 - `current_base_K × shunt_register_raw`：线性基准项，给出电流的一阶近似
@@ -74,7 +74,7 @@ current_final = current - temp_comp_uA
 ```c
 struct point_t {
     int16_t register_value;     // INA226 Shunt 寄存器原始值
-    int16_t offset_current_uA;  // 该寄存器值对应的电流偏移修正量（单位：uA）
+    int16_t offset_current_100uA;  // 该寄存器值对应的电流偏移修正量（单位：100uA）
 } __attribute__((packed, aligned(4)));
 
 struct params_t {
@@ -90,7 +90,7 @@ struct params_t {
 |------|------|------|------|
 | `current_base_K` | `uint16_t` | uA/LSB | 线性基准系数 |
 | `points[0..5].register_value` | `int16_t` | LSB | 校准点处的 Shunt 寄存器原始值 |
-| `points[0..5].offset_current_uA` | `int16_t` | uA | 校准点处线性基准与真实电流的偏差 |
+| `points[0..5].offset_current_100uA` | `int16_t` | 100uA | 校准点处线性基准与真实电流的偏差 |
 | `temperature_K` | `int16_t` | ppm/℃ | 每偏离基准温度 1℃ 的电流漂移 ppm 值 |
 | `BASE_TEMPERATURE` | `constexpr int32_t` | 0.01℃ | 标定基准温度 |
 
@@ -109,7 +109,7 @@ $$current\_base\_K \approx \frac{2.5}{R_{shunt}(\mu\Omega)} \times 10^6 \quad (\
 2. 死区判断：|shunt_register_raw × current_base_K| < current_dead_zone_uv → current_uA = 0
 3. 线性基准 + 插值修正：
    no_temp_cali_current_uA = current_base_K × shunt_register_raw
-                           + interpolate(shunt_register_raw)
+                           + interpolate(shunt_register_raw) × 100
 4. 温漂补偿：
    delta_temp = (Board_temperature - BASE_TEMPERATURE) / 100
    temp_comp_uA = (no_temp_cali_current_uA / 1000) × temperature_K × delta_temp / 1000
@@ -225,6 +225,7 @@ calibration_basek <value>
 对于每个校准点，计算偏差：
 ```
 offset_current_uA = 真实电流(uA) - (current_base_K × shunt_register_raw)
+注意：内部存储单位为100uA，固件自动完成换算
 ```
 
 然后逐点写入：
@@ -246,8 +247,8 @@ calibration_current_points <index> <register_value> <offset_current_uA>
 
 ```
 线性基准值 = current_base_K × X
-偏差 = I_ref(uA) - 线性基准值
-calibration_current_points <index> <X> <偏差>
+偏差(uA) = I_ref(uA) - 线性基准值
+calibration_current_points <index> <X> <偏差(uA)>
 ```
 
 ### 校准温漂系数（选做，提升高温精度）
@@ -314,9 +315,9 @@ calibration_params
 Current calibration params:
 Calibration current basek: <current_base_K>
 Calibration current current points:
-Calibration index 0: reg_raw_value <p0.register_value>, no_offset_mA <...>, cali_offset_uA <p0.offset_current_uA>
+Calibration index 0: reg_raw_value <p0.register_value>, no_offset_mA <...>, cali_offset_uA <p0.offset_current_100uA×100>
   ...
-Calibration index 5: reg_raw_value <p5.register_value>, no_offset_mA <...>, cali_offset_uA <p5.offset_current_uA>
+Calibration index 5: reg_raw_value <p5.register_value>, no_offset_mA <...>, cali_offset_uA <p5.offset_current_100uA×100>
 Calibration current temperatureK: <temperature_K>
 ```
 

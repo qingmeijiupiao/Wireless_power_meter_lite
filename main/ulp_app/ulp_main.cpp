@@ -57,7 +57,7 @@ void ina226_run(){
         current_uA = 0;
     } else {
         //插值补偿映射
-        int32_t no_temp_cali_current_uA = current_calib_params.current_base_K * (int16_t)shunt_register_raw + current_interp.interpolate(shunt_register_raw);
+        int32_t no_temp_cali_current_uA = current_calib_params.current_base_K * (int16_t)shunt_register_raw + current_interp.interpolate(shunt_register_raw) * 100;
         
         //温漂补偿
         int32_t delta_temp = (Board_temperature - CurrentCalib::BASE_TEMPERATURE) / 100;
@@ -110,7 +110,7 @@ void ulp_ina226_init(){
  */
 void load_current_calib_params(){
     for(int i = 0;i<sizeof(current_calib_params.points)/sizeof(current_calib_params.points[0]);i++){
-        current_interp.set_point(i,current_calib_params.points[i].register_value,current_calib_params.points[i].offset_current_uA);
+        current_interp.set_point(i,current_calib_params.points[i].register_value,current_calib_params.points[i].offset_current_100uA);
     }
     current_interp.finish_load();
 }

@@ -7,7 +7,7 @@ namespace CurrentCalib {
 
 struct point_t{
     int16_t register_value;     //寄存器原始值
-    int16_t offset_current_uA;  //电流偏移值 单位：uA
+    int16_t offset_current_100uA;  //电流偏移值 单位：100uA
 } __attribute__((packed, aligned(4)));
 
 struct params_t {

@@ -203,7 +203,7 @@ esp_err_t init() {
             printf("Calibration current basek: %d\n", params.current_base_K);
             printf("Calibration current current points:\n");
             for(int i = 0; i < sizeof(params.points)/sizeof(params.points[0]); i++){
-                printf("Calibration index %d: reg_raw_value %d,no_offset_mA %d, cali_offset_uA %d\n", i, params.points[i].register_value,params.points[i].register_value*params.current_base_K/1000, params.points[i].offset_current_uA);
+                printf("Calibration index %d: reg_raw_value %d,no_offset_mA %d, cali_offset_uA %d\n", i, params.points[i].register_value,params.points[i].register_value*params.current_base_K/1000, params.points[i].offset_current_100uA*100);
             }
             printf("Calibration current temperatureK: %d\n", params.temperature_K);
             return 0;
@@ -253,12 +253,12 @@ esp_err_t init() {
                 return 1;
             }
 
-            int register_value = atoi(argv[2]);
-            int new_offset_current_uA = atoi(argv[3]);
+            int register_value = std::abs(atoi(argv[2]));
+            int new_offset_current_100uA = atoi(argv[3])/100;
             params.points[point_index].register_value = register_value;
-            params.points[point_index].offset_current_uA = new_offset_current_uA;
+            params.points[point_index].offset_current_100uA = new_offset_current_100uA;
             CurrentCalib::params_data = params;
-            printf("Calibration current points set to %d, %d restart required\n", register_value, new_offset_current_uA);
+            printf("Calibration current points set to %d, %d(uA) restart required\n", register_value, atoi(argv[3]));
             return 0;
         });
 
