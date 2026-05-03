@@ -262,12 +262,25 @@ esp_err_t init() {
             return 0;
         });
 
+    static ShellCommand_t calibration_clear("calibration_clear", "Clear calibration params (keep base_K)", "",
+        [](int argc, char** argv) -> int {
+            auto params = CurrentCalib::params_data.read();
+            uint16_t base_k = params.current_base_K;
+            memset(params.points, 0, sizeof(params.points));
+            params.temperature_K = 0;
+            params.current_base_K = base_k;
+            CurrentCalib::params_data = params;
+            printf("Calibration params cleared (base_K=%d preserved)\n", base_k);
+            return 0;
+        });
+
     shell.register_command(ShellCommand_t("factory_mode", "Enter factory mode", "",
         [](int argc, char** argv) -> int {
             auto& _shell = Shell::instance();
             _shell.register_command(calibration_basek);
             _shell.register_command(calibration_current_temperatureK);
             _shell.register_command(calibration_current_points);
+            _shell.register_command(calibration_clear);
             printf("Factory mode enabled\n");
             return 0;
         }));
