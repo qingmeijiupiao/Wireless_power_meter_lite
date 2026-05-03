@@ -148,7 +148,7 @@ esp_err_t init() {
             float voltage = (float)state.voltage_mV/1e3;
             float current = (float)state.current_uA/1e6;
             float temperature = (float)state.board_temperature/100.0;
-            printf("Current voltage: %.3f V, current: %.3f A, temperature: %.2f C\n", voltage, current, temperature);
+            printf("voltage: %.3f V, current: %.3f A, temperature: %.2f C\n", voltage, current, temperature);
             return 0;
         }));
         

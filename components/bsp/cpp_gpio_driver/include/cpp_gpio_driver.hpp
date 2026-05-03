@@ -33,6 +33,7 @@ public:
 
     esp_err_t set(bool value) {
         if(Mode == GpioMode::OUTPUT) {
+            output_value_ = value;
             gpio_set_level(GPIO, value);
             if(on_change_callback_ != nullptr){
                 on_change_callback_(value);
@@ -43,6 +44,9 @@ public:
     }
 
     bool get() const {
+        if(Mode == GpioMode::OUTPUT) {
+            return output_value_;
+        }
         return gpio_get_level(GPIO);
     }
 
@@ -57,6 +61,7 @@ public:
 
 private:
     std::function<void(bool)> on_change_callback_=nullptr;
+    bool output_value_ = false;
 };
 
 template <GpioMode Mode>
@@ -86,6 +91,7 @@ public:
 
     esp_err_t set(bool value) {
         if(Mode == GpioMode::OUTPUT && gpio_num_ != GPIO_NUM_NC) {
+            output_value_ = value;
             gpio_set_level(gpio_num_, value);
             if(on_change_callback_ != nullptr){
                 on_change_callback_(value);
@@ -96,6 +102,9 @@ public:
     }
 
     bool get() const {
+        if(Mode == GpioMode::OUTPUT) {
+            return output_value_;
+        }
         return gpio_get_level(gpio_num_);
     }
     
@@ -110,5 +119,6 @@ public:
 
 private:
     std::function<void(bool)> on_change_callback_=nullptr;
+    bool output_value_ = false;
 };
 #endif // CPP_GPIO_DRIVER_HPP
