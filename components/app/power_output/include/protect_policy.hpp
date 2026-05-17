@@ -21,7 +21,7 @@ namespace PowerOutput {
 class ProtectPolicy : public OutputPolicy {
 public:
     OutputResult check(OutputOperation op, bool current_state) override {
-        if (op == OutputOperation::ON && have_protect()) {
+        if (op == OutputOperation::ON && protect_should_block_output()) {
             ESP_LOGW("ProtectPolicy", "protect active, cannot turn on");
             return OutputResult::FAIL_PROTECT_ACTIVE;
         }

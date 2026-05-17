@@ -110,11 +110,80 @@ void add_on_protect_change_callback(std::function<void(ProtectState_t last_state
 }
 
 bool have_protect(){
+    return protect_has_active_fault();
+}
+
+bool protect_has_active_fault(){
     auto& global_state_protects = glb_states.protect_states.states_bit; 
     return global_state_protects.temperature_protect_state == PROTECT_STATE_PROTECT || 
         global_state_protects.high_voltage_protect_state == PROTECT_STATE_PROTECT || 
         global_state_protects.low_voltage_protect_state == PROTECT_STATE_PROTECT ||  
         global_state_protects.current_protect_state == PROTECT_STATE_PROTECT;
+}
+
+void protect_set_bypassed(bool bypassed){
+    glb_states.global_state_bits.state_bit.protect_bypassed = bypassed;
+    PROTECT_LOGW("protect bypass %s", bypassed ? "enabled" : "disabled");
+}
+
+bool protect_is_bypassed(){
+    return glb_states.global_state_bits.state_bit.protect_bypassed;
+}
+
+bool protect_should_block_output(){
+    return !protect_is_bypassed() && protect_has_active_fault();
+}
+
+uint8_t protect_get_channel_count(){
+    return 4;
+}
+
+bool protect_get_channel_info(uint8_t index, protect_channel_info_t* info){
+    if(info == nullptr){
+        return false;
+    }
+
+    auto& global_state_protects = glb_states.protect_states.states_bit;
+    switch(index){
+        case 0:
+            *info = {
+                .name = "OTP",
+                .unit = "C",
+                .now_value = glb_states.board_temperature / 100.0f,
+                .state = global_state_protects.temperature_protect_state,
+                .threshold = temperature_threshold,
+            };
+            return true;
+        case 1:
+            *info = {
+                .name = "OVP",
+                .unit = "V",
+                .now_value = glb_states.voltage_mV / 1000.0f,
+                .state = global_state_protects.high_voltage_protect_state,
+                .threshold = high_voltage_threshold,
+            };
+            return true;
+        case 2:
+            *info = {
+                .name = "UVP",
+                .unit = "V",
+                .now_value = glb_states.voltage_mV / 1000.0f,
+                .state = global_state_protects.low_voltage_protect_state,
+                .threshold = low_voltage_threshold,
+            };
+            return true;
+        case 3:
+            *info = {
+                .name = "OCP",
+                .unit = "A",
+                .now_value = std::abs(glb_states.current_uA) / 1000000.0f,
+                .state = global_state_protects.current_protect_state,
+                .threshold = current_threshold,
+            };
+            return true;
+        default:
+            return false;
+    }
 }
 
 static bool _protect_init_ok = false;

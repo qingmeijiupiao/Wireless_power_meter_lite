@@ -96,9 +96,13 @@ esp_err_t init(gpio_num_t output_gpio_num) {
     // 监听保护状态变更，保护触发时强制关闭输出
     add_on_protect_change_callback([](ProtectState_t last_state, ProtectState_t new_state) {
         if (new_state == PROTECT_STATE_PROTECT) {
-            ESP_LOGW(TAG, "protect triggered, force disable output");
-            apply_state(false);
-            notify_policies_applied(OutputOperation::OFF, false);
+            if (protect_should_block_output()) {
+                ESP_LOGW(TAG, "protect triggered, force disable output");
+                apply_state(false);
+                notify_policies_applied(OutputOperation::OFF, false);
+            } else {
+                ESP_LOGW(TAG, "protect triggered but bypassed, output kept unchanged");
+            }
         }
     });
 

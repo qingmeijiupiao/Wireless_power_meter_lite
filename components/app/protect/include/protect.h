@@ -28,9 +28,23 @@ union protect_states_t{
     } states_bit; //1字节对齐
 } __attribute__((packed));
 
+struct protect_channel_info_t{
+    const char* name;
+    const char* unit;
+    float now_value;
+    ProtectState_t state;
+    protect_threshold_t threshold;
+};
+
 void add_on_protect_change_callback(std::function<void(ProtectState_t last_state, ProtectState_t new_state)> cb);
 
 bool have_protect();
+bool protect_has_active_fault();
+bool protect_should_block_output();
+void protect_set_bypassed(bool bypassed);
+bool protect_is_bypassed();
+uint8_t protect_get_channel_count();
+bool protect_get_channel_info(uint8_t index, protect_channel_info_t* info);
 
 esp_err_t protect_init();
 bool protect_init_ok();

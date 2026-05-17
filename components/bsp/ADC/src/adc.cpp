@@ -3,7 +3,7 @@
  * @Author: qingmeijiupiao
  * @version: 
  * @Date: 2026-04-25 01:28:58
- * @LastEditTime: 2026-04-25 02:23:28
+ * @LastEditTime: 2026-05-18 01:22:28
  */
 #include "adc.h"
 #include "esp_adc/adc_oneshot.h"
@@ -34,7 +34,11 @@ esp_err_t adc_t::init(){
     esp_err_t ret = ESP_OK;
     if(adc1_unit_handle == NULL){
         ret = adc_oneshot_new_unit(&init_config1, &adc1_unit_handle);
-        return ret;
+        if(ret != ESP_OK){
+            ESP_LOGE("ADC", "adc_oneshot_new_unit failed: %s", esp_err_to_name(ret));
+            return ret;
+        }
+        ESP_LOGD("ADC", "adc_oneshot_new_unit success");
     }
     ret = adc_oneshot_config_channel(adc1_unit_handle, adc_channel, &config);
     ret = adc_cali_create_scheme_curve_fitting(&cali_config, &cali_handle);

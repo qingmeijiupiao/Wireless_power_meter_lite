@@ -14,6 +14,7 @@
 #include <cstring>
 #include "esp_app_desc.h"
 #include "power_output.h"
+#include "protect.h"
 
 namespace ShellCommand {
 
@@ -179,6 +180,57 @@ esp_err_t init() {
             return 0;
         }));
 
+    /**
+     * @brief  protect - 保护功能开关
+     * @param  state - 保护状态，0为关闭保护，1为开启保护
+     * @usage  protect [state]
+     * @note   不带参数时显示当前保护开关状态和保护触发状态
+     */
+    shell.register_command(ShellCommand_t("protect", "Set protect state (0-1)", "<state>",
+        [](int argc, char** argv) -> int {
+            if (argc < 2) {
+                auto state_to_str = [](ProtectState_t state) -> const char* {
+                    switch(state){
+                        case PROTECT_STATE_NORMAL: return "NORMAL";
+                        case PROTECT_STATE_WARNING: return "WARNING";
+                        case PROTECT_STATE_PROTECT: return "PROTECT";
+                        default: return "UNKNOWN";
+                    }
+                };
+                printf("Protect state: %d, bypassed: %d, active fault: %d\n", !protect_is_bypassed(), protect_is_bypassed(), protect_has_active_fault());
+                printf("Name State   Now       Warn/Recover      Protect/Recover    Trigger\n");
+                for(uint8_t i = 0; i < protect_get_channel_count(); i++){
+                    protect_channel_info_t info;
+                    if(!protect_get_channel_info(i, &info)){
+                        continue;
+                    }
+                    printf("%-4s %-7s %7.3f%-2s %7.3f/%-7.3f %7.3f/%-7.3f %s\n",
+                        info.name,
+                        state_to_str(info.state),
+                        info.now_value,
+                        info.unit,
+                        info.threshold.warning_threshold,
+                        info.threshold.warning_recovery_threshold,
+                        info.threshold.protect_threshold,
+                        info.threshold.protect_recovery_threshold,
+                        info.threshold.is_asc ? ">=" : "<=");
+                }
+                return 0;
+            }
+            int state = atoi(argv[1]);
+            if (state < 0 || state > 1) {
+                printf("Error: state must be 0-1\n");
+                return 1;
+            }
+            protect_set_bypassed(state == 0);
+            printf("Protect %s\n", state ? "on" : "off");
+            if (state == 1 && protect_should_block_output()) {
+                PowerOutput::off();
+                printf("Active protect fault exists, output forced off\n");
+            }
+            return 0;
+        }));
+
 
     /**
      * @brief  ina226_register - 获取ina226寄存器值
@@ -277,11 +329,12 @@ esp_err_t init() {
     shell.register_command(ShellCommand_t("factory_mode", "Enter factory mode", "",
         [](int argc, char** argv) -> int {
             auto& _shell = Shell::instance();
+            protect_set_bypassed(true);
             _shell.register_command(calibration_basek);
             _shell.register_command(calibration_current_temperatureK);
             _shell.register_command(calibration_current_points);
             _shell.register_command(calibration_clear);
-            printf("Factory mode enabled\n");
+            printf("Factory mode enabled, protect bypass enabled\n");
             return 0;
         }));
 
