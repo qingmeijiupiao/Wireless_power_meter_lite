@@ -1,12 +1,26 @@
 # Fonts
 
-等宽矢量字体资源模块，提供 DENGB 字体家族的多种字高变体（12/16/20/默认），以编译期常量数组形式存储字形数据，供 `st7735_driver` 渲染文本。
+点阵字体资源模块，提供 DENGB 字体家族的多种字高变体（12/16/20/默认），以编译期常量数组形式存储字形灰度数据和宽度表，供 `st7735_driver` 渲染文本。
 
 ## 模块特点
 
 - **等高变宽**：字体为等高不等宽设计，每个字符独立宽度表
 - **多字高预置**：DENGB12 / DENGB16 / DENGB20 / DENGB（15px）
 - **预览位图**：`Front_preview/` 目录含各字体的渲染预览 BMP
+
+## 生成与渲染流程
+
+```mermaid
+flowchart LR
+    TTF["TTF/OTF 字体文件"] --> Tool["scripts/generate_font.py"]
+    Tool --> Header["Font_include/*.h<br/>extern Font_t"]
+    Tool --> Source["Font_src/*.cpp<br/>width_table + font_data"]
+    Tool --> Preview["Front_preview/*_preview.bmp"]
+    Header --> CMake["Fonts 组件编译"]
+    Source --> CMake
+    CMake --> ST7735["ST7735::draw_string()"]
+    ST7735 --> LCD["TFT 屏幕文本渲染"]
+```
 
 ## 文件结构
 

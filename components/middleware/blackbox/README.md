@@ -110,6 +110,6 @@ BlackBox::set_log_enable(true);
 
 | 类别 | 要求 |
 |------|------|
-| 框架 | ESP-IDF v5.x |
+| 框架 | ESP-IDF v6.0+ |
 | RTOS | FreeRTOS |
 | 组件依赖 | `circular_flash_buffer`, `esp_timer`, `log` |

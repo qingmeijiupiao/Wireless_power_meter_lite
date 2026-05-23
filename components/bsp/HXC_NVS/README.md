@@ -15,7 +15,7 @@
 
 | 依赖项 | 版本要求 |
 |--------|----------|
-| ESP-IDF | v5.x（依赖 `nvs_flash`、`esp_log` 组件） |
+| ESP-IDF | v6.0+（依赖 `nvs_flash`、`esp_log` 组件） |
 | C++ 标准 | C++11 及以上（`type_traits`、`static_assert`） |
 | FreeRTOS | 随 ESP-IDF 附带 |
 

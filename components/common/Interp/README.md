@@ -14,6 +14,48 @@ Interp 是一个面向嵌入式系统的 C++ 模板插值库，提供等间隔�
 - 零动态内存分配的插值计算
 - 输入范围验证和保护
 
+## 类结构
+
+```mermaid
+classDiagram
+    class InterpBase~InputType, OutputType~ {
+        <<abstract>>
+        +interpolate(InputType x) OutputType
+        +getMinInput() InputType
+        +getMaxInput() InputType
+    }
+    class EquidistantInterp~InputType, OutputType~ {
+        -InputType minInput
+        -InputType maxInput
+        -InputType step
+        -vector~OutputType~ values
+        +interpolate(InputType x) OutputType
+    }
+    class NonEquidistantInterp~InputType, OutputType~ {
+        -vector~InputType~ inputs
+        -vector~OutputType~ outputs
+        -Monotonicity monotonicity
+        +interpolate(InputType x) OutputType
+    }
+    InterpBase <|-- EquidistantInterp
+    InterpBase <|-- NonEquidistantInterp
+```
+
+## 插值流程
+
+```mermaid
+flowchart TD
+    X["输入 x"] --> Bounds{"是否越界?"}
+    Bounds -->|小于最小值| Min["返回首个输出值"]
+    Bounds -->|大于最大值| Max["返回末尾输出值"]
+    Bounds -->|范围内| Kind{"插值器类型"}
+    Kind -->|EquidistantInterp| Index["O(1) 计算区间索引"]
+    Kind -->|NonEquidistantInterp| Search["按单调方向二分查找区间"]
+    Index --> Linear["线性插值"]
+    Search --> Linear
+    Linear --> Y["输出 y"]
+```
+
 ## 使用方法
 
 ### 基本使用
@@ -235,7 +277,3 @@ NonEquidistantInterp<int, float> adc_converter(adc_calibration);
 int raw_value = read_adc();
 float physical_value = adc_converter.interpolate(raw_value);
 ```
-
-## 示例
-
-更多示例请参考 examples 目录。

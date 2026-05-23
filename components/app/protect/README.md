@@ -14,7 +14,6 @@
 ## 架构与原理
 
 ```mermaid
-%%{init: { 'theme': 'base', 'themeVariables': { 'primaryColor': '#E3F2FD', 'primaryBorderColor': '#1E88E5', 'primaryTextColor': '#0D47A1', 'lineColor': '#37474F', 'clusterBkg': '#F8FBFF', 'clusterBorder': '#90CAF9' } }}%%
 stateDiagram-v2
     [*] --> Normal
     Normal --> Warning : 触达 warning_threshold
@@ -22,6 +21,49 @@ stateDiagram-v2
     Warning --> Protect : 触达 protect_threshold
     Warning --> Normal : 恢复至 warning_recovery
     Protect --> Warning : 恢复至 protect_recovery
+```
+
+```mermaid
+flowchart TD
+    Tick["protect_task<br/>20Hz xTaskDelayUntil"] --> Read["读取 GlobalState<br/>温度 / 电压 / 电流绝对值"]
+    Read --> OTP["check_now_state(OTP)"]
+    Read --> OVP["check_now_state(OVP)"]
+    Read --> UVP["check_now_state(UVP)"]
+    Read --> OCP["check_now_state(OCP)"]
+    OTP --> Store["写回 protect_states_t 位域"]
+    OVP --> Store
+    UVP --> Store
+    OCP --> Store
+    Store --> Changed{"状态变化?"}
+    Changed -->|是| Callback["遍历 protect_change_callbacks"]
+    Changed -->|否| Delay["等待下一周期"]
+    Callback --> Delay
+```
+
+```mermaid
+classDiagram
+    class protect_threshold_t {
+        +float warning_threshold
+        +float warning_recovery_threshold
+        +float protect_threshold
+        +float protect_recovery_threshold
+        +uint32_t is_asc
+    }
+    class protect_channel_info_t {
+        +const char* name
+        +const char* unit
+        +float now_value
+        +ProtectState_t state
+        +protect_threshold_t threshold
+    }
+    class protect_states_t {
+        +temperature_protect_state : 2
+        +high_voltage_protect_state : 2
+        +low_voltage_protect_state : 2
+        +current_protect_state : 2
+    }
+    protect_channel_info_t *-- protect_threshold_t
+    protect_states_t --> ProtectState_t
 ```
 
 保护模块将“真实故障状态”和“是否执行保护动作”拆分为两个概念：
@@ -93,5 +135,5 @@ bool block = protect_should_block_output();
 
 ## 环境与依赖
 
-- **软件**：ESP-IDF v5.x、FreeRTOS、C++11
+- **软件**：ESP-IDF v6.0+、FreeRTOS、C++11
 - **组件依赖**：`global_state`

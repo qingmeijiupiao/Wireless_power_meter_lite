@@ -64,5 +64,5 @@ ST7735::set_backlight(200);
 ## 环境与依赖
 
 - **硬件**：ST7735S TFT 显示屏（160×80），SPI 接口
-- **软件**：ESP-IDF v5.x
+- **软件**：ESP-IDF v6.0+
 - **组件依赖**：`esp_driver_spi`、`esp_driver_gpio`、`freertos`、`log`

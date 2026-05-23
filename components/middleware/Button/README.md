@@ -15,7 +15,7 @@
 
 | 类别 | 要求 |
 |------|------|
-| 框架 | ESP-IDF v5.x |
+| 框架 | ESP-IDF v6.0+ |
 | RTOS | FreeRTOS（需支持 `xTimerCreate` / `xQueueCreate` / `xTaskCreate`） |
 | 硬件 | ESP32 系列，至少 1 个可用 GPIO 输入引脚 |
 | C++ 标准 | C++11 及以上（`std::function`、`constexpr`） |

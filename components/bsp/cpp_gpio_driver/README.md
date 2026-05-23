@@ -8,6 +8,45 @@
 - **四种模式**：`INPUT`、`OUTPUT`、`INPUT_PULLUP`、`INPUT_PULLDOWN`
 - **类型安全**：`set()` 在非 OUTPUT 模式下返回 `ESP_FAIL`
 
+## 类结构与运行流程
+
+```mermaid
+classDiagram
+    class GpioMode {
+        <<enumeration>>
+        INPUT
+        OUTPUT
+        INPUT_PULLUP
+        INPUT_PULLDOWN
+    }
+    class CppGpioDriver~GPIO, Mode~ {
+        -gpio_num_t gpio_num_
+        -std::function~void(bool)~ on_change_callback_
+        +init() esp_err_t
+        +init(gpio_num_t gpio_num) esp_err_t
+        +set(bool value) esp_err_t
+        +get() bool
+        +set_on_change_callback(callback) void
+    }
+    CppGpioDriver --> GpioMode
+```
+
+```mermaid
+flowchart TD
+    A["init() / init(gpio_num)"] --> B["生成 gpio_config_t"]
+    B --> C{"Mode"}
+    C -->|OUTPUT| D["GPIO_MODE_OUTPUT"]
+    C -->|INPUT| E["GPIO_MODE_INPUT"]
+    C -->|INPUT_PULLUP| F["GPIO_MODE_INPUT + pull_up"]
+    C -->|INPUT_PULLDOWN| G["GPIO_MODE_INPUT + pull_down"]
+    D --> H["gpio_config()"]
+    E --> H
+    F --> H
+    G --> H
+    H --> I["set()/get() 封装 ESP-IDF GPIO API"]
+    I --> J["set() 成功后触发 on_change_callback"]
+```
+
 ## 集成与使用
 
 ```cpp
@@ -32,5 +71,5 @@ bool pressed = btn.get();
 
 ## 环境与依赖
 
-- **软件**：ESP-IDF v5.x、C++11
+- **软件**：ESP-IDF v6.0+、C++11
 - **组件依赖**：`esp_driver_gpio`

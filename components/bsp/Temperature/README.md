@@ -13,6 +13,22 @@
 - **自动量程切换**：5 档温度范围，接近边界时自动切换以优化精度
 - **精度**：默认范围（-10°C ~ 80°C）±1°C
 
+## 数据流
+
+```mermaid
+flowchart LR
+    TMP235["TMP235<br/>模拟电压"] --> ADC["adc_t<br/>校准后 mV"]
+    ADC --> Piecewise["TMP235_t::getTemperature()<br/>分段线性换算"]
+    Piecewise --> Avg["64 点滑动均值"]
+    Avg --> Board["board_temperature<br/>0.01°C"]
+
+    TSENS["ESP 内置温度传感器"] --> ChipSensor["ESPChipTemperatureSensor_t"]
+    ChipSensor --> Range{"接近当前量程边界?"}
+    Range -->|否| Chip["chip_temperature<br/>°C"]
+    Range -->|是| Reinstall["切换 temperature_sensor_config_t<br/>重装传感器"]
+    Reinstall --> Chip
+```
+
 ## 集成与使用
 
 ```cpp
@@ -51,5 +67,5 @@ float t = chip_temp.getTemperature();       // °C 单位
 ## 环境与依赖
 
 - **硬件**：TMP235 温度传感器接 ADC 通道
-- **软件**：ESP-IDF v5.x
+- **软件**：ESP-IDF v6.0+
 - **组件依赖**：`ADC`（TMP235）、`esp_driver_tsens`、`esp_hal_ana_conv`

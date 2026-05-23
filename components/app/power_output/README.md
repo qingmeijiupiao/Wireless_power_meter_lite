@@ -14,7 +14,6 @@
 ## 架构与原理
 
 ```mermaid
-%%{init: { 'theme': 'base', 'themeVariables': { 'primaryColor': '#E3F2FD', 'primaryBorderColor': '#1E88E5', 'primaryTextColor': '#0D47A1', 'lineColor': '#37474F', 'clusterBkg': '#F8FBFF', 'clusterBorder': '#90CAF9' } }}%%
 flowchart LR
     A["on() / off() / toggle()"] --> B["check_policies()"]
     B --> C{"ProtectPolicy"}
@@ -24,6 +23,51 @@ flowchart LR
     D -->|FAIL| E
     F --> G["notify_policies_applied()"]
     G --> H["notify_change()"]
+```
+
+```mermaid
+sequenceDiagram
+    participant Caller as Button/CAN/Shell
+    participant PO as PowerOutput
+    participant Policy as OutputPolicy 链
+    participant GPIO as CppGpioDriver
+    participant GS as GlobalState
+    participant CB as 输出状态回调
+
+    Caller->>PO: on()/off()/toggle()
+    PO->>Policy: check(op, current_state)
+    alt 任一策略拒绝
+        Policy-->>PO: FAIL_PROTECT_ACTIVE / FAIL_COOLDOWN_ACTIVE
+        PO-->>Caller: OutputResult
+    else 全部通过
+        PO->>GPIO: set(new_state)
+        GPIO->>GS: on_change 更新 out_put_state
+        PO->>Policy: on_state_applied(op, new_state)
+        PO->>CB: notify_change(new_state)
+        PO-->>Caller: OK
+    end
+```
+
+```mermaid
+classDiagram
+    class OutputPolicy {
+        <<abstract>>
+        +check(OutputOperation op, bool current_state) OutputResult
+        +on_state_applied(OutputOperation op, bool new_state) void
+    }
+    class ProtectPolicy {
+        +check(OutputOperation op, bool current_state) OutputResult
+    }
+    class CooldownPolicy {
+        -uint32_t on_cooldown_ms_
+        -uint32_t off_cooldown_ms_
+        -int64_t last_on_time_us_
+        -int64_t last_off_time_us_
+        +check(OutputOperation op, bool current_state) OutputResult
+        +on_state_applied(OutputOperation op, bool new_state) void
+    }
+    OutputPolicy <|-- ProtectPolicy
+    OutputPolicy <|-- CooldownPolicy
 ```
 
 ### 策略接口
@@ -39,7 +83,7 @@ flowchart LR
 
 | 策略 | 文件 | 检查逻辑 | on_state_applied 逻辑 |
 |------|------|----------|----------------------|
-| `ProtectPolicy` | `protect_policy.hpp` | 仅 ON 操作检查 `have_protect()`，OFF 始终允许 | 无操作 |
+| `ProtectPolicy` | `protect_policy.hpp` | 仅 ON 操作检查 `protect_should_block_output()`，OFF 始终允许 | 无操作 |
 | `CooldownPolicy` | `cooldown_policy.hpp` | ON 操作检查距上次 OFF 的冷却时间，OFF 操作检查距上次 ON 的冷却时间 | 记录对应方向的时间戳 |
 
 ### 冷却策略工作方式
@@ -169,13 +213,13 @@ PowerOutput::add_policy(&max_on_policy);
 |----|------|
 | `OK` | 操作成功 |
 | `FAIL_NOT_INIT` | 模块未初始化 |
-| `FAIL_PROTECT_ACTIVE` | 保护状态激活，阻止开启 |
+| `FAIL_PROTECT_ACTIVE` | 保护阻断生效，阻止开启 |
 | `FAIL_COOLDOWN_ACTIVE` | 冷却时间未到，阻止操作 |
 
 ## 环境与依赖
 
 | 类别 | 要求 |
 |------|------|
-| 框架 | ESP-IDF v5.x |
+| 框架 | ESP-IDF v6.0+ |
 | RTOS | FreeRTOS |
 | 组件依赖 | `cpp_gpio_driver`, `hardware`, `global_state`, `protect`, `esp_timer`, `log`, `freertos` |

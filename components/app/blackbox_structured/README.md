@@ -8,6 +8,39 @@
 - **编译期大小检查**：`static_assert` 确保 payload 不超过 `BlackBox::PAYLOAD_SIZE`
 - **自动获取当前状态**：`add_structured_log()` 自动从 `get_global_state()` 采样
 
+## 架构与数据流
+
+```mermaid
+flowchart LR
+    App["应用层触发<br/>add_structured_log()"] --> Sample["读取 get_global_state()"]
+    Sample --> Payload["StructuredPayload_t<br/>GlobalState 快照"]
+    Payload --> Raw["BlackBox::add_typed_log<br/>LogType::STRUCTURED"]
+    Raw --> Middleware["middleware/blackbox<br/>帧头 + CRC8"]
+    Middleware --> Flash["circular_flash_buffer<br/>blackbox 分区"]
+```
+
+```mermaid
+classDiagram
+    class StructuredPayload_t {
+        +GlobalState global_state
+    }
+    class GlobalState {
+        +uint16_t voltage_mV
+        +int32_t current_uA
+        +int16_t board_temperature
+        +int16_t chip_temperature
+        +protect_states_t protect_states
+        +GlobalState_bit global_state_bits
+    }
+    class BlackBoxRaw_t {
+        +BlackBoxHeader_t header
+        +BlackBoxPayload_t payload
+        +uint8_t crc_checksum
+    }
+    StructuredPayload_t *-- GlobalState
+    BlackBoxRaw_t ..> StructuredPayload_t : payload.bytes
+```
+
 ## 数据结构
 
 ### StructuredPayload_t（25 字节可用空间内）
@@ -47,5 +80,5 @@ if (raw.header.type == BlackBox::LogType::STRUCTURED) {
 
 | 类别 | 要求 |
 |------|------|
-| 框架 | ESP-IDF v5.x |
+| 框架 | ESP-IDF v6.0+ |
 | 组件依赖 | `blackbox`, `global_state` |

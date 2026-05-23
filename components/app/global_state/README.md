@@ -9,6 +9,50 @@
 - **`packed` 对齐**：结构体 `__attribute__((packed))` 保证内存布局一致，适合 DMA / 持久化场景
 - **与 protect 联动**：内嵌 `protect_states_t` 直接承载保护状态
 
+## 架构与数据流
+
+```mermaid
+flowchart LR
+    ULP["LP 核共享变量<br/>ulp_voltage_uv / ulp_current_uA"] --> Timer["update_main_state<br/>5ms FreeRTOS Timer"]
+    TMP["TMP235_t<br/>板温 0.01°C"] --> Timer
+    CHIP["ESPChipTemperatureSensor_t<br/>芯片温度 °C"] --> Timer
+    Timer --> GS["GlobalState<br/>全局静态实例"]
+
+    GS --> Protect["protect<br/>20Hz 状态机"]
+    GS --> Screen["screen<br/>60FPS 渲染"]
+    GS --> CAN["can_callback<br/>状态帧打包"]
+    GS --> BlackBox["blackbox_structured<br/>结构化快照"]
+    Power["PowerOutput / CAN resistor<br/>GPIO on_change 回调"] --> GS
+```
+
+```mermaid
+classDiagram
+    class GlobalState {
+        +uint16_t voltage_mV
+        +int32_t current_uA
+        +int16_t board_temperature
+        +int16_t chip_temperature
+        +protect_states_t protect_states
+        +GlobalState_bit global_state_bits
+    }
+    class GlobalState_bit {
+        +uint32_t raw
+        +out_put_state : 1
+        +can_resistor_state : 1
+        +protect_bypassed : 1
+        +reverse : 29
+    }
+    class protect_states_t {
+        +uint8_t protect_states_raw
+        +temperature_protect_state : 2
+        +high_voltage_protect_state : 2
+        +low_voltage_protect_state : 2
+        +current_protect_state : 2
+    }
+    GlobalState *-- GlobalState_bit
+    GlobalState *-- protect_states_t
+```
+
 ## 数据结构
 
 | 字段 | 类型 | 说明 |
@@ -18,7 +62,7 @@
 | `board_temperature` | `int16_t` | 板载温度，单位 0.01°C |
 | `chip_temperature` | `int16_t` | 芯片内部温度，单位 0.01°C |
 | `protect_states` | `protect_states_t` | 保护状态位域 |
-| `global_state_bits` | `GlobalState_bit` | 通用状态位域（当前仅 `out_put_state`） |
+| `global_state_bits` | `GlobalState_bit` | 通用状态位域（输出、CAN 终端电阻、保护旁路等） |
 
 ## 集成与使用
 
@@ -33,5 +77,5 @@ bool out = state.global_state_bits.state_bit.out_put_state;
 
 ## 环境与依赖
 
-- **软件**：ESP-IDF v5.x、C++11
+- **软件**：ESP-IDF v6.0+、C++11
 - **组件依赖**：`protect`（提供 `protect_states_t` 类型定义）

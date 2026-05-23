@@ -8,7 +8,7 @@
 - **零侵入切换**：交互模式下关闭全局日志避免输出干扰，退出后自动恢复
 - **单例模式**：全局唯一 `Shell` 实例，所有模块共享
 - **C++ 命令封装**：`ShellCommand_t` 支持 `std::function`，可注册 lambda 作为命令处理函数
-- **USB Serial JTAG**：默认使用 USB Serial JTAG 作为终端，兼容 ESP-IDF v5.2+ 和旧版 API
+- **USB Serial JTAG**：默认使用 USB Serial JTAG 作为终端，兼容 ESP-IDF v6.0 使用的驱动 API，并保留旧版 API fallback
 
 ## 架构与原理
 
@@ -95,5 +95,5 @@ shell.deregister_command("hello");
 
 ## 环境与依赖
 
-- **软件**：ESP-IDF v5.x、C++11
+- **软件**：ESP-IDF v6.0+、C++11
 - **组件依赖**：`console`、`esp_timer`、`vfs`、`esp_driver_usb_serial_jtag`、`freertos`、`esp_usb_cdc_rom_console`

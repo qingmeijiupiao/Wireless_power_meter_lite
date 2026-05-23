@@ -7,12 +7,12 @@
 - **电压/电流/功率实时测量** — 通过 INA226 (LP 核驱动) 高精度采样，电压量程 0~27.5V，电流量程支持双向
 - **四重保护机制** — 过温保护(OTP)、过压保护(OVP)、欠压保护(UVP)、过流保护(OCP)，三级状态(正常→警告→保护)，带滞回恢复
 - **TFT 屏幕实时显示** — ST7735S 160×80 横屏显示电压、电流、功率、温度、时间及保护状态图标
-- **CAN 总线通信** — 基于 TWAI 的 CAN 收发封装，支持多 ID 回调回调分发
-- **WiFi 管理** — STA/AP 模式切换、扫描、省电模式等完整功能封装
+- **CAN 总线通信** — 基于 TWAI 的 CAN 收发封装，支持多 ID 回调分发
+- **WiFi 管理封装** — 提供 STA/AP 模式切换、扫描、省电模式等封装，当前主入口未启用
 - **黑匣子日志** — 循环 Flash 缓冲区存储，支持字符串日志与结构化数据日志
 - **Shell 调试命令** — 串口交互式 REPL，可注册自定义命令
 - **NVS 持久化存储** — 模板化封装，支持任意基础类型与字符串的存取
-- **OTA 升级** — 双 APP 分区设计，支持在线固件升级
+- **OTA 分区预留** — 双 APP 分区与 `otadata` 已配置，当前代码尚未实现在线升级流程
 
 ## 硬件平台
 
@@ -62,7 +62,7 @@
 │   │   ├── global_state/       # 全局状态：电压、电流、温度、保护位、输出位
 │   │   ├── screen/             # 屏幕渲染：ST7735S 60FPS 刷新 + UI 布局
 │   │   ├── shell_command/      # Shell 命令注册
-│   │   └── blackbox_structured/ # 黑匣子结构化日志(GloalState 打包写入)
+│   │   └── blackbox_structured/ # 黑匣子结构化日志(GlobalState 打包写入)
 │   ├── bsp/                    # 板级支持包
 │   │   ├── hardware/           # 硬件版本适配：引脚配置、版本检测
 │   │   ├── st7735_driver/      # ST7735S SPI TFT 驱动 (双缓冲/背光PWM)
@@ -70,7 +70,7 @@
 │   │   ├── wifi_manager/       # WiFi 管理单例(STA/AP/扫描/省电)
 │   │   ├── HXC_NVS/            # NVS 模板化封装(泛型存储/字符串特化)
 │   │   ├── shell/              # 交互式 Shell(REPL/命令注册/日志模式切换)
-│   │   ├── Button/             # 任务驱动型按键(消抖/短按/双击/长按/超长按)←middleware
+│   │   ├── Button/             # 任务驱动型按键(消抖/短按/双击/长按/超长按)
 │   │   ├── ADC/                # ADC 单次采样+校准封装
 │   │   ├── PWM/                # LEDC PWM 封装(自动通道分配)
 │   │   ├── Temperature/        # TMP235 板温传感器(分段线性+滑动平均)
@@ -120,10 +120,14 @@ graph TB
     subgraph HP["HP 核 (主程序)"]
         direction TB
         subgraph APP_L["App 应用层"]
-            PROTECT["Protect<br/>OTP/OVP/UVP/OCP<br/>10Hz 状态机"]
+            GLOBAL["GlobalState<br/>HP 核运行状态快照"]
+            PROTECT["Protect<br/>OTP/OVP/UVP/OCP<br/>20Hz 状态机"]
+            POWER["PowerOutput<br/>策略链输出控制"]
+            CAN_CB["CanCallback<br/>CAN 业务回调"]
             SCREEN["Screen<br/>ST7735S 60FPS 渲染"]
             BB_STRUCT["BlackBoxStructured<br/>结构化日志打包"]
             SHELL_CMD["ShellCommand<br/>调试命令注册"]
+            CUR_CAL["CurrentCalib<br/>电流校准参数"]
         end
 
         subgraph MW_L["Middleware 中间层"]
@@ -151,22 +155,58 @@ graph TB
     LP_INA --> RTC_I
     LP_TIMER --> RTC_S
 
-    RTC_V --> PROTECT
-    RTC_I --> PROTECT
-    PROTECT -->|保护触发| SCREEN
+    RTC_V --> GLOBAL
+    RTC_I --> GLOBAL
+    GLOBAL --> PROTECT
+    GLOBAL --> SCREEN
+    GLOBAL --> CAN_CB
+    GLOBAL --> BB_STRUCT
+    PROTECT -->|阻断/强制关闭| POWER
+    POWER --> SCREEN
+    CAN_CB -->|控制输出| POWER
+    CAN_CB --> TWAI
     SCREEN --> ST7735_BSP
     SCREEN --> PWM_BSP
     BB_STRUCT --> BLACKBOX
     BLACKBOX --> CFB
-    BUTTON_MW -->|按键事件| PROTECT
+    BUTTON_MW -->|短按| POWER
     TEMP_BSP --> ADC_BSP
     SHELL_CMD --> SHELL
+    SHELL_CMD --> POWER
+    SHELL_CMD --> PROTECT
+    CUR_CAL -->|NVS 参数加载| NVS
 
     ST7735_BSP --> TFT
     TWAI <--"TWAI"--> CAN_BUS
     WIFI <--"WiFi"--> WIFI_AP
     TEMP_BSP <--"ADC"--> TMP_CHIP
     GPIO_BSP <--"GPIO"--> BTN
+```
+
+## 启动流程
+
+```mermaid
+sequenceDiagram
+    participant Main as app_main
+    participant HW as hardware
+    participant BB as BlackBox/NVS
+    participant Temp as Temperature
+    participant Screen as screen_task
+    participant LP as LP_Core_Load
+    participant Protect as protect_task
+    participant Power as PowerOutput
+    participant IO as Button/CAN/Shell
+
+    Main->>HW: hardware_config_init()
+    Main->>BB: BlackBox::init() / NVS_Base::setup()
+    Main->>Temp: 初始化片内温度与 TMP235
+    Main->>Main: 创建 update_main_state 5ms 定时器
+    Main->>Screen: 创建屏幕任务
+    Main->>LP: 加载并启动 LP 核
+    LP-->>Main: INA226 首次采样完成
+    Main->>Protect: protect_init() 创建 20Hz 检测任务
+    Main->>Power: 初始化输出 GPIO 和策略链
+    Main->>IO: 初始化按键、CAN 回调、Shell 命令
 ```
 
 ## 核心类图
@@ -397,7 +437,7 @@ classDiagram
 
 ## 保护机制
 
-保护模块以 10Hz 频率检查四项保护指标，每个指标具有独立的三级状态机：
+保护模块以 20Hz 频率检查四项保护指标，每个指标具有独立的三级状态机：
 
 ```
 正常(NORMAL) → 警告(WARNING) → 保护(PROTECT)
@@ -437,7 +477,7 @@ idf.py build
 esptool.py --chip esp32c6 write_flash 0x0 Wireless_power_meter_lite_merged.bin
 ```
 
-**仅 APP 固件（OTA/追加烧录）：**
+**仅 APP 固件（OTA 分区/追加烧录）：**
 ```bash
 esptool.py --chip esp32c6 write_flash 0x20000 build/Wireless_power_meter_lite.bin
 ```
