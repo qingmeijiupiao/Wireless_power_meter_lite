@@ -96,9 +96,106 @@ struct params_t {
 
 ### `current_base_K` 的物理含义
 
-INA226 Shunt 电压寄存器的 1 LSB = 2.5 μV。对于合金分流器，`current_base_K` 近似等于：
+INA226 Shunt 电压寄存器的 1 LSB = 2.5 μV。`current_base_K` 表示 **Shunt 寄存器每增加 1 LSB 时，对应的电流增量**，单位为 `uA/LSB`。
 
-$$current\_base\_K \approx \frac{2.5}{R_{shunt}(\mu\Omega)} \times 10^6 \quad (\text{uA/LSB})$$
+对于真实采样电阻值为 $R_{shunt}$ 的合金分流器，有：
+
+$$V_{shunt} = raw \times 2.5\mu V$$
+
+$$I = \frac{V_{shunt}}{R_{shunt}}$$
+
+若 $R_{shunt}$ 使用 $\mu\Omega$ 作为单位，则：
+
+$$I(A) = raw \times \frac{2.5}{R_{shunt}(\mu\Omega)}$$
+
+换算到固件使用的 `uA` 单位后：
+
+$$I(\mu A) = raw \times \frac{2.5 \times 10^6}{R_{shunt}(\mu\Omega)}$$
+
+因此：
+
+$$current\_base\_K = \frac{2.5 \times 10^6}{R_{shunt}(\mu\Omega)} \quad (\text{uA/LSB})$$
+
+也可以写成毫欧形式：
+
+$$current\_base\_K = \frac{2500}{R_{shunt}(m\Omega)} \quad (\text{uA/LSB})$$
+
+### `current_base_K` 与真实采样电阻的相互转换
+
+如果已知真实采样电阻值，可以直接计算应写入的 `current_base_K`：
+
+```text
+current_base_K = 2,500,000 / Rshunt_uΩ
+current_base_K = 2,500 / Rshunt_mΩ
+```
+
+由于 `current_base_K` 在固件中是整数，实际写入时建议四舍五入：
+
+```text
+current_base_K = round(2,500,000 / Rshunt_uΩ)
+```
+
+如果已知当前固件里的 `current_base_K`，也可以反推等效采样电阻值：
+
+```text
+Rshunt_uΩ = 2,500,000 / current_base_K
+Rshunt_mΩ = 2,500 / current_base_K
+```
+
+这两个反推值表示固件当前线性基准项所等效的采样电阻值，可用于判断 `current_base_K` 是否与实际焊接的分流器匹配。
+
+**示例 1：已知采样电阻，计算 `current_base_K`**
+
+假设真实采样电阻为 `2mΩ`：
+
+```text
+Rshunt_mΩ = 2
+current_base_K = 2500 / 2 = 1250
+```
+
+应写入：
+
+```text
+calibration_basek 1250
+```
+
+此时 Shunt 寄存器每增加 1 LSB，线性基准电流增加 `1250uA`，也就是 `1.25mA`。
+
+**示例 2：已知 `current_base_K`，反推等效采样电阻**
+
+假设当前参数为：
+
+```text
+current_base_K = 1114
+```
+
+则等效采样电阻为：
+
+```text
+Rshunt_uΩ = 2,500,000 / 1114 ≈ 2244.17uΩ
+Rshunt_mΩ = 2,500 / 1114 ≈ 2.244mΩ
+```
+
+这说明当前 `current_base_K = 1114` 等效于约 `2.244mΩ` 的采样电阻。
+
+**示例 3：结合真实电流和寄存器值校准**
+
+如果万用表测得真实电流为 `1.23A`，INA226 Shunt 原始寄存器值为 `1104`：
+
+```text
+真实电流 = 1.23A = 1,230,000uA
+current_base_K = 1,230,000 / 1104 ≈ 1114
+```
+
+反推其等效采样电阻：
+
+```text
+Rshunt_mΩ = 2500 / 1114 ≈ 2.244mΩ
+```
+
+也就是说，这次单点校准相当于告诉固件：当前整条采样链路（分流器真实阻值、焊接电阻、PCB 铜箔、电压采样路径和 INA226 增益误差综合之后）等效为约 `2.244mΩ`。
+
+> 注意：通过真实电流和寄存器值算出的 `current_base_K` 不一定只反映分流器本体阻值，它还会吸收焊接、电路走线、INA226 增益误差等整条测量链路的一阶误差。因此工程上应优先使用实测电流法校准；只有在没有电流校准条件时，才建议根据标称采样电阻值估算。
 
 ## 算法运行流程
 

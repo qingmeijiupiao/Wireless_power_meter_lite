@@ -252,7 +252,7 @@ esp_err_t init() {
         [](int argc, char** argv) -> int {
             auto params = CurrentCalib::params_data.read();
             printf("Current calibration params:\n");
-            printf("Calibration current basek: %d\n", params.current_base_K);
+            printf("Calibration current basek: %d == sample resistance_mOhm: %.3f\n", params.current_base_K,float(2500.f/params.current_base_K));//电流参数K与采样电阻值的计算推导见current_calibration的README
             printf("Calibration current current points:\n");
             for(int i = 0; i < sizeof(params.points)/sizeof(params.points[0]); i++){
                 printf("Calibration index %d: reg_raw_value %d,no_offset_mA %d, cali_offset_uA %d\n", i, params.points[i].register_value,params.points[i].register_value*params.current_base_K/1000, params.points[i].offset_current_100uA*100);
