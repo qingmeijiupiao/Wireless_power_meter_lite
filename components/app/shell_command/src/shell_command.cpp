@@ -258,6 +258,8 @@ esp_err_t init() {
 
             auto print_status = [&]() {
                 IP_t ip = WifiService::get_ip();
+                MAC_t sta_mac = WiFiManager::instance().get_mac(WIFI_IF_STA);
+                MAC_t ap_mac = WiFiManager::instance().get_mac(WIFI_IF_AP);
                 auto cfg = WifiService::get_config();
                 printf("mode: %s, wifi_state: %d, web_running: %d, boot_enabled: %d\n",
                        mode_to_str(WifiService::get_mode()),
@@ -269,6 +271,11 @@ esp_err_t init() {
                        cfg.ssid[0] ? cfg.ssid : "(none)",
                        WifiService::get_ap_ssid(),
                        WifiService::get_last_error());
+                printf("sta_mac: %02X:%02X:%02X:%02X:%02X:%02X, ap_mac: %02X:%02X:%02X:%02X:%02X:%02X\n",
+                       sta_mac.octet1, sta_mac.octet2, sta_mac.octet3,
+                       sta_mac.octet4, sta_mac.octet5, sta_mac.octet6,
+                       ap_mac.octet1, ap_mac.octet2, ap_mac.octet3,
+                       ap_mac.octet4, ap_mac.octet5, ap_mac.octet6);
             };
 
             if(argc < 2 || strcmp(argv[1], "status") == 0 || strcmp(argv[1], "ip") == 0){

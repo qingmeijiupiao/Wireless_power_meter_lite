@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>实时日志 - Wireless Power Meter Lite</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <div class="brand"><h1>Wireless Power Meter Lite</h1><div class="sub" id="topStatus">实时日志</div></div>
+      <nav>
+        <a class="tab" href="/">实时概览</a>
+        <a class="tab" href="/charts.html">趋势曲线</a>
+        <a class="tab" href="/control.html">控制设置</a>
+        <a class="tab" href="/status.html">状态诊断</a>
+        <a class="tab active" href="/logs.html">实时日志</a>
+        <a class="tab" href="/blackbox.html">黑匣子日志</a>
+      </nav>
+    </aside>
+    <main class="stack">
+      <div class="page-head">
+        <div><h2>实时日志</h2><div class="sub">查看设备当前运行日志，页面打开期间自动更新</div></div>
+        <div class="actions">
+          <select id="pollRate"><option value="200">0.2s 刷新</option><option value="500">0.5s 刷新</option><option value="1000" selected>1s 刷新</option><option value="2000">2s 刷新</option><option value="5000">5s 刷新</option></select>
+          <button class="secondary" id="pauseBtn">暂停</button>
+          <button class="danger" id="clearBtn">清空</button>
+        </div>
+      </div>
+      <div class="notice" id="dropNotice" hidden>部分旧日志已被覆盖，只显示当前缓冲区内可用内容。</div>
+      <div class="card stack">
+        <div class="card-title"><strong>ESP 日志</strong><span class="sub" id="logMeta">--</span></div>
+        <pre class="log-view" id="logView"></pre>
+      </div>
+    </main>
+  </div>
+  <script>
+    const $ = id => document.getElementById(id);
+    const MAX_TEXT_LEN = 65536;
+    let seq = 0;
+    let timer = null;
+    let paused = false;
+    async function api(url, options) {
+      const res = await fetch(url, Object.assign({ cache: 'no-store' }, options || {}));
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+    const ANSI_CLASS = {
+      30: 'ansi-black', 31: 'ansi-red', 32: 'ansi-green', 33: 'ansi-yellow',
+      34: 'ansi-blue', 35: 'ansi-magenta', 36: 'ansi-cyan', 37: 'ansi-white',
+      90: 'ansi-bright-black', 91: 'ansi-bright-red', 92: 'ansi-bright-green',
+      93: 'ansi-bright-yellow', 94: 'ansi-bright-blue', 95: 'ansi-bright-magenta',
+      96: 'ansi-bright-cyan', 97: 'ansi-bright-white'
+    };
+    function escapeHtml(text) {
+      return text.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    }
+    function ansiToHtml(text) {
+      const regex = /\x1b\[([0-9;]*)m|\[([0-9;]*)m/g;
+      let html = '';
+      let last = 0;
+      let current = '';
+      for (const match of text.matchAll(regex)) {
+        html += wrapAnsi(escapeHtml(text.slice(last, match.index)), current);
+        const codes = (match[1] || match[2] || '0').split(';').map(item => Number(item || 0));
+        for (const code of codes) {
+          if (code === 0 || code === 39) current = '';
+          else if (ANSI_CLASS[code]) current = ANSI_CLASS[code];
+        }
+        last = match.index + match[0].length;
+      }
+      html += wrapAnsi(escapeHtml(text.slice(last)), current);
+      return html;
+    }
+    function wrapAnsi(text, className) {
+      if (!text) return '';
+      return className ? `<span class="${className}">${text}</span>` : text;
+    }
+    function appendLog(text) {
+      if (!text) return;
+      const view = $('logView');
+      view.innerHTML += ansiToHtml(text);
+      if (view.textContent.length > MAX_TEXT_LEN) {
+        view.textContent = view.textContent.slice(-MAX_TEXT_LEN);
+      }
+      view.scrollTop = view.scrollHeight;
+    }
+    async function loadLogs() {
+      if (paused) return;
+      let totalBytes = 0;
+      let dropped = false;
+      for (let i = 0; i < 8; i++) {
+        const data = await api(`/api/logs?since=${seq}`);
+        seq = data.seq;
+        dropped = dropped || data.dropped;
+        totalBytes += data.bytes || 0;
+        appendLog(data.text || '');
+        if (!data.latest || data.seq >= data.latest || !data.bytes) break;
+      }
+      $('dropNotice').hidden = !dropped;
+      $('logMeta').textContent = `${totalBytes} bytes`;
+      $('topStatus').textContent = '实时日志';
+    }
+    function restart() {
+      if (timer) clearInterval(timer);
+      timer = setInterval(() => loadLogs().catch(() => $('topStatus').textContent = '日志读取失败'), Number($('pollRate').value));
+    }
+    $('pollRate').onchange = restart;
+    $('pauseBtn').onclick = () => {
+      paused = !paused;
+      $('pauseBtn').textContent = paused ? '继续' : '暂停';
+      $('topStatus').textContent = paused ? '已暂停' : '实时日志';
+    };
+    $('clearBtn').onclick = async () => {
+      await api('/api/logs/clear', { method: 'POST' });
+      seq = 0;
+      $('logView').textContent = '';
+      $('dropNotice').hidden = true;
+      await loadLogs();
+    };
+    loadLogs().catch(() => $('topStatus').textContent = '日志读取失败');
+    restart();
+  </script>
+</body>
+</html>

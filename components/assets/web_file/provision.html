@@ -4,40 +4,91 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>WiFi 配网</title>
-  <style>
-    :root { color-scheme: light dark; font-family: Arial, "Microsoft YaHei", sans-serif; }
-    body { margin: 0; background: #eef2f6; color: #172033; }
-    main { max-width: 460px; margin: 0 auto; padding: 24px 14px; }
-    h1 { font-size: 22px; margin: 0 0 18px; }
-    .card { background: #fff; border: 1px solid #d8dee6; border-radius: 8px; padding: 16px; }
-    label { display: block; margin-top: 12px; font-size: 13px; color: #536173; }
-    input { width: 100%; box-sizing: border-box; margin-top: 6px; min-height: 42px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0 10px; font-size: 16px; }
-    button { width: 100%; min-height: 44px; margin-top: 16px; border: 0; border-radius: 6px; background: #2563eb; color: #fff; font-size: 16px; }
-    .muted { margin-top: 12px; color: #64748b; font-size: 13px; word-break: break-all; }
-  </style>
+  <link rel="stylesheet" href="/app.css">
 </head>
 <body>
-  <main>
-    <h1>WiFi 配网</h1>
-    <div class="card">
-      <label for="ssid">SSID</label>
-      <input id="ssid" autocomplete="off" placeholder="输入 WiFi 名称">
-      <label for="password">密码</label>
-      <input id="password" type="password" placeholder="开放网络可留空">
-      <button id="save" type="button">保存并连接</button>
-      <div class="muted" id="msg"></div>
-    </div>
-  </main>
+  <div class="layout">
+    <aside>
+      <div class="brand"><h1>Wireless Power Meter Lite</h1><div class="sub">WiFi 配网</div></div>
+      <nav>
+        <a class="tab active" href="/provision.html">WiFi 配网</a>
+        <a class="tab" href="/">返回主页面</a>
+      </nav>
+    </aside>
+    <main class="stack">
+      <div class="page-head"><div><h2>连接到路由器</h2><div class="sub">扫描附近网络，选择 SSID 后输入密码。也可以直接手动输入。</div></div></div>
+      <section class="card">
+        <div class="row">
+          <div><strong>选择网络</strong><div class="muted">扫描不会保存任何配置。</div></div>
+          <button id="scan" class="secondary" type="button">扫描附近 WiFi</button>
+        </div>
+        <div class="ap-list" id="apList" hidden></div>
+        <div class="muted" id="scanMsg"></div>
+      </section>
+      <section class="card">
+        <strong>WiFi 凭据</strong>
+        <label class="label" for="ssid">SSID</label>
+        <input id="ssid" autocomplete="off" placeholder="输入 WiFi 名称">
+        <label class="label" for="password">密码</label>
+        <input id="password" type="password" placeholder="开放网络可留空">
+        <div class="actions">
+          <button id="save" type="button">保存并连接</button>
+          <button class="secondary" type="button" onclick="location.href='/'">返回主页面</button>
+        </div>
+        <div class="notice" id="msg" hidden></div>
+      </section>
+    </main>
+  </div>
   <script>
     const $ = id => document.getElementById(id);
+    const setBusy = busy => { $('scan').disabled = busy; $('save').disabled = busy; };
+    const setMsg = (id, text) => { const el = $(id); el.textContent = text; el.hidden = !text; };
+    const authText = ap => ap.secure ? ap.auth.toUpperCase() : 'OPEN';
+    const renderAps = aps => {
+      const list = $('apList');
+      list.innerHTML = '';
+      if (!aps || aps.length === 0) { list.hidden = true; return; }
+      aps.forEach(ap => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ap-item';
+        btn.innerHTML = `<span class="ap-main"></span><span class="ap-meta">${ap.rssi} dBm · CH${ap.channel} · ${authText(ap)}</span>`;
+        btn.querySelector('.ap-main').textContent = ap.ssid;
+        btn.onclick = () => {
+          $('ssid').value = ap.ssid;
+          $('password').focus();
+          setMsg('msg', ap.secure ? '已选择网络，请输入密码。' : '已选择开放网络，可以直接连接。');
+        };
+        list.appendChild(btn);
+      });
+      list.hidden = false;
+    };
+    $('scan').onclick = async () => {
+      setBusy(true);
+      setMsg('scanMsg', '正在扫描附近 WiFi...');
+      try {
+        const res = await fetch('/api/wifi/scan', { cache: 'no-store' });
+        const data = await res.json();
+        if (data.ok) {
+          renderAps(data.aps);
+          setMsg('scanMsg', data.aps.length ? `发现 ${data.aps.length} 个网络。` : '未发现网络，可以手动输入 SSID。');
+        } else {
+          renderAps([]);
+          setMsg('scanMsg', `扫描失败: ${data.reason}`);
+        }
+      } catch (e) {
+        renderAps([]);
+        setMsg('scanMsg', '扫描请求失败，请确认仍连接设备热点。');
+      } finally {
+        setBusy(false);
+      }
+    };
     $('save').onclick = async () => {
       const ssid = $('ssid').value.trim();
       const password = $('password').value;
-      if (!ssid) {
-        $('msg').textContent = '请输入 SSID';
-        return;
-      }
-      $('msg').textContent = '正在保存并连接...';
+      if (!ssid) { setMsg('msg', '请输入 SSID。'); return; }
+      setBusy(true);
+      setMsg('msg', '正在保存并连接...');
       try {
         const res = await fetch('/api/wifi/connect', {
           method: 'POST',
@@ -46,13 +97,15 @@
         });
         const data = await res.json();
         if (data.ok) {
-          $('msg').textContent = `连接成功，设备 IP: ${data.ip}`;
+          setMsg('msg', `连接成功，设备 IP: ${data.ip}`);
           setTimeout(() => { location.href = `http://${data.ip}/`; }, 1200);
         } else {
-          $('msg').textContent = `连接失败，已保持配网模式: ${data.reason}`;
+          setMsg('msg', `连接失败，设备已保持配网模式: ${data.reason}`);
         }
       } catch (e) {
-        $('msg').textContent = '请求失败，请重新连接设备热点后再试';
+        setMsg('msg', '请求失败，请重新连接设备热点后再试。');
+      } finally {
+        setBusy(false);
       }
     };
   </script>

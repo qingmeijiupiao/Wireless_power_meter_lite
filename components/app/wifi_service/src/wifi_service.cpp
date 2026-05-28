@@ -15,6 +15,7 @@
 #include "esp_check.h"
 #include "esp_log.h"
 #include "web_server.h"
+#include "freertos/semphr.h"
 
 namespace WifiService {
 
@@ -30,6 +31,7 @@ static bool initialized = false;
 static Mode mode = Mode::OFF;
 static char ap_ssid[WIFI_SSID_MAX_LEN + 1] = {};
 static char last_error[64] = "none";
+static SemaphoreHandle_t scan_mutex = nullptr;
 
 /**
  * @brief 更新最近一次错误描述
@@ -80,6 +82,10 @@ esp_err_t init() {
     HXC::NVS_Base::setup();
     ESP_RETURN_ON_ERROR(WiFiManager::instance().init(), TAG, "wifi manager init failed");
     make_ap_ssid();
+    scan_mutex = xSemaphoreCreateMutex();
+    if (scan_mutex == nullptr) {
+        return ESP_ERR_NO_MEM;
+    }
     initialized = true;
     return ESP_OK;
 }
@@ -185,12 +191,86 @@ esp_err_t start_provision_ap() {
 
     // AP 使用空密码，降低首次配网门槛；HTTP 404/Captive 请求回落到配网页。
     ESP_RETURN_ON_ERROR(configure_ap_ip(), TAG, "set ap ip failed");
-    ESP_RETURN_ON_ERROR(WiFiManager::instance().start_ap(ap_ssid, ""), TAG, "start ap failed");
+    ESP_RETURN_ON_ERROR(WiFiManager::instance().start_apsta(ap_ssid, ""), TAG, "start apsta failed");
     ESP_RETURN_ON_ERROR(DNSServer::start(AP_IP_OCTET1, AP_IP_OCTET2, AP_IP_OCTET3, AP_IP_OCTET4), TAG, "start dns failed");
     WebServer::enable_captive_portal(true);
     mode = Mode::AP_PROVISION;
     set_last_error("none");
     ESP_LOGI(TAG, "Provision AP active: %s", ap_ssid);
+    return ESP_OK;
+}
+
+esp_err_t scan_ap_list(ScanResult* results, size_t max_results, size_t* out_count) {
+    if (results == nullptr || out_count == nullptr || max_results == 0) {
+        set_last_error("invalid scan args");
+        return ESP_ERR_INVALID_ARG;
+    }
+    *out_count = 0;
+    ESP_RETURN_ON_ERROR(init(), TAG, "init failed");
+
+    if (scan_mutex == nullptr || xSemaphoreTake(scan_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        set_last_error("scan busy");
+        return ESP_ERR_TIMEOUT;
+    }
+
+    wifi_scan_config_t scan_cfg = {};
+    scan_cfg.show_hidden = false;
+    scan_cfg.scan_type = WIFI_SCAN_TYPE_ACTIVE;
+    scan_cfg.scan_time.active.min = 80;
+    scan_cfg.scan_time.active.max = 180;
+
+    esp_err_t ret = WiFiManager::instance().scan_start(&scan_cfg, true);
+    if (ret != ESP_OK) {
+        set_last_error(esp_err_to_name(ret));
+        xSemaphoreGive(scan_mutex);
+        return ret;
+    }
+
+    uint16_t ap_num = 0;
+    ret = WiFiManager::instance().scan_get_ap_num(&ap_num);
+    if (ret != ESP_OK) {
+        set_last_error(esp_err_to_name(ret));
+        xSemaphoreGive(scan_mutex);
+        return ret;
+    }
+
+    wifi_ap_record_t records[WIFI_SCAN_MAX_RESULTS] = {};
+    uint16_t fetch_num = ap_num > WIFI_SCAN_MAX_RESULTS ? WIFI_SCAN_MAX_RESULTS : ap_num;
+    ret = WiFiManager::instance().scan_get_ap_records(&fetch_num, records);
+    if (ret != ESP_OK) {
+        set_last_error(esp_err_to_name(ret));
+        xSemaphoreGive(scan_mutex);
+        return ret;
+    }
+
+    size_t written = 0;
+    for (uint16_t i = 0; i < fetch_num && written < max_results; ++i) {
+        if (records[i].ssid[0] == '\0') {
+            continue;
+        }
+
+        bool duplicated = false;
+        for (size_t j = 0; j < written; ++j) {
+            if (strncmp(results[j].ssid, reinterpret_cast<const char*>(records[i].ssid), WIFI_SSID_MAX_LEN) == 0) {
+                duplicated = true;
+                break;
+            }
+        }
+        if (duplicated) {
+            continue;
+        }
+
+        strncpy(results[written].ssid, reinterpret_cast<const char*>(records[i].ssid), WIFI_SSID_MAX_LEN);
+        results[written].ssid[WIFI_SSID_MAX_LEN] = '\0';
+        results[written].rssi = records[i].rssi;
+        results[written].channel = records[i].primary;
+        results[written].authmode = records[i].authmode;
+        written++;
+    }
+
+    *out_count = written;
+    set_last_error("none");
+    xSemaphoreGive(scan_mutex);
     return ESP_OK;
 }
 

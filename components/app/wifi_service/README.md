@@ -7,6 +7,7 @@
 - **NVS 持久化配置**：保存 STA SSID、密码和启动时是否启用 WiFi/Web 的开关。
 - **自动启动策略**：启动时优先尝试连接已保存 STA，失败或未配置时自动进入 AP 配网模式。
 - **AP 配网兜底**：配网热点使用 `WPM-Lite-XXXXXX` 命名，后缀来自设备 MAC，默认开放无密码。
+- **APSTA 扫描配网**：AP 配网模式下保持热点在线，同时使用 STA 接口扫描附近 WiFi，供 Web 配网页选择 SSID。
 - **DNS 劫持**：AP 配网模式下启动 `DNSServer`，将域名请求解析到组件配置的 AP IP，用于 Captive Portal。
 - **统一状态入口**：Shell 命令和 Web API 均通过 `WifiService` 查询/控制 WiFi 状态，避免重复实现状态机。
 
@@ -30,7 +31,8 @@ flowchart TD
     HasSta -->|否| AP["start_provision_ap()"]
     StaConnect -->|成功| STA["Mode::STA"]
     StaConnect -->|失败/超时| AP
-    AP --> DNS["DNSServer::start(AP_IP_OCTET*)"]
+    AP --> APSTA["WiFiManager::start_apsta()"]
+    APSTA --> DNS["DNSServer::start(AP_IP_OCTET*)"]
     AP --> Portal["WebServer::enable_captive_portal(true)"]
 ```
 
@@ -60,7 +62,11 @@ WebBackend::start_with_wifi_service();
 
 ### `esp_err_t start_provision_ap()`
 
-启动开放 AP、DNS 劫持和 WebServer Captive Portal 回落。默认访问地址由 `wifi_service.h` 中的 `AP_IP_OCTET1` ~ `AP_IP_OCTET4` 定义。
+启动开放 APSTA 配网模式、DNS 劫持和 WebServer Captive Portal 回落。默认访问地址由 `wifi_service.h` 中的 `AP_IP_OCTET1` ~ `AP_IP_OCTET4` 定义。
+
+### `esp_err_t scan_ap_list(ScanResult* results, size_t max_results, size_t* out_count)`
+
+扫描附近 WiFi AP，并写入调用方提供的固定缓冲区。当前默认最多返回 `WIFI_SCAN_MAX_RESULTS` 个结果，过滤隐藏 SSID 和重复 SSID，结果包含 SSID、RSSI、信道和认证模式。
 
 ### `esp_err_t stop()`
 
@@ -88,6 +94,15 @@ WebBackend::start_with_wifi_service();
 | `get_last_error()` | 获取最近一次错误描述 |
 | `get_ip()` | 获取当前对外访问 IP |
 | `get_wifi_state()` | 获取底层 `wifi_manager` 状态 |
+
+### 扫描结果结构
+
+| 字段 | 说明 |
+|------|------|
+| `ssid` | AP 名称 |
+| `rssi` | 信号强度，单位 dBm |
+| `channel` | 主信道 |
+| `authmode` | ESP-IDF `wifi_auth_mode_t` |
 
 ## AP 网段配置
 

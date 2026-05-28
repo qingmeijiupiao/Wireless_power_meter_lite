@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>趋势曲线 - Wireless Power Meter Lite</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <div class="brand"><h1>Wireless Power Meter Lite</h1><div class="sub" id="topStatus">趋势曲线</div></div>
+      <nav>
+        <a class="tab" href="/">实时概览</a>
+        <a class="tab active" href="/charts.html">趋势曲线</a>
+        <a class="tab" href="/control.html">控制设置</a>
+        <a class="tab" href="/status.html">状态诊断</a>
+        <a class="tab" href="/logs.html">实时日志</a>
+        <a class="tab" href="/blackbox.html">黑匣子日志</a>
+      </nav>
+    </aside>
+    <main class="stack">
+      <div class="page-head">
+        <div><h2>趋势曲线</h2><div class="sub">各曲线独立显示，按选择的时间范围展示变化</div></div>
+        <div class="actions">
+          <select id="sampleRate"><option value="200">0.2s 刷新</option><option value="500">0.5s 刷新</option><option value="1000">1s 刷新</option><option value="2000">2s 刷新</option><option value="5000">5s 刷新</option></select>
+          <select id="historyWindow"><option value="30000">保留 30 秒</option><option value="60000">保留 1 分钟</option><option value="180000">保留 3 分钟</option><option value="300000">保留 5 分钟</option><option value="600000">保留 10 分钟</option><option value="1800000">保留 30 分钟</option><option value="3600000">保留 1 小时</option><option value="10800000">保留 3 小时</option><option value="21600000">保留 6 小时</option><option value="43200000">保留 12 小时</option><option value="86400000">保留 24 小时</option></select>
+        </div>
+      </div>
+      <div class="notice" id="chartError" hidden>曲线库加载失败，实时曲线不可用；其他页面不受影响。</div>
+      <div class="chart-grid" id="chartGrid">
+        <div class="card"><div class="card-title"><strong>电压</strong><span class="sub" id="vNow">-- V</span></div><div class="chart-box"><canvas id="chartVoltage"></canvas></div></div>
+        <div class="card"><div class="card-title"><strong>电流</strong><span class="sub" id="cNow">-- A</span></div><div class="chart-box"><canvas id="chartCurrent"></canvas></div></div>
+        <div class="card"><div class="card-title"><strong>功率</strong><span class="sub" id="pNow">-- W</span></div><div class="chart-box"><canvas id="chartPower"></canvas></div></div>
+        <div class="card"><div class="card-title"><strong>板温</strong><span class="sub" id="tNow">-- C</span></div><div class="chart-box"><canvas id="chartTemp"></canvas></div></div>
+      </div>
+    </main>
+  </div>
+  <script>
+    const $ = id => document.getElementById(id);
+    const samples = [];
+    const charts = {};
+    const MAX_RENDER_POINTS = 1200;
+    let maxWindowMs = 30000;
+    let timer = null;
+    const fmt = (n, d) => Number.isFinite(n) ? Number(n).toFixed(d) : '--';
+    async function api(url) {
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+    function makeChart(id, label, color) {
+      return new Chart($(id), {
+        type: 'line',
+        data: { labels: [], datasets: [{ label, data: [], borderColor: color, backgroundColor: color + '22', fill: true, tension: .25, pointRadius: 0, borderWidth: 2 }] },
+        options: { responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: false } }, scales: { x: { ticks: { maxTicksLimit: 6 } }, y: { beginAtZero: false } } }
+      });
+    }
+    function initCharts() {
+      if (!window.Chart) {
+        $('chartGrid').hidden = true;
+        $('chartError').hidden = false;
+        return;
+      }
+      charts.voltage = makeChart('chartVoltage', '电压(V)', '#dc2626');
+      charts.current = makeChart('chartCurrent', '电流(A)', '#16a34a');
+      charts.power = makeChart('chartPower', '功率(W)', '#2563eb');
+      charts.temp = makeChart('chartTemp', '板温(C)', '#d97706');
+    }
+    function setChart(chart, labels, data) {
+      if (!chart) return;
+      chart.data.labels = labels;
+      chart.data.datasets[0].data = data;
+      chart.update('none');
+    }
+    function trimSamples() {
+      const now = Date.now();
+      while (samples.length && now - samples[0].t > maxWindowMs) samples.shift();
+    }
+    function visibleSamples() {
+      if (samples.length <= MAX_RENDER_POINTS) return samples;
+      const step = Math.ceil(samples.length / MAX_RENDER_POINTS);
+      return samples.filter((_, index) => index % step === 0 || index === samples.length - 1);
+    }
+    async function loadState() {
+      const data = await api('/api/state');
+      $('topStatus').textContent = `IP ${data.wifi.ip || '--'} · ${data.wifi.mode}`;
+      $('vNow').textContent = `${fmt(data.voltage_v, 3)} V`;
+      $('cNow').textContent = `${fmt(data.current_a, 3)} A`;
+      $('pNow').textContent = `${fmt(data.power_w, 3)} W`;
+      $('tNow').textContent = `${fmt(data.board_temp_c, 1)} C`;
+      if (!charts.voltage) return;
+      const now = Date.now();
+      samples.push({ t: now, v: data.voltage_v, c: data.current_a, p: data.power_w, temp: data.board_temp_c });
+      trimSamples();
+      const shown = visibleSamples();
+      const labels = shown.map(s => `${Math.round((s.t - now) / 1000)}s`);
+      setChart(charts.voltage, labels, shown.map(s => s.v));
+      setChart(charts.current, labels, shown.map(s => s.c));
+      setChart(charts.power, labels, shown.map(s => s.p));
+      setChart(charts.temp, labels, shown.map(s => s.temp));
+    }
+    function restart() {
+      if (timer) clearInterval(timer);
+      timer = setInterval(() => loadState().catch(() => $('topStatus').textContent = '状态读取失败'), Number($('sampleRate').value));
+    }
+    window.addEventListener('load', () => { setTimeout(initCharts, 200); loadState().catch(() => {}); restart(); });
+    $('sampleRate').onchange = restart;
+    $('historyWindow').onchange = () => { maxWindowMs = Number($('historyWindow').value); trimSamples(); loadState().catch(() => {}); };
+  </script>
+</body>
+</html>

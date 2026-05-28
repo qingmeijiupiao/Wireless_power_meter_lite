@@ -18,7 +18,7 @@
 namespace WebServer {
 
 /** 路由表最大数量，静态分配，避免运行期扩容 */
-constexpr uint8_t WEB_SERVER_MAX_ROUTES = 24;
+constexpr uint8_t WEB_SERVER_MAX_ROUTES = 32;
 /** 全局中间件最大数量，按注册顺序执行 */
 constexpr uint8_t WEB_SERVER_MAX_MIDDLEWARES = 8;
 /** URI缓存长度，不含query字符串 */

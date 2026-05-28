@@ -8,7 +8,7 @@
 - **双页面入口**：主页面用于查看设备状态和控制输出；配网页用于写入 STA WiFi 凭据。
 - **设备状态 API**：读取电压、电流、功率、温度、保护状态、输出状态和 WiFi 状态。
 - **输出控制 API**：Web 层直接调用 `PowerOutput::on/off/toggle`，输出保护和冷却规则只维护在 `PowerOutput` 策略链中。
-- **WiFi 配网 API**：通过 `WifiService` 保存 STA 凭据、切换 AP 配网和查询 WiFi 状态。
+- **WiFi 配网 API**：通过 `WifiService` 扫描附近 AP、保存 STA 凭据、切换 AP 配网和查询 WiFi 状态。
 - **Captive Portal 支持**：AP 配网模式下，未匹配路径可回落到配网页。
 
 ## 路由表
@@ -17,14 +17,33 @@
 |------|------|------|
 | `/` | GET | STA 模式返回主页面，AP 配网模式返回配网页 |
 | `/index.html` | GET | 返回主页面 |
+| `/charts.html` | GET | 返回趋势曲线页面 |
+| `/control.html` | GET | 返回控制设置页面 |
+| `/status.html` | GET | 返回状态诊断页面 |
+| `/logs.html` | GET | 返回实时日志页面 |
+| `/blackbox.html` | GET | 返回黑匣子日志入口页面 |
+| `/app.css` | GET | 返回 Web 公共样式 |
 | `/provision` | GET | 返回配网页 |
 | `/provision.html` | GET | 返回配网页 |
 | `/api/state` | GET | 返回设备状态、保护状态、输出状态和 WiFi 状态 |
 | `/api/output` | POST | 设置或切换输出状态 |
-| `/api/wifi/status` | GET | 返回 WiFiService 状态 |
+| `/api/reboot` | POST | 延迟 300ms 后重启设备 |
+| `/api/system` | GET | 返回硬件版本、固件版本、IDF 版本、MAC 地址、构建时间和运行时间 |
+| `/api/backlight` | GET/POST | 查询或设置屏幕背光亮度 |
+| `/api/protect` | GET/POST | 查询保护详情或开启/关闭保护功能 |
+| `/api/can` | GET/POST | 查询或设置 CAN 波特率和设备 ID |
+| `/api/calibration` | GET | 查询电流校准参数 |
+| `/api/diagnostics` | GET | 查询 INA226 原始寄存器等诊断数据 |
+| `/api/logs` | GET | 按 `since` 增量读取最近 8KB 实时 ESP 日志 |
+| `/api/logs/clear` | POST | 清空实时日志缓冲区 |
+| `/api/wifi/status` | GET | 返回 WiFiService 状态和 STA/AP MAC 地址 |
+| `/api/wifi/scan` | GET | 扫描附近 WiFi AP，返回 SSID、RSSI、信道和认证类型 |
+| `/api/wifi/on` | POST | 按 NVS 配置启动 WiFi/Web |
 | `/api/wifi/connect` | POST | 保存并连接 STA WiFi |
 | `/api/wifi/ap` | POST | 切换到 AP 配网模式 |
 | `/api/wifi/off` | POST | 关闭 WiFiService 管理的网络功能 |
+| `/api/wifi/boot` | POST | 设置启动时是否自动启用 WiFi/Web |
+| `/api/wifi/clear` | POST | 清除已保存的 STA 凭据 |
 
 ## 集成方式
 
@@ -68,6 +87,8 @@ WebBackend::start_with_wifi_service();
     "state": 1,
     "ip": "<device-ip>",
     "ap_ssid": "<provision-ap-ssid>",
+    "sta_mac": "<sta-mac>",
+    "ap_mac": "<ap-mac>",
     "boot_enabled": true,
     "last_error": "none"
   }
@@ -105,6 +126,8 @@ WebBackend::start_with_wifi_service();
   "ip": "<device-ip>",
   "saved_ssid": "<saved-ssid>",
   "ap_ssid": "<provision-ap-ssid>",
+  "sta_mac": "<sta-mac>",
+  "ap_mac": "<ap-mac>",
   "boot_enabled": true,
   "last_error": "none"
 }
@@ -122,6 +145,23 @@ WebBackend::start_with_wifi_service();
 ```
 
 连接成功后保存到 NVS；失败时回到 AP 配网模式。
+
+### GET `/api/wifi/scan`
+
+响应：
+
+```json
+{
+  "ok": true,
+  "count": 2,
+  "aps": [
+    {"ssid": "Example", "rssi": -41, "channel": 6, "auth": "wpa2", "secure": true},
+    {"ssid": "OpenWifi", "rssi": -70, "channel": 11, "auth": "open", "secure": false}
+  ]
+}
+```
+
+扫描由用户在配网页触发。AP 配网模式下底层使用 APSTA，扫描期间配网热点保持运行，但无线链路可能有短暂延迟。
 
 ### POST `/api/wifi/ap`
 
@@ -157,6 +197,7 @@ sequenceDiagram
 
 - Web 输出控制不复制保护逻辑，必须通过 `PowerOutput` 执行。
 - 配网页提交的 SSID/password 只在 `WifiService::connect_sta(..., true)` 成功后写入 NVS。
+- 配网页保留手动输入 SSID 兜底，扫描只用于辅助选择。
 - 不要在 README 或前端调用方写死设备 IP；统一通过 API 返回值或 `WifiService::get_ip()` 获取。
 - 路由路径属于 Web 后端接口契约，修改时需要同步前端页面和 README。
 

@@ -8,6 +8,8 @@
 #ifndef WIFI_SERVICE_H
 #define WIFI_SERVICE_H
 
+#include <cstddef>
+
 #include "esp_err.h"
 #include "wifi_manager.h"
 
@@ -37,6 +39,15 @@ struct Config {
     char ssid[WIFI_SSID_MAX_LEN + 1];          /**< 已保存的 STA SSID，空字符串表示未配置 */
     char password[WIFI_PASSWORD_MAX_LEN + 1];  /**< 已保存的 STA 密码，开放网络可为空 */
     bool web_enabled_on_boot;                  /**< 启动时是否自动启用 WiFi/Web 相关功能 */
+};
+
+constexpr size_t WIFI_SCAN_MAX_RESULTS = 12;
+
+struct ScanResult {
+    char ssid[WIFI_SSID_MAX_LEN + 1];
+    int8_t rssi;
+    uint8_t channel;
+    wifi_auth_mode_t authmode;
 };
 
 /**
@@ -87,6 +98,18 @@ esp_err_t connect_sta(const char* ssid, const char* password, bool save);
  * @return ESP_OK 成功，其他值来自 WiFiManager 或 DNSServer
  */
 esp_err_t start_provision_ap();
+
+/**
+ * @brief 扫描附近 WiFi AP
+ *
+ * AP 配网模式下使用 APSTA，扫描期间配网热点仍保持运行，但无线侧会有短暂延迟。
+ *
+ * @param results 输出缓冲区
+ * @param max_results 输出缓冲区容量
+ * @param out_count 实际写入数量
+ * @return ESP_OK 成功，ESP_ERR_INVALID_ARG 参数非法，其他值来自底层 WiFi 扫描
+ */
+esp_err_t scan_ap_list(ScanResult* results, size_t max_results, size_t* out_count);
 
 /**
  * @brief 设置启动时是否默认启用 WiFi/Web 功能

@@ -3,107 +3,82 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Wireless Power Meter Lite</title>
-  <style>
-    :root { color-scheme: light dark; font-family: Arial, "Microsoft YaHei", sans-serif; }
-    body { margin: 0; background: #f3f5f7; color: #18202a; }
-    header { padding: 14px 16px; background: #111827; color: #fff; }
-    h1 { margin: 0; font-size: 18px; font-weight: 600; }
-    main { max-width: 760px; margin: 0 auto; padding: 14px; }
-    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-    .card { background: #fff; border: 1px solid #d8dee6; border-radius: 8px; padding: 12px; }
-    .label { color: #5b6675; font-size: 12px; }
-    .value { margin-top: 6px; font-size: 24px; font-weight: 700; }
-    .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    button { min-height: 40px; border: 0; border-radius: 6px; padding: 0 14px; font-size: 15px; color: #fff; background: #2563eb; }
-    button.off { background: #b91c1c; }
-    button.secondary { background: #475569; }
-    .pill { display: inline-block; margin: 4px 5px 0 0; padding: 4px 8px; border-radius: 999px; background: #e5e7eb; font-size: 12px; }
-    .warn { background: #facc15; color: #111827; }
-    .fault { background: #ef4444; color: #fff; }
-    .muted { color: #64748b; font-size: 13px; word-break: break-all; }
-    @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } .value { font-size: 22px; } }
-  </style>
+  <title>实时概览 - Wireless Power Meter Lite</title>
+  <link rel="stylesheet" href="/app.css">
 </head>
 <body>
-  <header><h1>Wireless Power Meter Lite</h1></header>
-  <main>
-    <section class="grid">
-      <div class="card"><div class="label">电压</div><div class="value" id="voltage">-- V</div></div>
-      <div class="card"><div class="label">电流</div><div class="value" id="current">-- A</div></div>
-      <div class="card"><div class="label">功率</div><div class="value" id="power">-- W</div></div>
-      <div class="card"><div class="label">板温 / 芯片温度</div><div class="value" id="temp">-- C</div></div>
-    </section>
-
-    <section class="card" style="margin-top:10px">
-      <div class="row">
-        <div>
-          <div class="label">输出</div>
-          <div class="value" id="output">--</div>
-        </div>
-        <button id="outputBtn" type="button">切换</button>
+  <div class="layout">
+    <aside>
+      <div class="brand"><h1>Wireless Power Meter Lite</h1><div class="sub" id="topStatus">正在读取状态...</div></div>
+      <nav>
+        <a class="tab active" href="/">实时概览</a>
+        <a class="tab" href="/charts.html">趋势曲线</a>
+        <a class="tab" href="/control.html">控制设置</a>
+        <a class="tab" href="/status.html">状态诊断</a>
+        <a class="tab" href="/logs.html">实时日志</a>
+        <a class="tab" href="/blackbox.html">黑匣子日志</a>
+      </nav>
+    </aside>
+    <main class="stack">
+      <div class="page-head">
+        <div><h2>实时概览</h2><div class="sub">快速查看当前测量值、输出和保护状态</div></div>
+        <select id="sampleRate"><option value="500">0.5s 刷新</option><option value="1000">1s 刷新</option><option value="2000">2s 刷新</option><option value="5000">5s 刷新</option></select>
       </div>
-      <div class="muted" id="outputMsg"></div>
-    </section>
-
-    <section class="card" style="margin-top:10px">
-      <div class="label">保护状态</div>
-      <div id="protect"></div>
-    </section>
-
-    <section class="card" style="margin-top:10px">
-      <div class="label">网络</div>
-      <div class="muted" id="wifi">--</div>
-      <p><button class="secondary" onclick="location.href='/provision.html'">配置 WiFi</button></p>
-    </section>
-  </main>
-
+      <div class="grid">
+        <div class="card metric"><div class="label">电压</div><div class="value" id="voltage">-- V</div></div>
+        <div class="card metric"><div class="label">电流</div><div class="value" id="current">-- A</div></div>
+        <div class="card metric"><div class="label">功率</div><div class="value" id="power">-- W</div></div>
+        <div class="card metric"><div class="label">板温 / 芯片</div><div class="value" id="temp">-- C</div></div>
+      </div>
+      <div class="grid-2">
+          <div class="card stack">
+            <div class="row"><div><div class="label">输出</div><div class="metric"><div class="value" id="output">--</div></div></div><button id="outputBtn" class="switch" aria-label="切换输出"></button></div>
+            <div class="muted" id="outputMsg"></div>
+          </div>
+        <div class="card"><div class="label">保护状态</div><div id="protectPills"></div></div>
+      </div>
+    </main>
+  </div>
   <script>
     const $ = id => document.getElementById(id);
-    const stateName = ['NORMAL', 'WARNING', 'PROTECT'];
-
-    function fmt(n, d) {
-      return Number.isFinite(n) ? n.toFixed(d) : '--';
-    }
-
-    function protectPill(name, value) {
-      const cls = value === 2 ? 'fault' : value === 1 ? 'warn' : '';
-      return `<span class="pill ${cls}">${name}: ${stateName[value] || 'UNKNOWN'}</span>`;
-    }
-
-    async function loadState() {
-      const res = await fetch('/api/state', { cache: 'no-store' });
-      const data = await res.json();
+    const stateName = ['正常', '告警', '保护'];
+    let lastState = null;
+    let timer = null;
+    const fmt = (n, d) => Number.isFinite(n) ? Number(n).toFixed(d) : '--';
+    const api = async (url, options) => {
+      const res = await fetch(url, Object.assign({ cache: 'no-store' }, options || {}));
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    };
+    const postJson = (url, body) => api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+    const pill = (name, value) => `<span class="pill ${value === 2 ? 'fault' : value === 1 ? 'warn' : 'ok'}">${name}: ${stateName[value] || '未知'}</span>`;
+    function render(data) {
+      lastState = data;
       $('voltage').textContent = `${fmt(data.voltage_v, 3)} V`;
       $('current').textContent = `${fmt(data.current_a, 3)} A`;
       $('power').textContent = `${fmt(data.power_w, 3)} W`;
       $('temp').textContent = `${fmt(data.board_temp_c, 1)} / ${fmt(data.chip_temp_c, 1)} C`;
       $('output').textContent = data.output_on ? 'ON' : 'OFF';
-      $('outputBtn').textContent = data.output_on ? '关闭输出' : '打开输出';
-      $('outputBtn').className = data.output_on ? 'off' : '';
-      $('protect').innerHTML =
-        protectPill('OTP', data.protect.otp) +
-        protectPill('OVP', data.protect.ovp) +
-        protectPill('UVP', data.protect.uvp) +
-        protectPill('OCP', data.protect.ocp);
-      $('wifi').textContent = `模式: ${data.wifi.mode}, IP: ${data.wifi.ip}, AP: ${data.wifi.ap_ssid}`;
+      $('outputBtn').className = data.output_on ? 'switch on' : 'switch';
+      $('outputBtn').title = data.output_on ? '关闭输出' : '打开输出';
+      $('protectPills').innerHTML = pill('OTP', data.protect.otp) + pill('OVP', data.protect.ovp) + pill('UVP', data.protect.uvp) + pill('OCP', data.protect.ocp);
+      $('topStatus').textContent = `IP ${data.wifi.ip || '--'} · 输出 ${data.output_on ? 'ON' : 'OFF'} · ${data.wifi.mode}`;
     }
-
+    async function loadState() {
+      try { render(await api('/api/state')); } catch (e) { $('topStatus').textContent = '状态读取失败'; }
+    }
     $('outputBtn').onclick = async () => {
-      $('outputMsg').textContent = '';
-      const target = $('output').textContent !== 'ON';
-      const res = await fetch('/api/output', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: target })
-      });
-      const data = await res.json();
-      $('outputMsg').textContent = data.ok ? 'OK' : `失败: ${data.reason}`;
+      const data = await postJson('/api/output', { state: !(lastState && lastState.output_on) });
+      $('outputMsg').textContent = data.ok ? '输出已更新' : `输出失败: ${data.reason}`;
       await loadState();
     };
-
+    function restart() {
+      if (timer) clearInterval(timer);
+      timer = setInterval(loadState, Number($('sampleRate').value));
+    }
+    $('sampleRate').onchange = restart;
     loadState();
-    setInterval(loadState, 1000);
+    restart();
   </script>
 </body>
 </html>

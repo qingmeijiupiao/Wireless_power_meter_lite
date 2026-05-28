@@ -129,6 +129,17 @@ public:
     esp_err_t start_ap(const char* ssid, const char* password, uint8_t max_conn = WIFI_AP_MAX_CONN, uint8_t channel = 1);
 
     /**
+     * @brief 以AP+STA模式启动热点
+     * @note 主要用于配网场景：AP保持可访问，STA接口用于扫描或后续连接。
+     * @param ssid     热点SSID
+     * @param password 热点密码，空字符串表示开放网络
+     * @param max_conn 最大允许连接的STA数量，默认4
+     * @param channel  WiFi信道，默认1
+     * @return esp_err_t
+     */
+    esp_err_t start_apsta(const char* ssid, const char* password, uint8_t max_conn = WIFI_AP_MAX_CONN, uint8_t channel = 1);
+
+    /**
      * @brief 断开STA连接
      * 仅在STA/APSTA模式下有效，断开后状态变为DISCONNECTED。
      * @return esp_err_t

@@ -133,7 +133,7 @@ WebServer::serve_static("/", index_html_file.data, index_html_file.size, "text/h
 
 | 常量 | 默认值 | 说明 |
 |------|------|------|
-| `WEB_SERVER_MAX_ROUTES` | 24 | 最大路由数量 |
+| `WEB_SERVER_MAX_ROUTES` | 32 | 最大路由数量 |
 | `WEB_SERVER_MAX_MIDDLEWARES` | 8 | 最大中间件数量 |
 | `WEB_SERVER_URI_MAX_LEN` | 96 | URI缓存长度 |
 | `WEB_SERVER_QUERY_MAX_LEN` | 128 | Query缓存长度 |

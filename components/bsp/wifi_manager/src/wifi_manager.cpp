@@ -254,6 +254,48 @@ esp_err_t WiFiManager::start_ap(const char* ssid, const char* password, uint8_t 
     return ESP_OK;
 }
 
+esp_err_t WiFiManager::start_apsta(const char* ssid, const char* password, uint8_t max_conn, uint8_t channel) {
+    if (!initialized_) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (wifi_started_) {
+        esp_wifi_stop();
+        wifi_started_ = false;
+    }
+
+    esp_err_t ret = esp_wifi_set_mode(WIFI_MODE_APSTA);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "set APSTA mode failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    wifi_config_t ap_config = {};
+    strncpy(reinterpret_cast<char*>(ap_config.ap.ssid), ssid, WIFI_SSID_MAX_LEN - 1);
+    strncpy(reinterpret_cast<char*>(ap_config.ap.password), password, WIFI_PASSWORD_MAX_LEN - 1);
+    ap_config.ap.ssid_len = static_cast<uint8_t>(strlen(ssid));
+    ap_config.ap.channel = channel;
+    ap_config.ap.max_connection = max_conn;
+    ap_config.ap.authmode = (strlen(password) == 0) ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
+
+    ret = esp_wifi_set_config(WIFI_IF_AP, &ap_config);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "set AP config failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    ret = esp_wifi_start();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "wifi start failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    wifi_started_ = true;
+
+    state_ = WIFI_STATE_AP_ACTIVE;
+    ESP_LOGI(TAG, "APSTA started SSID:%s Channel:%d", ssid, channel);
+    return ESP_OK;
+}
+
 /* ==================== 断开/停止 ==================== */
 
 esp_err_t WiFiManager::disconnect() {
