@@ -905,12 +905,12 @@ esp_err_t start() {
 }
 
 esp_err_t start_with_wifi_service() {
-    ESP_ERROR_CHECK(init());
-
     if (!WifiService::is_web_enabled_on_boot()) {
         ESP_LOGI(TAG, "Web/WiFi startup disabled by NVS");
         return ESP_OK;
     }
+
+    ESP_ERROR_CHECK(init());
 
     esp_err_t wifi_ret = WifiService::start_default();
     if (wifi_ret != ESP_OK) {
