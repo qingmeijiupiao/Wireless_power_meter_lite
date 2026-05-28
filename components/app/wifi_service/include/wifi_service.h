@@ -1,0 +1,142 @@
+/*
+ * @version: 1.0
+ * @LastEditors: qingmeijiupiao
+ * @Description: WiFi/Web 应用层服务组件，封装 STA 自动连接、AP 配网、DNS 劫持和 NVS 配置
+ * @Author: qingmeijiupiao
+ * @LastEditTime: 2026-05-28
+ */
+#ifndef WIFI_SERVICE_H
+#define WIFI_SERVICE_H
+
+#include "esp_err.h"
+#include "wifi_manager.h"
+
+namespace WifiService {
+
+/** AP 配网模式默认 IPv4 地址，修改配网网段时只需要调整这里 */
+constexpr uint8_t AP_IP_OCTET1 = 192;
+constexpr uint8_t AP_IP_OCTET2 = 168;
+constexpr uint8_t AP_IP_OCTET3 = 4;
+constexpr uint8_t AP_IP_OCTET4 = 1;
+
+/**
+ * @brief WiFiService 当前工作模式
+ */
+enum class Mode : uint8_t {
+    OFF = 0,        /**< WiFi/Web 服务未启动或已停止 */
+    STA,            /**< STA 模式，已连接到外部路由器并通过路由器 IP 提供 Web 服务 */
+    AP_PROVISION,   /**< AP 配网模式，设备启动热点并开启 DNS 劫持 */
+};
+
+/**
+ * @brief WiFiService 持久化配置快照
+ *
+ * @note password 会完整返回给内部调用方，Web API 不应直接暴露该字段。
+ */
+struct Config {
+    char ssid[WIFI_SSID_MAX_LEN + 1];          /**< 已保存的 STA SSID，空字符串表示未配置 */
+    char password[WIFI_PASSWORD_MAX_LEN + 1];  /**< 已保存的 STA 密码，开放网络可为空 */
+    bool web_enabled_on_boot;                  /**< 启动时是否自动启用 WiFi/Web 相关功能 */
+};
+
+/**
+ * @brief 初始化 WiFiService
+ *
+ * 初始化 NVS、底层 WiFiManager，并基于 AP MAC 生成默认配网热点名。
+ *
+ * @return ESP_OK 成功，其他值表示 WiFiManager 初始化失败
+ */
+esp_err_t init();
+
+/**
+ * @brief 按 NVS 配置启动默认 WiFi/Web 网络模式
+ *
+ * 流程：
+ * 1. 若 web_boot 为 0，则保持 OFF。
+ * 2. 若已保存 SSID，则尝试 STA 连接。
+ * 3. STA 连接失败或未保存 SSID 时，切换到 AP 配网模式。
+ *
+ * @return ESP_OK 成功进入某种可用模式，其他值表示底层 WiFi/AP 启动失败
+ */
+esp_err_t start_default();
+
+/**
+ * @brief 停止 WiFiService 管理的网络功能
+ *
+ * 停止 DNS 劫持、关闭 Captive Portal，并停止底层 WiFi 驱动。
+ *
+ * @return ESP_OK 成功，其他值来自 WiFiManager::stop()
+ */
+esp_err_t stop();
+
+/**
+ * @brief 连接到指定 STA WiFi
+ *
+ * @param ssid WiFi SSID，不能为空
+ * @param password WiFi 密码，开放网络传空字符串
+ * @param save true 表示连接成功后写入 NVS，false 表示仅本次连接
+ * @return ESP_OK 连接成功，ESP_ERR_INVALID_ARG 参数非法，ESP_ERR_TIMEOUT 等表示连接失败
+ */
+esp_err_t connect_sta(const char* ssid, const char* password, bool save);
+
+/**
+ * @brief 启动 AP 配网模式
+ *
+ * 使用 `WPM-Lite-XXXXXX` 作为开放热点名，启动 DNS 劫持并开启 WebServer Captive Portal 回落。
+ *
+ * @return ESP_OK 成功，其他值来自 WiFiManager 或 DNSServer
+ */
+esp_err_t start_provision_ap();
+
+/**
+ * @brief 设置启动时是否默认启用 WiFi/Web 功能
+ *
+ * @param enabled true 启用，false 禁用
+ * @return ESP_OK 当前实现固定返回成功
+ */
+esp_err_t set_web_enabled_on_boot(bool enabled);
+
+/**
+ * @brief 清除已保存的 STA SSID 和密码
+ *
+ * @return ESP_OK 当前实现固定返回成功
+ */
+esp_err_t clear_saved_sta();
+
+/** @brief 查询 WiFiService 是否已初始化 */
+bool is_initialized();
+
+/** @brief 查询启动时是否默认启用 WiFi/Web 功能 */
+bool is_web_enabled_on_boot();
+
+/** @brief 查询 NVS 中是否已保存 STA SSID */
+bool has_saved_sta();
+
+/** @brief 查询当前是否处于 AP 配网模式 */
+bool is_provisioning();
+
+/** @brief 获取当前 WiFiService 模式 */
+Mode get_mode();
+
+/** @brief 获取当前 NVS 配置快照 */
+Config get_config();
+
+/** @brief 获取当前配网 AP 的 SSID */
+const char* get_ap_ssid();
+
+/** @brief 获取最近一次 WiFiService 操作错误描述 */
+const char* get_last_error();
+
+/**
+ * @brief 获取当前对外访问 IP
+ *
+ * AP 配网模式返回 `AP_IP_OCTET*` 定义的地址；STA 模式返回 WiFiManager 当前 IP。
+ */
+IP_t get_ip();
+
+/** @brief 获取底层 WiFiManager 状态 */
+wifi_state_t get_wifi_state();
+
+} // namespace WifiService
+
+#endif

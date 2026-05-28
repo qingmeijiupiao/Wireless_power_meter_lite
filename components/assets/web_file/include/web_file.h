@@ -18,6 +18,7 @@ struct EmbeddedFile {
 };
 
 extern const EmbeddedFile index_html_file;
+extern const EmbeddedFile provision_html_file;
 // extern const EmbeddedFile StyleCss;
 // extern const EmbeddedFile XtermJs;
 

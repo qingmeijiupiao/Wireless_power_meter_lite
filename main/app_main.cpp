@@ -1,5 +1,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_err.h"
 #include "esp_log.h"
 
 #include "blackbox.h"
@@ -12,14 +13,12 @@
 #include "Button.h"
 #include "shell_command.h"
 #include "screen.h"
-#include "wifi_manager.h"
 #include "pwm.h"
 #include "can_callback.h"
 #include "power_output.h"
+#include "web_backend.h"
 
 auto& shell_instance = Shell::instance();
-
-auto& wifi_manager = WiFiManager::instance();
 
 Button Main_Button;
 Button Side_Button;
@@ -73,7 +72,7 @@ extern "C" void app_main(void){
 
     ESP_ERROR_CHECK(ShellCommand::init());
 
-    // wifi_manager.init();
+    WebBackend::start_with_wifi_service();
 
     while (1){
         // Main loop only use for debug

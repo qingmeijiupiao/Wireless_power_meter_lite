@@ -15,6 +15,8 @@
 #include "esp_app_desc.h"
 #include "power_output.h"
 #include "protect.h"
+#include "wifi_service.h"
+#include "web_backend.h"
 
 namespace ShellCommand {
 
@@ -229,6 +231,124 @@ esp_err_t init() {
                 printf("Active protect fault exists, output forced off\n");
             }
             return 0;
+        }));
+
+    /**
+     * @brief  wifi - WiFi/Web 功能管理
+     * @usage  wifi [status|ip|on|off|connect|ap|boot|clear]
+     * @param  status/ip - 查询当前 WiFiService 模式、IP、已保存 SSID、配网 AP 名称和最近错误
+     * @param  on - 按 NVS 配置启动 WiFi/Web，优先连接已保存 STA，失败则进入 AP 配网模式
+     * @param  off - 停止 WiFiService 管理的网络功能
+     * @param  connect <ssid> [password] - 连接指定 WiFi，成功后保存到 NVS
+     * @param  ap - 手动切换到 AP 配网模式
+     * @param  boot <0|1> - 设置启动时是否默认启用 WiFi/Web 功能
+     * @param  clear - 清除已保存的 STA SSID 和密码
+     * @note   命令通过 WifiService 统一处理状态机，不直接调用底层 esp_wifi；Web 启动失败时返回错误码，不触发重启。
+     */
+    shell.register_command(ShellCommand_t("wifi", "WiFi/Web control", "status|ip|on|off|connect|ap|boot|clear",
+        [](int argc, char** argv) -> int {
+            auto mode_to_str = [](WifiService::Mode mode) -> const char* {
+                switch(mode){
+                    case WifiService::Mode::OFF: return "OFF";
+                    case WifiService::Mode::STA: return "STA";
+                    case WifiService::Mode::AP_PROVISION: return "AP_PROVISION";
+                    default: return "UNKNOWN";
+                }
+            };
+
+            auto print_status = [&]() {
+                IP_t ip = WifiService::get_ip();
+                auto cfg = WifiService::get_config();
+                printf("mode: %s, wifi_state: %d, web_running: %d, boot_enabled: %d\n",
+                       mode_to_str(WifiService::get_mode()),
+                       (int)WifiService::get_wifi_state(),
+                       WebBackend::is_running(),
+                       cfg.web_enabled_on_boot);
+                printf("ip: %u.%u.%u.%u, saved_ssid: %s, ap_ssid: %s, last_error: %s\n",
+                       ip.octet1, ip.octet2, ip.octet3, ip.octet4,
+                       cfg.ssid[0] ? cfg.ssid : "(none)",
+                       WifiService::get_ap_ssid(),
+                       WifiService::get_last_error());
+            };
+
+            if(argc < 2 || strcmp(argv[1], "status") == 0 || strcmp(argv[1], "ip") == 0){
+                print_status();
+                return 0;
+            }
+
+            if(strcmp(argv[1], "on") == 0){
+                esp_err_t web_init_ret = WebBackend::init();
+                esp_err_t web_start_ret = WebBackend::start();
+                if(web_init_ret != ESP_OK || web_start_ret != ESP_OK){
+                    printf("web start failed: %s %s\n", esp_err_to_name(web_init_ret), esp_err_to_name(web_start_ret));
+                    return 1;
+                }
+                esp_err_t ret = WifiService::start_default();
+                printf("wifi on: %s\n", esp_err_to_name(ret));
+                print_status();
+                return ret == ESP_OK ? 0 : 1;
+            }
+
+            if(strcmp(argv[1], "off") == 0){
+                esp_err_t ret = WifiService::stop();
+                printf("wifi off: %s\n", esp_err_to_name(ret));
+                return ret == ESP_OK ? 0 : 1;
+            }
+
+            if(strcmp(argv[1], "connect") == 0){
+                if(argc < 3){
+                    printf("Usage: wifi connect <ssid> [password]\n");
+                    return 1;
+                }
+                const char* password = argc >= 4 ? argv[3] : "";
+                esp_err_t web_init_ret = WebBackend::init();
+                esp_err_t web_start_ret = WebBackend::start();
+                if(web_init_ret != ESP_OK || web_start_ret != ESP_OK){
+                    printf("web start failed: %s %s\n", esp_err_to_name(web_init_ret), esp_err_to_name(web_start_ret));
+                    return 1;
+                }
+                esp_err_t ret = WifiService::connect_sta(argv[2], password, true);
+                printf("wifi connect: %s\n", esp_err_to_name(ret));
+                print_status();
+                return ret == ESP_OK ? 0 : 1;
+            }
+
+            if(strcmp(argv[1], "ap") == 0){
+                esp_err_t web_init_ret = WebBackend::init();
+                esp_err_t web_start_ret = WebBackend::start();
+                if(web_init_ret != ESP_OK || web_start_ret != ESP_OK){
+                    printf("web start failed: %s %s\n", esp_err_to_name(web_init_ret), esp_err_to_name(web_start_ret));
+                    return 1;
+                }
+                esp_err_t ret = WifiService::start_provision_ap();
+                printf("wifi ap: %s\n", esp_err_to_name(ret));
+                print_status();
+                return ret == ESP_OK ? 0 : 1;
+            }
+
+            if(strcmp(argv[1], "boot") == 0){
+                if(argc < 3){
+                    printf("boot_enabled: %d\n", WifiService::is_web_enabled_on_boot());
+                    return 0;
+                }
+                int enabled = atoi(argv[2]);
+                if(enabled < 0 || enabled > 1){
+                    printf("Usage: wifi boot <0|1>\n");
+                    return 1;
+                }
+                WifiService::set_web_enabled_on_boot(enabled == 1);
+                printf("boot_enabled set to %d\n", enabled);
+                return 0;
+            }
+
+            if(strcmp(argv[1], "clear") == 0){
+                WifiService::clear_saved_sta();
+                printf("saved wifi cleared\n");
+                return 0;
+            }
+
+            printf("Usage: wifi status|ip|on|off|connect <ssid> [password]|ap|boot <0|1>|clear\n");
+            return 1;
         }));
 
 

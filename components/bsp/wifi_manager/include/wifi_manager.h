@@ -148,6 +148,9 @@ public:
     /** @brief 获取当前IP地址（STA模式下有效） */
     IP_t get_ip() const;
 
+    /** @brief 获取 AP 接口当前 IP 地址 */
+    IP_t get_ap_ip() const;
+
     /**
      * @brief 获取指定接口的MAC地址
      * @param ifx 接口类型，默认WIFI_IF_STA
@@ -269,6 +272,15 @@ public:
     esp_err_t set_ap_config(const char* ssid, const char* password, uint8_t channel = 1, wifi_auth_mode_t authmode = WIFI_AUTH_WPA2_PSK, uint8_t max_conn = WIFI_AP_MAX_CONN);
     /** @brief 获取当前AP配置 */
     esp_err_t get_ap_config(wifi_config_t* conf);
+
+    /**
+     * @brief 设置 AP 接口 IPv4 地址
+     * @note 需要在 start_ap() 之前调用，函数会同步重启 DHCP Server。
+     * @param ip AP IP 地址，gateway 也会设置为该地址
+     * @param netmask 子网掩码
+     * @return esp_err_t
+     */
+    esp_err_t set_ap_ip(IP_t ip, IP_t netmask);
 
     /**
      * @brief 设置指定接口的MAC地址

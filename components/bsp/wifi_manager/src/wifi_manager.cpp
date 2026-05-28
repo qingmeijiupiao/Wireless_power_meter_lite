@@ -308,6 +308,19 @@ IP_t WiFiManager::get_ip() const {
     return ip_;
 }
 
+IP_t WiFiManager::get_ap_ip() const {
+    IP_t ip = {};
+    if (ap_netif_ == nullptr) {
+        return ip;
+    }
+
+    esp_netif_ip_info_t ip_info = {};
+    if (esp_netif_get_ip_info(ap_netif_, &ip_info) == ESP_OK) {
+        ip.addr = ip_info.ip.addr;
+    }
+    return ip;
+}
+
 MAC_t WiFiManager::get_mac(wifi_interface_t ifx) const {
     MAC_t mac = {};
     if (initialized_) {
@@ -467,6 +480,33 @@ esp_err_t WiFiManager::set_ap_config(const char* ssid, const char* password, uin
 
 esp_err_t WiFiManager::get_ap_config(wifi_config_t* conf) {
     return esp_wifi_get_config(WIFI_IF_AP, conf);
+}
+
+esp_err_t WiFiManager::set_ap_ip(IP_t ip, IP_t netmask) {
+    if (!initialized_ || ap_netif_ == nullptr) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    esp_netif_ip_info_t ip_info = {};
+    ip_info.ip.addr = ip.addr;
+    ip_info.gw.addr = ip.addr;
+    ip_info.netmask.addr = netmask.addr;
+
+    esp_err_t ret = esp_netif_dhcps_stop(ap_netif_);
+    if (ret != ESP_OK && ret != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STOPPED) {
+        return ret;
+    }
+
+    ret = esp_netif_set_ip_info(ap_netif_, &ip_info);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    ret = esp_netif_dhcps_start(ap_netif_);
+    if (ret != ESP_OK && ret != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STARTED) {
+        return ret;
+    }
+    return ESP_OK;
 }
 
 /* ==================== MAC地址设置 ==================== */

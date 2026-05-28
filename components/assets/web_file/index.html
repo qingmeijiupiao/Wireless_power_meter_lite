@@ -1,1 +1,109 @@
-test file
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wireless Power Meter Lite</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Arial, "Microsoft YaHei", sans-serif; }
+    body { margin: 0; background: #f3f5f7; color: #18202a; }
+    header { padding: 14px 16px; background: #111827; color: #fff; }
+    h1 { margin: 0; font-size: 18px; font-weight: 600; }
+    main { max-width: 760px; margin: 0 auto; padding: 14px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .card { background: #fff; border: 1px solid #d8dee6; border-radius: 8px; padding: 12px; }
+    .label { color: #5b6675; font-size: 12px; }
+    .value { margin-top: 6px; font-size: 24px; font-weight: 700; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    button { min-height: 40px; border: 0; border-radius: 6px; padding: 0 14px; font-size: 15px; color: #fff; background: #2563eb; }
+    button.off { background: #b91c1c; }
+    button.secondary { background: #475569; }
+    .pill { display: inline-block; margin: 4px 5px 0 0; padding: 4px 8px; border-radius: 999px; background: #e5e7eb; font-size: 12px; }
+    .warn { background: #facc15; color: #111827; }
+    .fault { background: #ef4444; color: #fff; }
+    .muted { color: #64748b; font-size: 13px; word-break: break-all; }
+    @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } .value { font-size: 22px; } }
+  </style>
+</head>
+<body>
+  <header><h1>Wireless Power Meter Lite</h1></header>
+  <main>
+    <section class="grid">
+      <div class="card"><div class="label">电压</div><div class="value" id="voltage">-- V</div></div>
+      <div class="card"><div class="label">电流</div><div class="value" id="current">-- A</div></div>
+      <div class="card"><div class="label">功率</div><div class="value" id="power">-- W</div></div>
+      <div class="card"><div class="label">板温 / 芯片温度</div><div class="value" id="temp">-- C</div></div>
+    </section>
+
+    <section class="card" style="margin-top:10px">
+      <div class="row">
+        <div>
+          <div class="label">输出</div>
+          <div class="value" id="output">--</div>
+        </div>
+        <button id="outputBtn" type="button">切换</button>
+      </div>
+      <div class="muted" id="outputMsg"></div>
+    </section>
+
+    <section class="card" style="margin-top:10px">
+      <div class="label">保护状态</div>
+      <div id="protect"></div>
+    </section>
+
+    <section class="card" style="margin-top:10px">
+      <div class="label">网络</div>
+      <div class="muted" id="wifi">--</div>
+      <p><button class="secondary" onclick="location.href='/provision.html'">配置 WiFi</button></p>
+    </section>
+  </main>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const stateName = ['NORMAL', 'WARNING', 'PROTECT'];
+
+    function fmt(n, d) {
+      return Number.isFinite(n) ? n.toFixed(d) : '--';
+    }
+
+    function protectPill(name, value) {
+      const cls = value === 2 ? 'fault' : value === 1 ? 'warn' : '';
+      return `<span class="pill ${cls}">${name}: ${stateName[value] || 'UNKNOWN'}</span>`;
+    }
+
+    async function loadState() {
+      const res = await fetch('/api/state', { cache: 'no-store' });
+      const data = await res.json();
+      $('voltage').textContent = `${fmt(data.voltage_v, 3)} V`;
+      $('current').textContent = `${fmt(data.current_a, 3)} A`;
+      $('power').textContent = `${fmt(data.power_w, 3)} W`;
+      $('temp').textContent = `${fmt(data.board_temp_c, 1)} / ${fmt(data.chip_temp_c, 1)} C`;
+      $('output').textContent = data.output_on ? 'ON' : 'OFF';
+      $('outputBtn').textContent = data.output_on ? '关闭输出' : '打开输出';
+      $('outputBtn').className = data.output_on ? 'off' : '';
+      $('protect').innerHTML =
+        protectPill('OTP', data.protect.otp) +
+        protectPill('OVP', data.protect.ovp) +
+        protectPill('UVP', data.protect.uvp) +
+        protectPill('OCP', data.protect.ocp);
+      $('wifi').textContent = `模式: ${data.wifi.mode}, IP: ${data.wifi.ip}, AP: ${data.wifi.ap_ssid}`;
+    }
+
+    $('outputBtn').onclick = async () => {
+      $('outputMsg').textContent = '';
+      const target = $('output').textContent !== 'ON';
+      const res = await fetch('/api/output', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: target })
+      });
+      const data = await res.json();
+      $('outputMsg').textContent = data.ok ? 'OK' : `失败: ${data.reason}`;
+      await loadState();
+    };
+
+    loadState();
+    setInterval(loadState, 1000);
+  </script>
+</body>
+</html>

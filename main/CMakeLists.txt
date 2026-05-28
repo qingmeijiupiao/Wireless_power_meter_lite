@@ -17,6 +17,7 @@ idf_component_register(
         HXC_NVS
         shell
         wifi_manager
+        wifi_service
         hardware
         screen
         PWM
@@ -24,7 +25,7 @@ idf_component_register(
         can_callback
         power_output
         current_calibration
-    INCLUDE_DIRS ""
+        web_backend
 )
 
 # LP核程序配置

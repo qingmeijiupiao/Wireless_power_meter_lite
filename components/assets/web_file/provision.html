@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WiFi 配网</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Arial, "Microsoft YaHei", sans-serif; }
+    body { margin: 0; background: #eef2f6; color: #172033; }
+    main { max-width: 460px; margin: 0 auto; padding: 24px 14px; }
+    h1 { font-size: 22px; margin: 0 0 18px; }
+    .card { background: #fff; border: 1px solid #d8dee6; border-radius: 8px; padding: 16px; }
+    label { display: block; margin-top: 12px; font-size: 13px; color: #536173; }
+    input { width: 100%; box-sizing: border-box; margin-top: 6px; min-height: 42px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0 10px; font-size: 16px; }
+    button { width: 100%; min-height: 44px; margin-top: 16px; border: 0; border-radius: 6px; background: #2563eb; color: #fff; font-size: 16px; }
+    .muted { margin-top: 12px; color: #64748b; font-size: 13px; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>WiFi 配网</h1>
+    <div class="card">
+      <label for="ssid">SSID</label>
+      <input id="ssid" autocomplete="off" placeholder="输入 WiFi 名称">
+      <label for="password">密码</label>
+      <input id="password" type="password" placeholder="开放网络可留空">
+      <button id="save" type="button">保存并连接</button>
+      <div class="muted" id="msg"></div>
+    </div>
+  </main>
+  <script>
+    const $ = id => document.getElementById(id);
+    $('save').onclick = async () => {
+      const ssid = $('ssid').value.trim();
+      const password = $('password').value;
+      if (!ssid) {
+        $('msg').textContent = '请输入 SSID';
+        return;
+      }
+      $('msg').textContent = '正在保存并连接...';
+      try {
+        const res = await fetch('/api/wifi/connect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ssid, password })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          $('msg').textContent = `连接成功，设备 IP: ${data.ip}`;
+          setTimeout(() => { location.href = `http://${data.ip}/`; }, 1200);
+        } else {
+          $('msg').textContent = `连接失败，已保持配网模式: ${data.reason}`;
+        }
+      } catch (e) {
+        $('msg').textContent = '请求失败，请重新连接设备热点后再试';
+      }
+    };
+  </script>
+</body>
+</html>
