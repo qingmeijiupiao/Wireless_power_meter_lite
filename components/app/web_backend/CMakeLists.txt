@@ -1,5 +1,10 @@
 idf_component_register(
     SRCS "src/web_backend.cpp"
+         "src/api_handlers.cpp"
+         "src/log_capture.cpp"
+         "src/page_handlers.cpp"
+         "src/request_json.cpp"
     INCLUDE_DIRS "include"
-    REQUIRES WebServer web_file wifi_service global_state power_output protect esp_timer esp_system esp_http_server st7735_driver can_callback current_calibration hardware esp_app_format
+    PRIV_INCLUDE_DIRS "private_include"
+    REQUIRES WebServer web_file wifi_service global_state power_output protect esp_timer esp_system esp_http_server st7735_driver can_callback current_calibration hardware esp_app_format json
 )
