@@ -5,11 +5,45 @@
 ## 模块特点
 
 - **集中注册路由**：所有页面和 API 在 `WebBackend::init()` 中注册。
+- **按职责拆分实现**：生命周期与路由注册、页面响应、业务 API、日志捕获、JSON 请求解析分别维护在独立源文件中。
 - **双页面入口**：主页面用于查看设备状态和控制输出；配网页用于写入 STA WiFi 凭据。
 - **设备状态 API**：读取电压、电流、功率、温度、保护状态、输出状态和 WiFi 状态。
 - **输出控制 API**：Web 层直接调用 `PowerOutput::on/off/toggle`，输出保护和冷却规则只维护在 `PowerOutput` 策略链中。
 - **WiFi 配网 API**：通过 `WifiService` 扫描附近 AP、保存 STA 凭据、切换 AP 配网和查询 WiFi 状态。
 - **Captive Portal 支持**：AP 配网模式下，未匹配路径可回落到配网页。
+- **嵌入式内存策略**：响应使用固定静态缓冲，JSON 请求通过 SAX 按字段提取，避免构造完整 JSON DOM。
+
+## 源码结构
+
+| 文件 | 职责 |
+|------|------|
+| `include/web_backend.h` | 对外公开 API，只暴露初始化、启动、停止和运行状态查询 |
+| `private_include/web_backend_internal.h` | 组件内部接口，供多个源文件共享 handler 声明和固定响应缓冲 |
+| `src/web_backend.cpp` | 生命周期管理、CORS 中间件、页面/API 路由注册和 404/Captive Portal 回落 |
+| `src/page_handlers.cpp` | HTML/CSS 静态资源响应 |
+| `src/api_handlers.cpp` | 业务 REST API handler，调用 `PowerOutput`、`WifiService`、`protect` 等应用模块 |
+| `src/log_capture.cpp` | ESP 日志捕获、RAM 环形缓冲和请求日志中间件 |
+| `src/request_json.cpp` | 请求 JSON 字段读取，基于 nlohmann JSON SAX 接口 |
+
+`private_include` 只通过 `PRIV_INCLUDE_DIRS` 加入本组件编译，不作为跨组件公共头文件使用。其他组件应只包含 `web_backend.h`。
+
+## 内存与 JSON 策略
+
+Web 后端运行在 ESP32-C6 上，RAM 和任务栈都有限，因此当前实现遵循以下约束：
+
+- 响应正文使用 `response_buffer`、`detail_response_buffer`、`scan_response_buffer` 等固定静态缓冲。
+- 拼接长 JSON 响应时使用带边界检查的追加函数，缓冲不足时返回 `response_too_large`。
+- 请求 JSON 不使用 `nlohmann::json::parse()` 构造 DOM，而使用 SAX 事件流只提取 handler 关心的字段。
+- 字符串字段复制到调用方提供的固定长度数组，例如 WiFi SSID/password。
+- 输出 JSON 仍使用 `snprintf` 手动生成，避免引入运行期堆分配和更大的代码体积。
+
+对 Web 技术不熟悉时可以按下面理解：
+
+- **路由**：URL 路径和处理函数的绑定，例如 `/api/state` 绑定到状态查询 handler。
+- **handler**：真正处理一次 HTTP 请求的函数，负责读取请求、调用业务模块、返回响应。
+- **middleware**：进入 handler 前统一执行的函数，适合做 CORS、请求日志、鉴权等公共逻辑。
+- **CORS/OPTIONS**：浏览器跨来源调用 API 前可能发送的预检请求，本组件统一返回允许的请求方法和 Header。
+- **SAX JSON**：解析器逐个回调 key/value，不生成完整对象树，更适合嵌入式设备。
 
 ## 路由表
 
@@ -188,7 +222,6 @@ sequenceDiagram
     WB->>WS: 注册页面和业务 API
     WB->>App: WifiService::start_default()
     WB->>WS: WebServer::begin()
-    WB->>WS: WebServer::begin()
     WS->>WF: 页面请求读取嵌入资源
     WS->>App: API 请求调用 GlobalState / PowerOutput / WifiService
 ```
@@ -200,6 +233,9 @@ sequenceDiagram
 - 配网页保留手动输入 SSID 兜底，扫描只用于辅助选择。
 - 不要在 README 或前端调用方写死设备 IP；统一通过 API 返回值或 `WifiService::get_ip()` 获取。
 - 路由路径属于 Web 后端接口契约，修改时需要同步前端页面和 README。
+- 新增内部函数优先放在现有职责文件中；只有跨源文件共享的声明才放入 `private_include/web_backend_internal.h`。
+- 新增 API 请求体字段时优先复用 `request_json.cpp` 的轻量字段读取工具，避免重新写字符串查找逻辑。
+- 新增响应时优先估算最大响应长度，并选择合适的固定响应缓冲区。
 
 ## 依赖
 
@@ -208,6 +244,7 @@ sequenceDiagram
 | `WebServer` | HTTP 路由、中间件、请求和响应封装 |
 | `web_file` | 固件内嵌 HTML 页面资源 |
 | `wifi_service` | WiFi 状态、AP 配网和 NVS 凭据管理 |
+| `json` | 请求 JSON SAX 解析 |
 | `global_state` | 设备测量状态 |
 | `power_output` | 输出控制策略链 |
 | `protect` | 保护状态查询 |

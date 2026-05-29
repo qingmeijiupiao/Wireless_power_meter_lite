@@ -54,6 +54,8 @@
 
 模块内部设计、API、命令、阈值、路由等细节统一维护在对应模块 README 中，主 README 只保留导航。
 
+组件若需要私有头文件，统一放在对应组件的 `private_include/` 并通过 `PRIV_INCLUDE_DIRS` 引入；跨组件公开接口仍放在 `include/`。例如 `web_backend` 的内部 handler 声明位于 `components/app/web_backend/private_include/`，外部只应包含 `web_backend.h`。
+
 | 模块 | 文档 |
 |------|------|
 | 主入口与 LP 核加载 | [main/ulp_loader/README.md](main/ulp_loader/README.md) |
@@ -88,6 +90,14 @@
 | 字体资源 | [components/assets/Fonts/README.md](components/assets/Fonts/README.md) |
 | UI 资源 | [components/assets/ui_resources/README.md](components/assets/ui_resources/README.md) |
 | Web 页面资源 | [components/assets/web_file/README.md](components/assets/web_file/README.md) |
+
+## Web 后端概览
+
+Web 后端由 `components/app/web_backend` 提供，对外入口为 `WebBackend::start_with_wifi_service()`。组件负责注册页面路由和 REST API，底层 HTTP 能力由 `components/middleware/WebServer` 提供，网页资源由 `components/assets/web_file` 嵌入固件。
+
+当前后端实现按职责拆分为路由注册、页面 handler、API handler、日志捕获和 JSON 请求解析等源文件。为适配 ESP32-C6 的内存约束，后端响应使用固定静态缓冲，请求 JSON 使用 common/json 的 SAX 方式按字段读取，不构造完整 JSON DOM。
+
+详细路由表、API 示例、内存策略和源码结构见 [components/app/web_backend/README.md](components/app/web_backend/README.md)。
 
 ## 启动入口
 
