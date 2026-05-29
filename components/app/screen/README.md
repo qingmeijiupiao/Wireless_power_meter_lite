@@ -1,43 +1,125 @@
 # screen
 
-屏幕显示应用组件，负责初始化 ST7735S TFT，并周期性渲染设备运行状态。
+屏幕 UI 应用组件，负责初始化 ST7735S 160x80 TFT 屏幕，并在 `screen_task()` 中统一管理多页面渲染、按键事件分发、页面切换和全局 UI 提示。
 
 ## 模块特点
 
-- **固定显示任务**：`screen_task()` 作为 FreeRTOS 任务运行，当前目标刷新率为 60 FPS
-- **硬件配置解耦**：屏幕 SPI、复位、片选、背光等引脚从 `hardware` 组件读取
-- **状态集中读取**：显示内容来自 `global_state`，包括电压、电流、功率、温度和输出状态
-- **保护状态提示**：读取 `protect_states`，对 OTP、OVP/UVP、OCP 显示 WARNING 或 PROTECT 标识
-- **资源复用**：背景、开关图标、告警框、错误框和字体来自 `ui_resources` 与 `Fonts`
+- **应用层 UI 管理**：`screen` 位于应用层，页面可直接读取 `global_state`、`protect`、`wifi_service`、`can_callback` 等业务状态。
+- **多页面架构**：通过 `Page` 基类和 `UIManager` 单例管理主页、电量页、曲线页、无线页、设置页，侧键短按按数组顺序单向循环翻页。
+- **跨任务事件队列**：`Button` 回调只调用 `SCREEN::post_button_event()` 投递事件，实际页面切换和状态修改在 `screen_task()` 中串行执行。
+- **页面刷新周期**：每个页面可通过 `refresh_interval_ms()` 声明刷新周期；按键事件和页面切换会触发一次强制完整刷新。
+- **统一编辑提示**：页面进入编辑/菜单状态时，由 `UIManager` 在页面渲染后绘制顶部 1px 黄色提示线。
+- **设置持久化**：屏幕旋转和背光档位通过 `HXC_NVS` 保存；设置页选中项仅在本次运行期间保留。
+- **资源复用**：静态图标、开关图标、警告/错误标签来自 `ui_resources`，字体来自 `Fonts`。
 
-## 显示内容
+## 架构与时序
 
-| 区域 | 内容 |
-|------|------|
-| 主数据区 | 电压、电流、功率、板温 |
-| 时间区 | 上电运行时间，格式 `HH:MM:SS` |
-| 输出状态 | ON/OFF 图标 |
-| 保护状态 | OTP、OVP/UVP、OCP 的告警或保护标识 |
-
-## 启动流程
+```mermaid
+flowchart TD
+    App["app_main"] --> Task["xTaskCreate(screen_task)"]
+    Task --> LCD["ST7735::init()"]
+    Task --> UI["UIManager::init()"]
+    UI --> Pages["注册页面指针表"]
+    Task --> Config["应用 NVS 屏幕配置"]
+    Task --> Protect["等待 protect_init_ok()"]
+    Protect --> Loop["screen_task 循环"]
+    Loop --> Events["消费按键事件队列"]
+    Events --> Dispatch["页面优先处理 / 默认行为"]
+    Dispatch --> Render["按页面刷新周期 render()"]
+    Render --> Overlay["绘制全局 overlay"]
+    Overlay --> Sync["ST7735::sync_buffers()"]
+```
 
 ```mermaid
 sequenceDiagram
-    participant Main as app_main
+    participant Btn as Button task
+    participant UI as UIManager queue
     participant Screen as screen_task
-    participant HW as hardware
+    participant Page as Current Page
     participant LCD as ST7735
-    participant State as global_state/protect
 
-    Main->>Screen: xTaskCreate(screen_task)
-    Screen->>HW: get_hardware_config()
-    Screen->>LCD: ST7735::init(...)
-    Screen->>LCD: 绘制静态背景
-    Screen->>State: 等待 protect_init_ok()
-    loop 60 FPS
-        Screen->>State: 读取测量值、输出状态、保护状态
-        Screen->>LCD: 更新动态区域并同步缓冲
+    Btn->>UI: post_button_event(button, event)
+    Screen->>UI: process_button_events()
+    UI->>Page: handle_button()
+    alt 页面消费
+        Page-->>UI: true
+        UI->>UI: full_redraw_ = true
+    else 页面未消费
+        Page-->>UI: false
+        UI->>UI: 执行默认侧键/主键行为
     end
+    Screen->>Page: render(mode)
+    Screen->>LCD: sync_buffers()
+```
+
+## 页面列表
+
+| 页面 | 类 | 刷新周期 | 说明 |
+|------|------|----------|------|
+| 主页 | `DashboardPage` | 约 33ms | 显示电压、电流、功率、板温、运行时间、输出状态和保护标签 |
+| 电量页 | `BatteryPage` | 250ms | 当前为电量/输入信息占位页面 |
+| 曲线页 | `CurvePage` | 200ms | 当前为曲线功能占位页面 |
+| 无线页 | `WirelessPage` | 500ms | 显示 WiFi 模式；STA 显示 SSID/IP；长按侧键进入 AP 配网 |
+| 设置页 | `SettingsPage` | 200ms | 长按进入菜单，短按切换设置项，双击修改当前设置 |
+
+## 按键行为
+
+### 默认行为
+
+| 按键 | 事件 | 行为 |
+|------|------|------|
+| 侧键 | 短按 | 单向循环切换到下一页 |
+| 侧键 | 长按 | 若当前页支持编辑模式，则进入该页编辑/菜单状态 |
+| 侧键 | 超长按 | 预留，当前仅打印日志 |
+| 正面键 | 短按 | 调用 `PowerOutput::toggle()` 切换输出 |
+
+### 设置页行为
+
+| 状态 | 侧键事件 | 行为 |
+|------|----------|------|
+| 普通状态 | 短按 | 下一页 |
+| 普通状态 | 长按 | 进入设置菜单 |
+| 菜单状态 | 短按 | 切换高亮设置项 |
+| 菜单状态 | 双击 | 修改当前设置项 |
+| 菜单状态 | 长按 | 退出设置菜单 |
+
+设置页为单层菜单，没有二级编辑状态。所有设置项均通过双击直接切换或循环调整。
+
+## 设置项
+
+| 设置项 | 显示名 | 行为 | 持久化 |
+|------|------|------|------|
+| 屏幕旋转 | `Rotate` | `0` / `180` 之间切换，立即调用 `ST7735::set_rotation()` | `ui_rot` |
+| 背光档位 | `Bright` | 1-5 档循环，映射到 0-255 背光值 | `ui_bl` |
+| WiFi 开机启动 | `WiFi boot` | 调用 `WifiService::set_web_enabled_on_boot()` | `wifi_service` 内部 NVS |
+| 保护旁路 | `Bypass` | 调用 `protect_set_bypassed()` | 否，仅运行期 |
+| CAN 终端电阻 | `CAN term` | 调用 `CanCallback::can_resistor.set()` | 否，仅运行期 |
+
+## NVS Key
+
+| Key | 类型 | 默认值 | 说明 |
+|------|------|------|------|
+| `ui_rot` | blob(uint8_t) | `0` | 屏幕是否 180 度旋转，`1` 表示启用 |
+| `ui_bl` | blob(uint8_t) | `3` | 背光档位，范围 1-5 |
+
+## 文件结构
+
+```
+screen/
+├── include/
+│   └── screen.h                 公开 API：screen_task、post_button_event
+├── private_include/
+│   ├── page.h                   Page 抽象基类
+│   ├── pages.h                  各页面类声明
+│   ├── ui_common.h              公共类型、绘制工具、UI 配置接口
+│   └── ui_manager.h             UIManager 声明
+├── src/
+│   ├── screen.cpp               屏幕任务入口和 ST7735 初始化
+│   ├── ui_common.cpp            公共绘制、背光映射、NVS 配置
+│   ├── ui_manager.cpp           页面管理、事件分发、渲染调度
+│   └── pages.cpp                具体页面渲染和页面内按键行为
+├── CMakeLists.txt
+└── README.md
 ```
 
 ## 集成与使用
@@ -50,14 +132,59 @@ xTaskCreate(SCREEN::screen_task, "screen_task", 4096, NULL, 4, NULL);
 
 `screen_task()` 内部会初始化 ST7735，因此调用前需要保证 `hardware_config_init()` 已完成。
 
+按键回调不应直接修改 UI 状态，应通过队列投递到屏幕任务：
+
+```cpp
+Main_Button.bind_event(ButtonEvent::SHORT_PRESS, []() {
+    if (!SCREEN::post_button_event(SCREEN::ButtonId::Main, ButtonEvent::SHORT_PRESS)) {
+        PowerOutput::toggle();
+    }
+});
+
+Side_Button.bind_event(ButtonEvent::SHORT_PRESS, []() {
+    SCREEN::post_button_event(SCREEN::ButtonId::Side, ButtonEvent::SHORT_PRESS);
+});
+```
+
+主按钮保留投递失败回退逻辑，避免屏幕任务未初始化或异常时影响输出控制。
+
 ## API 参考
 
-| API | 说明 |
-|-----|------|
-| `SCREEN::screen_task(void* arg)` | 屏幕任务入口，初始化屏幕并持续刷新 UI |
+### `void SCREEN::screen_task(void* arg)`
+
+屏幕任务入口。执行 ST7735 初始化、UIManager 初始化、应用 NVS 显示配置、等待保护模块完成首次检查，并持续刷新当前页面。
+
+### `bool SCREEN::post_button_event(ButtonId button, ButtonEvent event)`
+
+向 UIManager 的按键事件队列投递事件。该接口可从 Button 任务调用，成功返回 `true`；若队列尚未创建或写入失败则返回 `false`。
+
+### `enum class ButtonId`
+
+| 值 | 说明 |
+|----|------|
+| `Main` | 正面主按键 |
+| `Side` | 侧边功能按键 |
+
+## 新增页面方式
+
+新增页面时推荐按以下步骤：
+
+1. 在 `PageId` 中添加页面枚举。
+2. 继承 `Page` 实现页面类。
+3. 在 `UIManager` 中添加页面静态实例。
+4. 将页面指针加入 `pages_`，顺序即侧键翻页顺序。
+5. 如页面需要拦截按键，重写 `handle_button()`；否则走默认按键行为。
+
+页面渲染建议保持 160x80 固定坐标系。屏幕旋转由 ST7735 驱动处理，页面无需维护两套坐标。
 
 ## 环境与依赖
 
-- **硬件**：ST7735S 160x80 TFT
-- **软件**：ESP-IDF v6.0+、FreeRTOS
-- **组件依赖**：`st7735_driver`、`hardware`、`global_state`、`protect`、`ui_resources`、`Fonts`
+| 类别 | 要求 |
+|------|------|
+| 硬件 | ST7735S 160x80 TFT |
+| 框架 | ESP-IDF v6.0+ |
+| RTOS | FreeRTOS |
+| 资源组件 | `ui_resources`, `Fonts` |
+| BSP/驱动 | `st7735_driver`, `hardware`, `Button`, `HXC_NVS` |
+| 应用组件 | `global_state`, `protect`, `wifi_service`, `power_output`, `can_callback` |
+

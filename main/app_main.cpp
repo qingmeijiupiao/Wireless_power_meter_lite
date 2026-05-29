@@ -41,7 +41,9 @@ void update_main_state(TimerHandle_t xTimer){
 
 
 void OUTPUT_ctrl(){
-    PowerOutput::toggle();
+    if (!SCREEN::post_button_event(SCREEN::ButtonId::Main, ButtonEvent::SHORT_PRESS)) {
+        PowerOutput::toggle();
+    }
 }
 
 
@@ -63,7 +65,16 @@ extern "C" void app_main(void){
 
     Main_Button.bind_event(ButtonEvent::SHORT_PRESS, OUTPUT_ctrl);
     Side_Button.bind_event(ButtonEvent::SHORT_PRESS, [](){
-        ESP_LOGI("Side_Button", "button toggle");
+        SCREEN::post_button_event(SCREEN::ButtonId::Side, ButtonEvent::SHORT_PRESS);
+    });
+    Side_Button.bind_event(ButtonEvent::DOUBLE_CLICK, [](){
+        SCREEN::post_button_event(SCREEN::ButtonId::Side, ButtonEvent::DOUBLE_CLICK);
+    });
+    Side_Button.bind_event(ButtonEvent::LONG_PRESS, [](){
+        SCREEN::post_button_event(SCREEN::ButtonId::Side, ButtonEvent::LONG_PRESS);
+    });
+    Side_Button.bind_event(ButtonEvent::SUPER_LONG_PRESS, [](){
+        SCREEN::post_button_event(SCREEN::ButtonId::Side, ButtonEvent::SUPER_LONG_PRESS);
     });
     ESP_ERROR_CHECK(Main_Button.setup(get_hardware_config().MAIN_BUTTON, true));
     ESP_ERROR_CHECK(Side_Button.setup(get_hardware_config().SIDE_BUTTON, true));
