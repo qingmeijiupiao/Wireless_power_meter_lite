@@ -245,37 +245,57 @@ bool WirelessPage::handle_button(ButtonId button, ButtonEvent event) {
 void WirelessPage::render(RenderMode mode) {
     (void)mode;
     ST7735::fill_screen(ST7735::BLACK);
-    draw_page_title("Wireless");
 
     char line[40];
-    snprintf(line, sizeof(line), "Mode %s", wifi_mode_text(WifiService::get_mode()));
-    ST7735::draw_string(8, 27, line, ST7735::WHITE, ST7735::BLACK, DENGB12);
+    const WifiService::Mode wifi_mode = WifiService::get_mode();
+    const bool provisioning = WifiService::is_provisioning();
+    const char* mode_text = provisioning ? "AP" : wifi_mode_text(wifi_mode);
+    ST7735::color_t mode_color = wifi_mode == WifiService::Mode::STA
+        ? ST7735::color_t(0x1ef851)
+        : ST7735::color_t(0x2FC9EC);
+    if (last_result_ != ESP_OK && wifi_mode != WifiService::Mode::STA && !provisioning) {
+        mode_text = "ERR";
+        mode_color = ST7735::color_t(0xef2a2a);
+    }
 
-    if (WifiService::is_provisioning()) {
-        ST7735::draw_string(8, 43, WifiService::get_ap_ssid(), ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB12);
-        ST7735::draw_string(8, 60, "192.168.4.1", ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB12);
-    } else if (WifiService::get_mode() == WifiService::Mode::STA) {
+    ST7735::draw_string(4, 3, "WiFi", ST7735::WHITE, ST7735::BLACK, DENGB16);
+    ST7735::fill_rect(0, 21, ST7735::WIDTH, 1, ST7735::color_t(0x303030));
+    ST7735::fill_rect(126, 3, 30, 15, ST7735::color_t(0x202020));
+    ST7735::draw_string(132, 5, mode_text, mode_color, ST7735::color_t(0x202020), DENGB12);
+
+    if (provisioning) {
+        ST7735::draw_string(4, 27, "CONFIG AP", ST7735::color_t(0x2FC9EC), ST7735::BLACK, DENGB12);
+        snprintf(line, sizeof(line), "%.20s", WifiService::get_ap_ssid());
+        ST7735::draw_string(4, 44, line, ST7735::WHITE, ST7735::BLACK, DENGB12);
+        ST7735::draw_string(4, 61, "192.168.4.1", ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB12);
+    } else if (wifi_mode == WifiService::Mode::STA) {
         WifiService::Config cfg = WifiService::get_config();
         IP_t ip = WifiService::get_ip();
         uint8_t channel = 0;
         WifiService::get_channel(&channel);
         snprintf(line, sizeof(line), "%.20s", cfg.ssid[0] == '\0' ? "STA connected" : cfg.ssid);
-        ST7735::draw_string(8, 40, line, ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB12);
+        ST7735::draw_string(4, 26, line, ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB12);
         snprintf(line, sizeof(line), "%u.%u.%u.%u",
                  static_cast<unsigned>(ip.octet1),
                  static_cast<unsigned>(ip.octet2),
                  static_cast<unsigned>(ip.octet3),
                  static_cast<unsigned>(ip.octet4));
-        ST7735::draw_string(8, 53, line, ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB12);
-        snprintf(line, sizeof(line), "Signal %u%%  CH %u",
-                 static_cast<unsigned>(WifiService::get_signal_percent()),
-                 static_cast<unsigned>(channel));
-        ST7735::draw_string(8, 66, line, ST7735::color_t(0x808080), ST7735::BLACK, DENGB12);
+        ST7735::draw_string(4, 42, line, ST7735::color_t(0x2FC9EC), ST7735::BLACK, DENGB12);
+
+        const uint8_t signal = WifiService::get_signal_percent();
+        snprintf(line, sizeof(line), "%u%%", static_cast<unsigned>(signal));
+        ST7735::draw_string(4, 59, line, ST7735::WHITE, ST7735::BLACK, DENGB12);
+        ST7735::fill_rect(36, 63, 70, 4, ST7735::color_t(0x303030));
+        ST7735::fill_rect(36, 63, static_cast<uint16_t>(70 * signal / 100), 4, ST7735::color_t(0x1ef851));
+        snprintf(line, sizeof(line), "CH %u", static_cast<unsigned>(channel));
+        ST7735::draw_string(120, 59, line, ST7735::color_t(0x808080), ST7735::BLACK, DENGB12);
     } else if (last_result_ != ESP_OK) {
-        snprintf(line, sizeof(line), "ERR %s", esp_err_to_name(last_result_));
-        ST7735::draw_string(8, 50, line, ST7735::color_t(0xef2a2a), ST7735::BLACK, DENGB12);
+        snprintf(line, sizeof(line), "ERR %.20s", esp_err_to_name(last_result_));
+        ST7735::draw_string(4, 33, line, ST7735::color_t(0xef2a2a), ST7735::BLACK, DENGB12);
+        ST7735::draw_string(4, 54, "Hold side: retry", ST7735::color_t(0x808080), ST7735::BLACK, DENGB12);
     } else {
-        ST7735::draw_string(8, 50, "Hold: AP config", ST7735::color_t(0x808080), ST7735::BLACK, DENGB12);
+        ST7735::draw_string(4, 33, "WiFi service OFF", ST7735::WHITE, ST7735::BLACK, DENGB12);
+        ST7735::draw_string(4, 54, "Hold side: AP", ST7735::color_t(0x808080), ST7735::BLACK, DENGB12);
     }
 }
 
