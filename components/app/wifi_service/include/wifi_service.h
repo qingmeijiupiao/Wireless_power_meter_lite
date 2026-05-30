@@ -160,6 +160,19 @@ IP_t get_ip();
 /** @brief 获取底层 WiFiManager 状态 */
 wifi_state_t get_wifi_state();
 
+/** @brief 获取当前 STA 连接的 RSSI，未连接时返回 0 */
+int8_t get_rssi();
+
+/** @brief 获取当前 STA 信号强度百分比，范围 0-100 */
+uint8_t get_signal_percent();
+
+/**
+ * @brief 获取当前 WiFi 主信道
+ * @param channel 输出主信道
+ * @return ESP_OK 成功，其他值来自底层 WiFiManager
+ */
+esp_err_t get_channel(uint8_t* channel);
+
 } // namespace WifiService
 
 #endif

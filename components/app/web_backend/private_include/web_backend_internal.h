@@ -84,6 +84,7 @@ esp_err_t provision_handler(WebServer::Request* request);
 /* API handler：负责解析 HTTP 请求、调用业务模块、返回 JSON。 */
 esp_err_t state_handler(WebServer::Request* request);
 esp_err_t output_handler(WebServer::Request* request);
+esp_err_t meter_reset_handler(WebServer::Request* request);
 esp_err_t reboot_handler(WebServer::Request* request);
 esp_err_t system_handler(WebServer::Request* request);
 esp_err_t backlight_handler(WebServer::Request* request);

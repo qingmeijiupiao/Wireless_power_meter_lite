@@ -16,6 +16,8 @@ static_assert(sizeof(GlobalState_bit) == 4, "GlobalState_bit size must be 4 byte
 struct GlobalState{
     uint16_t voltage_mV; 
     int32_t current_uA;
+    int32_t meter_uah;
+    int32_t meter_uwh;
     int16_t board_temperature;  //单位为0.01摄氏度
     int16_t chip_temperature;   //单位为0.01摄氏度
     protect_states_t protect_states;

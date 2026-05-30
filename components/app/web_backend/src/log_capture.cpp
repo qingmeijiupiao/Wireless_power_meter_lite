@@ -146,7 +146,7 @@ esp_err_t log_middleware(WebServer::Request* request) {
     if (strcmp(request->uri, "/api/logs") == 0 || strcmp(request->uri, "/api/logs/clear") == 0) {
         return ESP_OK;
     }
-    ESP_LOGI("WebBackend", "request uri=%s", request->uri);
+    ESP_LOGD("WebBackend", "request uri=%s", request->uri);
     return ESP_OK;
 }
 

@@ -7,6 +7,7 @@
 #include "st7735.h"
 #include "can_callback.h"
 #include "current_calibration.h"
+#include "energy_meter.h"
 #include "global_state.h"
 #include "HXC_NVS.h"
 #include <cstdio>
@@ -152,6 +153,47 @@ esp_err_t init() {
             float current = (float)state.current_uA/1e6;
             float temperature = (float)state.board_temperature/100.0;
             printf("voltage: %.3f V, current: %.3f A, temperature: %.2f C\n", voltage, current, temperature);
+            return 0;
+        }));
+
+    shell.register_command(ShellCommand_t("meter", "Get or reset shared energy meter session", "[status|reset]",
+        [](int argc, char** argv) -> int {
+            if (argc >= 2 && strcmp(argv[1], "reset") == 0) {
+                EnergyMeter::reset();
+                printf("Shared meter session reset\n");
+            } else if (argc >= 2 && strcmp(argv[1], "status") != 0) {
+                printf("Usage: meter [status|reset]\n");
+                return 1;
+            }
+
+            const auto meter = EnergyMeter::snapshot();
+            const auto& state = get_global_state();
+            const uint64_t meter_seconds = meter.meter_time_ms / 1000;
+            const uint64_t system_time_ms = static_cast<uint64_t>(esp_timer_get_time() / 1000);
+            const uint64_t system_seconds = system_time_ms / 1000;
+            const double voltage_v = state.voltage_mV / 1000.0;
+            const double current_a = state.current_uA / 1000000.0;
+
+            printf("Shared meter session:\n");
+            printf("  energy:       %.3f mWh (%lld uWh)\n", meter.energy_uwh / 1000.0, static_cast<long long>(meter.energy_uwh));
+            printf("  charge:       %.3f mAh (%lld uAh)\n", meter.charge_uah / 1000.0, static_cast<long long>(meter.charge_uah));
+            printf("  meter time:   %llu ms (%02llu:%02llu:%02llu)\n",
+                   static_cast<unsigned long long>(meter.meter_time_ms),
+                   static_cast<unsigned long long>(meter_seconds / 3600),
+                   static_cast<unsigned long long>((meter_seconds / 60) % 60),
+                   static_cast<unsigned long long>(meter_seconds % 60));
+            printf("LP Core lifetime counters:\n");
+            printf("  energy:       %ld uWh\n", static_cast<long>(state.meter_uwh));
+            printf("  charge:       %ld uAh\n", static_cast<long>(state.meter_uah));
+            printf("System:\n");
+            printf("  uptime:       %llu ms (%02llu:%02llu:%02llu)\n",
+                   static_cast<unsigned long long>(system_time_ms),
+                   static_cast<unsigned long long>(system_seconds / 3600),
+                   static_cast<unsigned long long>((system_seconds / 60) % 60),
+                   static_cast<unsigned long long>(system_seconds % 60));
+            printf("  voltage:      %.3f V\n", voltage_v);
+            printf("  current:      %.6f A\n", current_a);
+            printf("  power:        %.3f W\n", voltage_v * current_a);
             return 0;
         }));
         

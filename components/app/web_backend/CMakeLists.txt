@@ -6,5 +6,5 @@ idf_component_register(
          "src/request_json.cpp"
     INCLUDE_DIRS "include"
     PRIV_INCLUDE_DIRS "private_include"
-    REQUIRES WebServer web_file wifi_service global_state power_output protect esp_timer esp_system esp_http_server st7735_driver can_callback current_calibration hardware esp_app_format json
+    REQUIRES WebServer web_file wifi_service global_state power_output protect esp_timer esp_system esp_http_server st7735_driver can_callback current_calibration hardware esp_app_format json energy_meter
 )

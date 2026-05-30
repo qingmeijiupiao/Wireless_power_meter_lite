@@ -23,6 +23,10 @@ TaskHandle_t protect_task_handle = nullptr;
 
 GlobalState& glb_states = get_global_state();
 
+static int32_t to_milli(float value) {
+    return static_cast<int32_t>(value * 1000.0f);
+}
+
 protect_threshold_t temperature_threshold ={
     .warning_threshold = 60.0f,
     .warning_recovery_threshold = 55.0f,
@@ -66,12 +70,16 @@ ProtectState_t check_now_state(protect_threshold_t threshold, ProtectState_t las
         case PROTECT_STATE_NORMAL:
             // 直接越过保护阈值
             if (is_triggered(now_value, threshold.protect_threshold)) {
-                PROTECT_LOGE("protect_threshold=%.3f, now_value=%.3f", threshold.protect_threshold, now_value);
+                PROTECT_LOGE("protect_threshold_milli=%ld, now_value_milli=%ld",
+                             static_cast<long>(to_milli(threshold.protect_threshold)),
+                             static_cast<long>(to_milli(now_value)));
                 return PROTECT_STATE_PROTECT;
             }
             // 越过警告阈值
             if (is_triggered(now_value, threshold.warning_threshold)) {
-                PROTECT_LOGW("warning_threshold=%.3f, now_value=%.3f", threshold.warning_threshold, now_value);
+                PROTECT_LOGW("warning_threshold_milli=%ld, now_value_milli=%ld",
+                             static_cast<long>(to_milli(threshold.warning_threshold)),
+                             static_cast<long>(to_milli(now_value)));
                 return PROTECT_STATE_WARNING;
             }
             return PROTECT_STATE_NORMAL;
@@ -79,12 +87,16 @@ ProtectState_t check_now_state(protect_threshold_t threshold, ProtectState_t las
         case PROTECT_STATE_WARNING:
             // 继续恶化至保护阈值
             if (is_triggered(now_value, threshold.protect_threshold)) {
-                PROTECT_LOGE("protect_threshold=%.3f, now_value=%.3f", threshold.protect_threshold, now_value);
+                PROTECT_LOGE("protect_threshold_milli=%ld, now_value_milli=%ld",
+                             static_cast<long>(to_milli(threshold.protect_threshold)),
+                             static_cast<long>(to_milli(now_value)));
                 return PROTECT_STATE_PROTECT;
             }
             // 恢复到警告恢复阈值以下（利用反向比较）
             if (!is_triggered(now_value, threshold.warning_recovery_threshold)) {
-                PROTECT_LOGI("warning_recovery_threshold=%.3f, now_value=%.3f", threshold.warning_recovery_threshold, now_value);
+                PROTECT_LOGI("warning_recovery_threshold_milli=%ld, now_value_milli=%ld",
+                             static_cast<long>(to_milli(threshold.warning_recovery_threshold)),
+                             static_cast<long>(to_milli(now_value)));
                 return PROTECT_STATE_NORMAL;
             }
             return PROTECT_STATE_WARNING;
@@ -92,7 +104,9 @@ ProtectState_t check_now_state(protect_threshold_t threshold, ProtectState_t las
         case PROTECT_STATE_PROTECT:
             // 恢复到保护恢复阈值以下，退回警告状态（而非直接正常，需二次确认）
             if (!is_triggered(now_value, threshold.protect_recovery_threshold)) {
-                PROTECT_LOGI("protect_recovery_threshold=%.3f, now_value=%.3f", threshold.protect_recovery_threshold, now_value);
+                PROTECT_LOGI("protect_recovery_threshold_milli=%ld, now_value_milli=%ld",
+                             static_cast<long>(to_milli(threshold.protect_recovery_threshold)),
+                             static_cast<long>(to_milli(now_value)));
                 return PROTECT_STATE_WARNING;
             }
             return PROTECT_STATE_PROTECT;
@@ -251,7 +265,12 @@ esp_err_t protect_init(){
         ESP_LOGW(PROTECT_LOG_TAG, "protect task already running");
         return ESP_OK;
     }
-    xTaskCreate(protect_task, "protect_task", 2048, nullptr, 5, &protect_task_handle);
+    constexpr uint32_t protect_task_stack_size = 4096;
+    if (xTaskCreate(protect_task, "protect_task", protect_task_stack_size, nullptr, 5, &protect_task_handle) != pdPASS) {
+        protect_task_handle = nullptr;
+        ESP_LOGE(PROTECT_LOG_TAG, "failed to create protect task");
+        return ESP_ERR_NO_MEM;
+    }
     return ESP_OK;
 }
 bool protect_init_ok(){

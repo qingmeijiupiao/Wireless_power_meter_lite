@@ -2,7 +2,7 @@
 """
 从 TrueType/OpenType 字体生成包含字体数据的 C++ 头文件和源文件。
 输出格式适用于嵌入式系统，假设 Font_t 结构体已在 Font.h 中定义。
-此版本保留原始字符间距（步进宽度），并在生成的像素数据中包含侧边距。
+此版本保留原始字符间距（步进宽度）、侧边距和统一基线。
 
 用法: python generate_font.py <字体文件> <字体大小> <字体名称>
 示例: python generate_font.py /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf 16 DejaVuSans
@@ -26,42 +26,27 @@ def char_advance(font, char):
     except:
         return 0
 
-def get_char_info(font, char, size):
+def get_char_info(font, char):
     """
-    渲染一个字符，返回其步进宽度、边界框和原始图像。
+    获取字符相对统一基线的布局信息。
     返回：
         advance_width (int)   - 四舍五入的步进宽度（用作表中的宽度）
-        bbox (tuple)          - 字符像素的边界框 (x0, y0, x1, y1)
-        img (PIL.Image)       - 原始图像（大小为 (size*2, size*2)），字符绘制在 (0,0) 位置
-    对于不可见字符（空格等），返回 (advance_width, None, None)。
+        bbox (tuple)          - 相对基线的字符边界框 (x0, y0, x1, y1)
+    对于不可见字符（空格等），返回 (advance_width, None)。
     """
-    # 创建足够大的临时图像以容纳任何字符
-    temp_size = size * 2
-    img = Image.new('L', (temp_size, temp_size), 0)  # 黑色背景
-    draw = ImageDraw.Draw(img)
-
-    # 在 (0,0) 处以白色绘制字符
-    draw.text((0, 0), char, fill=255, font=font)
-
-    # 获取非零像素的边界框
-    bbox = img.getbbox()
-    if bbox is None:
-        # 不可见字符（空格等）
+    bbox = font.getbbox(char, anchor='ls')
+    if bbox is None or bbox[2] <= bbox[0] or bbox[3] <= bbox[1]:
         w = char_advance(font, char)
         if w == 0:
-            w = size // 2  # 备用宽度
-        return w, None, None
+            w = max(1, font.size // 2)
+        return w, None
 
-    # 步进宽度
     advance = char_advance(font, char)
-    # 确保步进宽度至少等于实际字符宽度，避免裁剪
-    actual_width = bbox[2] - bbox[0]
-    if advance < actual_width:
-        advance = actual_width
+    left = min(0, bbox[0])
+    right = max(advance, bbox[2])
+    return right - left, bbox
 
-    return advance, bbox, img
-
-def generate_preview(chars, char_preview_images, output_base, font_height):
+def generate_preview(chars, char_preview_images, output_base, font_height, baseline_y):
     """生成所有字符的 BMP 预览图像。"""
     cols = 16
     rows = (len(chars) + cols - 1) // cols
@@ -75,6 +60,11 @@ def generate_preview(chars, char_preview_images, output_base, font_height):
     img_w = cols * cell_w
     img_h = rows * cell_h
     preview = Image.new('L', (img_w, img_h), 255)  # 白色背景
+
+    # 灰色基线便于检查 g/p/q/y 等下伸字母是否与其他字符共用同一基线。
+    for row in range(rows):
+        baseline = row * cell_h + pad_y + baseline_y
+        ImageDraw.Draw(preview).line((0, baseline, img_w - 1, baseline), fill=210)
 
     for idx, ch in enumerate(chars):
         row = idx // cols
@@ -106,27 +96,22 @@ def generate_font_files(font_path, font_size, font_name):
     # 标准可打印 ASCII 字符（32-126）
     chars = [chr(i) for i in range(32, 127)]
 
-    # 对每个字符存储：
-    #   width   = 步进宽度（像素）
-    #   bbox    = 原始图像中像素的边界框 (x0,y0,x1,y1)
-    #   raw_img = 原始 PIL 图像（temp_size x temp_size），字符位于 (0,0)
+    # 对每个字符存储步进宽度和相对统一基线的边界框。
     widths = []
     bboxes = []
-    raw_images = []
-    char_heights = []   # 字符实际像素高度 (y1-y0)
 
     for ch in chars:
-        advance, bbox, img = get_char_info(font, ch, font_size)
+        advance, bbox = get_char_info(font, ch)
         widths.append(advance)
         bboxes.append(bbox)
-        raw_images.append(img)
-        if bbox is not None:
-            char_heights.append(bbox[3] - bbox[1])
-        else:
-            char_heights.append(0)
 
-    # 确定全局字体高度 = 所有字符实际高度的最大值
-    font_height = max(h for h in char_heights if h > 0) if any(h > 0 for h in char_heights) else font_size
+    # 所有字符使用同一基线。上伸和下伸空间按整套字库统一计算，
+    # 避免 g/p/q/y 等字符因逐字符贴底而与其他字母上下错位。
+    visible_bboxes = [bbox for bbox in bboxes if bbox is not None]
+    top = min(bbox[1] for bbox in visible_bboxes)
+    bottom = max(bbox[3] for bbox in visible_bboxes)
+    font_height = bottom - top
+    baseline_y = -top
 
     # 构建字体数据（每个字符占用 font_height * width 字节）
     font_data = bytearray()
@@ -135,31 +120,17 @@ def generate_font_files(font_path, font_size, font_name):
     for i, ch in enumerate(chars):
         w = widths[i]                 # 步进宽度（用于宽度表）
         bbox = bboxes[i]
-        raw_img = raw_images[i]
 
         if bbox is None:
             # 不可见字符：填充全零，宽度为步进宽度
             data = bytearray(font_height * w)
             char_preview_images.append(None)
         else:
-            # 从原始图像中提取字符区域
-            x0, y0, x1, y1 = bbox
-            char_w = x1 - x0
-            char_h = y1 - y0
-
-            # 裁剪出字符边界框
-            char_roi = raw_img.crop((x0, y0, x1, y1))
-
             # 创建画布（步进宽度, 字体高度），黑色背景
             canvas = Image.new('L', (w, font_height), 0)
-
-            # 垂直居中
-            y_offset = font_height - char_h
-
-            # 将字符 ROI 粘贴到画布 (x0, y_offset) 处
-            # x0 是左侧边距（从绘图原点到字符左边缘的距离）
-            # 可能为负（字符向左突出），但会被裁剪到画布内
-            canvas.paste(char_roi, (x0, y_offset))
+            draw = ImageDraw.Draw(canvas)
+            x_offset = -min(0, bbox[0])
+            draw.text((x_offset, baseline_y), ch, fill=255, font=font, anchor='ls')
 
             # 获取像素数据
             data = canvas.tobytes()
@@ -194,22 +165,18 @@ def generate_font_files(font_path, font_size, font_name):
         f.write(f'// {source_path}\n')
         f.write(f'#include "{font_name}.h"\n\n')
         # 字体数据数组（静态）
-        f.write(f"static const uint8_t {font_name}_font_data[] = {{\n    ")
-        for i, byte in enumerate(font_data):
-            f.write(f'0x{byte:02x}')
-            if i < len(font_data) - 1:
-                f.write(', ')
-            if (i + 1) % 16 == 0 and i != len(font_data) - 1:
-                f.write('\n    ')
+        f.write(f"static const uint8_t {font_name}_font_data[] = {{\n")
+        for start in range(0, len(font_data), 16):
+            chunk = font_data[start:start + 16]
+            f.write("    " + ", ".join(f"0x{byte:02x}" for byte in chunk))
+            f.write(",\n" if start + 16 < len(font_data) else "\n")
         f.write('\n};\n\n')
         # 宽度表（常量）
-        f.write(f"const uint8_t {font_name}_width_table[] = {{\n    ")
-        for i, w in enumerate(widths):
-            f.write(f'{w:3d}')
-            if i < len(widths) - 1:
-                f.write(', ')
-            if (i + 1) % 16 == 0 and i != len(widths) - 1:
-                f.write('\n    ')
+        f.write(f"const uint8_t {font_name}_width_table[] = {{\n")
+        for start in range(0, len(widths), 16):
+            chunk = widths[start:start + 16]
+            f.write("    " + ", ".join(f"{width:3d}" for width in chunk))
+            f.write(",\n" if start + 16 < len(widths) else "\n")
         f.write('\n};\n\n')
         # Font_t 实例
         f.write(f"const Font_t {font_name}{{\n")
@@ -221,7 +188,7 @@ def generate_font_files(font_path, font_size, font_name):
     print(f"已生成源文件 {source_path}")
 
     # 生成预览图像
-    generate_preview(chars, char_preview_images, preview_base, font_height)
+    generate_preview(chars, char_preview_images, preview_base, font_height, baseline_y)
 
 if __name__ == "__main__":
     if len(sys.argv) != 4:

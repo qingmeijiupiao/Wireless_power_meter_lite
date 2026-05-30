@@ -93,9 +93,6 @@
       $('wifiText').innerHTML = infoHtml([
         ['模式', w.mode],
         ['IP', w.ip],
-        ['保存的 SSID', w.saved_ssid || '(无)'],
-        ['STA MAC', w.sta_mac],
-        ['AP MAC', w.ap_mac],
         ['开机启动', w.boot_enabled ? '开启' : '关闭']
       ]);
       $('wifiBoot').textContent = w.boot_enabled ? '关闭开机启动' : '开启开机启动';

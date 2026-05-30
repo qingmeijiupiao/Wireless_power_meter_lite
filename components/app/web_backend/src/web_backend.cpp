@@ -81,6 +81,7 @@ esp_err_t init() {
     /* REST API 路由：返回 JSON，POST 路由通过请求体携带参数。 */
     ESP_ERROR_CHECK(WebServer::on("/api/state", WebServer::Method::GET, state_handler));
     ESP_ERROR_CHECK(WebServer::on("/api/output", WebServer::Method::POST, output_handler));
+    ESP_ERROR_CHECK(WebServer::on("/api/meter/reset", WebServer::Method::POST, meter_reset_handler));
     ESP_ERROR_CHECK(WebServer::on("/api/reboot", WebServer::Method::POST, reboot_handler));
     ESP_ERROR_CHECK(WebServer::on("/api/system", WebServer::Method::GET, system_handler));
     ESP_ERROR_CHECK(WebServer::on("/api/backlight", WebServer::Method::GET, backlight_handler));

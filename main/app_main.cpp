@@ -34,6 +34,8 @@ auto& Board_Temperature_sensor = TMP235_t::instance();
 void update_main_state(TimerHandle_t xTimer){
     global_state.voltage_mV = ulp_voltage_uv/1e3;
     global_state.current_uA = ulp_current_uA;
+    global_state.meter_uah = ulp_meter_uah;
+    global_state.meter_uwh = ulp_meter_uwh;
     global_state.board_temperature = Board_Temperature_sensor.getTemperature();
     global_state.chip_temperature = Chip_Temperature_Sensor.getTemperature()*100.0f;
     *(int32_t*)&(ulp_Board_temperature) = global_state.board_temperature;

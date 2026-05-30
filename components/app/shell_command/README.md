@@ -94,6 +94,7 @@ shell.register_command(ShellCommand_t("echo", "Echo input text", "<text>",
 | `can_baudrate` | 设置/查询 CAN 波特率配置值；当前 CAN 初始化仍固定使用 1Mbps | `[baudrate]` |
 | `can_id` | 设置/查询 CAN ID 配置值，重启或重新初始化后用于回调注册 | `[id]` |
 | `get_data` | 获取当前电压、电流、板温 | 无 |
+| `meter` | 查询或重置 UI/Web/Shell 共用的电量计量会话，输出相对累计值、LP Core 自启动累计值、计量时间、系统时间和实时功率 | `[status|reset]` |
 | `output` | 设置/查询输出状态 | `[0/1]` |
 | `protect` | 设置/查询保护阻断状态和各保护通道 | `[0/1]` |
 | `wifi` | 管理 WiFi/Web，支持查询、启动、停止、连接 STA、进入 AP 配网、设置启动开关、清除保存凭据 | `status|ip|on|off|connect <ssid> [password]|ap|boot [0/1]|clear` |

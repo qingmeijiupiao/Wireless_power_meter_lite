@@ -22,20 +22,30 @@
     <main class="stack">
       <div class="page-head">
         <div><h2>实时概览</h2><div class="sub">快速查看当前测量值、输出和保护状态</div></div>
-        <select id="sampleRate"><option value="500">0.5s 刷新</option><option value="1000">1s 刷新</option><option value="2000">2s 刷新</option><option value="5000">5s 刷新</option></select>
+        <label class="refresh-control"><span>刷新间隔</span><select id="sampleRate"><option value="500">0.5 秒</option><option value="1000">1 秒</option><option value="2000">2 秒</option><option value="5000">5 秒</option></select></label>
       </div>
-      <div class="grid">
-        <div class="card metric"><div class="label">电压</div><div class="value" id="voltage">-- V</div></div>
-        <div class="card metric"><div class="label">电流</div><div class="value" id="current">-- A</div></div>
-        <div class="card metric"><div class="label">功率</div><div class="value" id="power">-- W</div></div>
-        <div class="card metric"><div class="label">板温 / 芯片</div><div class="value" id="temp">-- C</div></div>
+      <div class="grid overview-grid">
+        <div class="card metric metric-voltage"><div class="label">电压</div><div class="value" id="voltage">-- V</div></div>
+        <div class="card metric metric-current"><div class="label">电流</div><div class="value" id="current">-- A</div></div>
+        <div class="card metric metric-power"><div class="label">功率</div><div class="value" id="power">-- W</div></div>
+        <div class="card metric metric-temp"><div class="label">板温 / 芯片</div><div class="value" id="temp">-- C</div></div>
+        <div class="card metric metric-time"><div class="label">系统运行时间</div><div class="value" id="systemTime">--:--:--</div></div>
+      </div>
+      <div class="card stack">
+        <div class="label">电量统计</div>
+        <div class="grid energy-grid">
+          <div class="metric metric-energy"><div class="label">电量</div><div class="value" id="energy">-- mWh</div></div>
+          <div class="metric metric-charge"><div class="label">容量</div><div class="value" id="charge">-- mAh</div></div>
+          <div class="metric metric-time"><div class="label">计量时间</div><div class="value" id="meterTime">--:--:--</div></div>
+          <div class="stack"><button id="meterReset" class="secondary">重置电量</button><div class="muted" id="meterMsg"></div></div>
+        </div>
       </div>
       <div class="grid-2">
-          <div class="card stack">
-            <div class="row"><div><div class="label">输出</div><div class="metric"><div class="value" id="output">--</div></div></div><button id="outputBtn" class="switch" aria-label="切换输出"></button></div>
+          <div class="card stack output-card">
+            <div class="output-control"><div class="metric metric-output"><div class="label">输出状态</div><div class="value" id="output">--</div></div><div class="output-actions"><span class="muted" id="outputHint">读取中</span><button id="outputBtn" class="switch" aria-label="切换输出"></button></div></div>
             <div class="muted" id="outputMsg"></div>
           </div>
-        <div class="card"><div class="label">保护状态</div><div id="protectPills"></div></div>
+        <div class="card stack"><div class="row"><div class="label">保护状态</div><span class="pill" id="protectMode">读取中</span></div><div class="protect-list" id="protectPills"></div></div>
       </div>
     </main>
   </div>
@@ -45,6 +55,12 @@
     let lastState = null;
     let timer = null;
     const fmt = (n, d) => Number.isFinite(n) ? Number(n).toFixed(d) : '--';
+    const fmtAbs = (n, d) => Number.isFinite(n) ? Math.abs(Number(n)).toFixed(d) : '--';
+    const duration = ms => {
+      const seconds = Math.floor(Number(ms || 0) / 1000);
+      const pad = n => String(n).padStart(2, '0');
+      return `${pad(Math.floor(seconds / 3600))}:${pad(Math.floor(seconds / 60) % 60)}:${pad(seconds % 60)}`;
+    };
     const api = async (url, options) => {
       const res = await fetch(url, Object.assign({ cache: 'no-store' }, options || {}));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -58,10 +74,18 @@
       $('current').textContent = `${fmt(data.current_a, 3)} A`;
       $('power').textContent = `${fmt(data.power_w, 3)} W`;
       $('temp').textContent = `${fmt(data.board_temp_c, 1)} / ${fmt(data.chip_temp_c, 1)} C`;
+      $('energy').textContent = `${fmtAbs(data.energy_mwh, 3)} mWh`;
+      $('charge').textContent = `${fmtAbs(data.charge_mah, 3)} mAh`;
+      $('meterTime').textContent = duration(data.meter_time_ms);
+      $('systemTime').textContent = duration(data.uptime_ms);
       $('output').textContent = data.output_on ? 'ON' : 'OFF';
+      $('output').className = data.output_on ? 'value output-on' : 'value output-off';
+      $('outputHint').textContent = data.output_on ? '点击关闭' : '点击开启';
       $('outputBtn').className = data.output_on ? 'switch on' : 'switch';
       $('outputBtn').title = data.output_on ? '关闭输出' : '打开输出';
-      $('protectPills').innerHTML = pill('OTP', data.protect.otp) + pill('OVP', data.protect.ovp) + pill('UVP', data.protect.uvp) + pill('OCP', data.protect.ocp);
+      $('protectMode').className = data.protect_bypassed ? 'pill warn' : 'pill ok';
+      $('protectMode').textContent = data.protect_bypassed ? '保护已关闭' : '保护已启用';
+      $('protectPills').innerHTML = pill('过温保护', data.protect.otp) + pill('过压保护', data.protect.ovp) + pill('欠压保护', data.protect.uvp) + pill('过流保护', data.protect.ocp);
       $('topStatus').textContent = `IP ${data.wifi.ip || '--'} · 输出 ${data.output_on ? 'ON' : 'OFF'} · ${data.wifi.mode}`;
     }
     async function loadState() {
@@ -70,6 +94,11 @@
     $('outputBtn').onclick = async () => {
       const data = await postJson('/api/output', { state: !(lastState && lastState.output_on) });
       $('outputMsg').textContent = data.ok ? '输出已更新' : `输出失败: ${data.reason}`;
+      await loadState();
+    };
+    $('meterReset').onclick = async () => {
+      await postJson('/api/meter/reset');
+      $('meterMsg').textContent = '电量已重置';
       await loadState();
     };
     function restart() {

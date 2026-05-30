@@ -43,6 +43,7 @@ public:
     PageId id() const override;
     const char* title() const override;
     uint32_t refresh_interval_ms() const override;
+    bool handle_button(ButtonId button, ButtonEvent event) override;
     void render(RenderMode mode) override;
 };
 
@@ -73,7 +74,7 @@ private:
 };
 
 /**
- * @brief 设置页，提供单层菜单和双击修改设置项
+ * @brief 设置页，提供单层菜单和大按键修改设置项
  */
 class SettingsPage final : public Page {
 public:

@@ -3,7 +3,7 @@
  * @LastEditors: qingmeijiupiao
  * @Description: 屏幕应用页面实现，包含主页数据渲染、无线状态页、设置页和预留页面
  * @Author: qingmeijiupiao
- * @LastEditTime: 2026-05-30
+ * @LastEditTime: 2026-05-30 19:15:38
  */
 #include "pages.h"
 
@@ -13,6 +13,7 @@
 #include "DENGB12.h"
 #include "DENGB16.h"
 #include "DENGB20.h"
+#include "energy_meter.h"
 #include "ErrorRectangle.h"
 #include "WarningRectangle.h"
 #include "can_callback.h"
@@ -26,6 +27,22 @@
 #include "wifi_service.h"
 
 namespace SCREEN {
+namespace {
+
+void format_meter_line(char* line, size_t line_size, char label, int64_t value_u, const char* unit) {
+    const double value_m = std::abs(value_u / 1000.0);
+    int precision = 0;
+    if (value_m < 10000.0) {
+        precision = 3;
+    } else if (value_m < 100000.0) {
+        precision = 2;
+    } else if (value_m < 1000000.0) {
+        precision = 1;
+    }
+    snprintf(line, line_size, "%c %.*f%s", label, precision, value_m, unit);
+}
+
+} // namespace
 
 PageId DashboardPage::id() const {
     return PageId::Dashboard;
@@ -56,12 +73,12 @@ void DashboardPage::render(RenderMode mode) {
     float voltage = global_state.voltage_mV / 1000.0f;
     float current = std::abs(global_state.current_uA / 1000000.0f);
     snprintf(temp_str, sizeof(temp_str), "%.3fV", voltage);
-    ST7735::draw_string(28, 2, temp_str, ST7735::color_t(0xef2a2a), ST7735::BLACK, DENGB20);
+    ST7735::draw_string(28, 4, temp_str, ST7735::color_t(0xef2a2a), ST7735::BLACK, DENGB20);
     snprintf(temp_str, sizeof(temp_str), "%.3fA", current);
-    ST7735::draw_string(28, 25, temp_str, ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB20);
+    ST7735::draw_string(28, 27, temp_str, ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB20);
 
     snprintf(temp_str, sizeof(temp_str), "%.3fW", current * voltage);
-    ST7735::draw_string(28, 47, temp_str, ST7735::color_t(0x003ED0), ST7735::BLACK, DENGB16);
+    ST7735::draw_string(28, 49, temp_str, ST7735::color_t(0x003ED0), ST7735::BLACK, DENGB16);
 
     float temperature = global_state.board_temperature / 100.0f;
     if (temperature >= 100.0f || temperature < 0.0f) {
@@ -69,7 +86,7 @@ void DashboardPage::render(RenderMode mode) {
     } else {
         snprintf(temp_str, sizeof(temp_str), "%.1fC", temperature);
     }
-    ST7735::draw_string(28, 67, temp_str, ST7735::color_t(0xb3261e), ST7735::BLACK, DENGB12);
+    ST7735::draw_string(28, 69, temp_str, ST7735::color_t(0xb3261e), ST7735::BLACK, DENGB12);
 
     uint32_t total_seconds = (xTaskGetTickCount() * portTICK_PERIOD_MS) / 1000;
     uint32_t hour = total_seconds / 3600;
@@ -79,7 +96,7 @@ void DashboardPage::render(RenderMode mode) {
              static_cast<unsigned long>(hour),
              static_cast<unsigned long>(minute),
              static_cast<unsigned long>(second));
-    ST7735::draw_string(111, 0, temp_str, ST7735::WHITE, ST7735::BLACK, DENGB12);
+    ST7735::draw_string(111, 2, temp_str, ST7735::WHITE, ST7735::BLACK, DENGB12);
 
     if (global_state_bits.state_bit.out_put_state) {
         ST7735::draw_image(62, 66, OPEN_WIDTH, OPEN_HEIGHT, open_data);
@@ -111,10 +128,10 @@ void DashboardPage::draw_protect_tag(uint16_t x, uint16_t y, const char* text, P
 
     if (state == PROTECT_STATE_PROTECT) {
         ST7735::draw_image(x, y, ERRORRECTANGLE_WIDTH, ERRORRECTANGLE_HEIGHT, ErrorRectangle_data);
-        ST7735::draw_string(x + 5, y, text, ST7735::BLACK, error_background_color, DENGB16);
+        ST7735::draw_string(x + 5, y + 2, text, ST7735::BLACK, error_background_color, DENGB16);
     } else if (state == PROTECT_STATE_WARNING) {
         ST7735::draw_image(x, y, WARNINGRECTANGLE_WIDTH, WARNINGRECTANGLE_HEIGHT, WarningRectangle_data);
-        ST7735::draw_string(x + 5, y, text, ST7735::BLACK, warning_background_color, DENGB16);
+        ST7735::draw_string(x + 5, y + 2, text, ST7735::BLACK, warning_background_color, DENGB16);
     }
 }
 
@@ -130,17 +147,40 @@ uint32_t BatteryPage::refresh_interval_ms() const {
     return 250;
 }
 
+bool BatteryPage::handle_button(ButtonId button, ButtonEvent event) {
+    if (button != ButtonId::Side || event != ButtonEvent::LONG_PRESS) {
+        return false;
+    }
+
+    EnergyMeter::reset();
+    return true;
+}
+
 void BatteryPage::render(RenderMode mode) {
     (void)mode;
     ST7735::fill_screen(ST7735::BLACK);
-    draw_page_title("Battery");
 
-    auto& state = get_global_state();
-    char line[24];
-    snprintf(line, sizeof(line), "VIN %.3fV", state.voltage_mV / 1000.0f);
-    ST7735::draw_string(8, 30, line, ST7735::color_t(0xef2a2a), ST7735::BLACK, DENGB16);
-    snprintf(line, sizeof(line), "I %.3fA", std::abs(state.current_uA / 1000000.0f));
-    ST7735::draw_string(8, 50, line, ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB16);
+    const EnergyMeter::Snapshot meter = EnergyMeter::snapshot();
+    const int64_t meter_uwh = meter.energy_uwh;
+    const int64_t meter_uah = meter.charge_uah;
+    const uint32_t system_seconds = (xTaskGetTickCount() * portTICK_PERIOD_MS) / 1000;
+    const uint64_t meter_seconds = meter.meter_time_ms / 1000;
+
+    char line[32];
+    format_meter_line(line, sizeof(line), 'E', meter_uwh, "mWh");
+    ST7735::draw_string(5, 4, line, ST7735::color_t(0x003ED0), ST7735::BLACK, DENGB20);
+    format_meter_line(line, sizeof(line), 'Q', meter_uah, "mAh");
+    ST7735::draw_string(5, 32, line, ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB20);
+    snprintf(line, sizeof(line), "S:%02lu:%02lu:%02lu",
+             static_cast<unsigned long>(system_seconds / 3600),
+             static_cast<unsigned long>((system_seconds / 60) % 60),
+             static_cast<unsigned long>(system_seconds % 60));
+    ST7735::draw_string(5, 64, line, ST7735::WHITE, ST7735::BLACK, DENGB12);
+    snprintf(line, sizeof(line), "M:%02lu:%02lu:%02lu",
+             static_cast<unsigned long>(meter_seconds / 3600),
+             static_cast<unsigned long>((meter_seconds / 60) % 60),
+             static_cast<unsigned long>(meter_seconds % 60));
+    ST7735::draw_string(80, 64, line, ST7735::WHITE, ST7735::BLACK, DENGB12);
 }
 
 PageId CurvePage::id() const {
@@ -190,24 +230,30 @@ void WirelessPage::render(RenderMode mode) {
     ST7735::fill_screen(ST7735::BLACK);
     draw_page_title("Wireless");
 
-    char line[32];
+    char line[40];
     snprintf(line, sizeof(line), "Mode %s", wifi_mode_text(WifiService::get_mode()));
-    ST7735::draw_string(8, 28, line, ST7735::WHITE, ST7735::BLACK, DENGB16);
+    ST7735::draw_string(8, 27, line, ST7735::WHITE, ST7735::BLACK, DENGB12);
 
     if (WifiService::is_provisioning()) {
-        ST7735::draw_string(8, 48, WifiService::get_ap_ssid(), ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB12);
-        ST7735::draw_string(8, 63, "192.168.4.1", ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB12);
+        ST7735::draw_string(8, 43, WifiService::get_ap_ssid(), ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB12);
+        ST7735::draw_string(8, 60, "192.168.4.1", ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB12);
     } else if (WifiService::get_mode() == WifiService::Mode::STA) {
         WifiService::Config cfg = WifiService::get_config();
         IP_t ip = WifiService::get_ip();
+        uint8_t channel = 0;
+        WifiService::get_channel(&channel);
         snprintf(line, sizeof(line), "%.20s", cfg.ssid[0] == '\0' ? "STA connected" : cfg.ssid);
-        ST7735::draw_string(8, 48, line, ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB12);
+        ST7735::draw_string(8, 40, line, ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB12);
         snprintf(line, sizeof(line), "%u.%u.%u.%u",
                  static_cast<unsigned>(ip.octet1),
                  static_cast<unsigned>(ip.octet2),
                  static_cast<unsigned>(ip.octet3),
                  static_cast<unsigned>(ip.octet4));
-        ST7735::draw_string(8, 63, line, ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB12);
+        ST7735::draw_string(8, 53, line, ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB12);
+        snprintf(line, sizeof(line), "Signal %u%%  CH %u",
+                 static_cast<unsigned>(WifiService::get_signal_percent()),
+                 static_cast<unsigned>(channel));
+        ST7735::draw_string(8, 66, line, ST7735::color_t(0x808080), ST7735::BLACK, DENGB12);
     } else if (last_result_ != ESP_OK) {
         snprintf(line, sizeof(line), "ERR %s", esp_err_to_name(last_result_));
         ST7735::draw_string(8, 50, line, ST7735::color_t(0xef2a2a), ST7735::BLACK, DENGB12);
@@ -245,23 +291,23 @@ void SettingsPage::on_edit_exit() {
 }
 
 bool SettingsPage::handle_button(ButtonId button, ButtonEvent event) {
-    if (button != ButtonId::Side || mode_ == Mode::View) {
+    if (mode_ == Mode::View) {
         return false;
     }
 
-    if (event == ButtonEvent::SHORT_PRESS) {
+    if (button == ButtonId::Side && event == ButtonEvent::SHORT_PRESS) {
         // 菜单态短按只移动选中项，避免误修改配置。
         selected_ = (selected_ + 1) % ITEM_COUNT;
         return true;
     }
 
-    if (event == ButtonEvent::DOUBLE_CLICK) {
-        // 所有设置项统一双击修改，无二级编辑状态。
+    if (button == ButtonId::Main && event == ButtonEvent::SHORT_PRESS) {
+        // 所有设置项统一使用大按键修改，无二级编辑状态。
         adjust_selected_item();
         return true;
     }
 
-    if (event == ButtonEvent::LONG_PRESS) {
+    if (button == ButtonId::Side && event == ButtonEvent::LONG_PRESS) {
         mode_ = Mode::View;
         return true;
     }
@@ -281,12 +327,6 @@ void SettingsPage::render(RenderMode mode) {
         ST7735::color_t color = row == 0 && mode_ != Mode::View ? ST7735::YELLOW : ST7735::WHITE;
         ST7735::draw_string(8, y, item_name(item), color, ST7735::BLACK, DENGB12);
         ST7735::draw_string(94, y, item_value(item), color, ST7735::BLACK, DENGB12);
-    }
-
-    if (mode_ == Mode::View) {
-        ST7735::draw_string(8, 68, "Hold: menu", ST7735::color_t(0x808080), ST7735::BLACK, DENGB12);
-    } else {
-        ST7735::draw_string(8, 68, "Dbl: change", ST7735::color_t(0x808080), ST7735::BLACK, DENGB12);
     }
 }
 

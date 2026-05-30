@@ -362,4 +362,41 @@ wifi_state_t get_wifi_state() {
     return WiFiManager::instance().get_state();
 }
 
+/**
+ * @brief 获取当前 STA 连接的 RSSI
+ */
+int8_t get_rssi() {
+    return WiFiManager::instance().get_rssi();
+}
+
+/**
+ * @brief 将当前 STA RSSI 映射为便于展示的信号强度百分比
+ */
+uint8_t get_signal_percent() {
+    if (get_wifi_state() != WIFI_STATE_STA_CONNECTED) {
+        return 0;
+    }
+
+    int8_t rssi = get_rssi();
+    if (rssi <= -100) {
+        return 0;
+    }
+    if (rssi >= -50) {
+        return 100;
+    }
+    return static_cast<uint8_t>(2 * (rssi + 100));
+}
+
+/**
+ * @brief 获取当前 WiFi 主信道
+ */
+esp_err_t get_channel(uint8_t* channel) {
+    if (channel == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    wifi_second_chan_t second = WIFI_SECOND_CHAN_NONE;
+    return WiFiManager::instance().get_channel(channel, &second);
+}
+
 } // namespace WifiService

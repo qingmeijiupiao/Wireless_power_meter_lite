@@ -5,7 +5,7 @@
 
 #include "Font.h"
 
-constexpr int DENGB20_FONT_HEIGHT = 18;
+constexpr int DENGB20_FONT_HEIGHT = 19;
 
 extern const Font_t DENGB20;
 

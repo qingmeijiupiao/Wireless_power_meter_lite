@@ -18,6 +18,7 @@
 #include "esp_timer.h"
 #include "can_callback.h"
 #include "current_calibration.h"
+#include "energy_meter.h"
 #include "global_state.h"
 #include "hardware.h"
 #include "power_output.h"
@@ -27,6 +28,7 @@
 
 namespace WebBackend {
 
+static const char* TAG = "WebBackendApi";
 static constexpr size_t LOG_RESPONSE_RAW_MAX = 2400;
 static char log_snapshot_buffer[LOG_RESPONSE_RAW_MAX + 1];
 
@@ -82,6 +84,7 @@ esp_err_t state_handler(WebServer::Request* request) {
     float board_temp_c = state.board_temperature / 100.0f;
     float chip_temp_c = state.chip_temperature / 100.0f;
     auto& protect = state.protect_states.states_bit;
+    const EnergyMeter::Snapshot meter = EnergyMeter::snapshot();
 
     snprintf(response_buffer, sizeof(response_buffer),
         "{"
@@ -90,6 +93,9 @@ esp_err_t state_handler(WebServer::Request* request) {
         "\"power_w\":%.3f,"
         "\"board_temp_c\":%.2f,"
         "\"chip_temp_c\":%.2f,"
+        "\"energy_mwh\":%.3f,"
+        "\"charge_mah\":%.3f,"
+        "\"meter_time_ms\":%" PRIu64 ","
         "\"output_on\":%s,"
         "\"protect_bypassed\":%s,"
         "\"uptime_ms\":%lld,"
@@ -101,6 +107,9 @@ esp_err_t state_handler(WebServer::Request* request) {
         voltage_v * abs_current_a,
         board_temp_c,
         chip_temp_c,
+        meter.energy_uwh / 1000.0,
+        meter.charge_uah / 1000.0,
+        meter.meter_time_ms,
         state.global_state_bits.state_bit.out_put_state ? "true" : "false",
         protect_is_bypassed() ? "true" : "false",
         esp_timer_get_time() / 1000,
@@ -116,6 +125,13 @@ esp_err_t state_handler(WebServer::Request* request) {
         WifiService::get_last_error());
 
     return WebServer::send_json(request, response_buffer);
+}
+
+/** @brief POST /api/meter/reset, reset the shared UI/Web metering session. */
+esp_err_t meter_reset_handler(WebServer::Request* request) {
+    EnergyMeter::reset();
+    ESP_LOGI(TAG, "meter session reset");
+    return WebServer::send_json(request, "{\"ok\":true}\n");
 }
 
 /**
@@ -138,9 +154,15 @@ esp_err_t output_handler(WebServer::Request* request) {
     } else if (has_state) {
         result = target ? PowerOutput::on() : PowerOutput::off();
     } else {
+        ESP_LOGW(TAG, "output request rejected: missing state");
         return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"missing_state\"}\n", strlen("{\"ok\":false,\"reason\":\"missing_state\"}\n"));
     }
 
+    if (result == PowerOutput::OutputResult::OK) {
+        ESP_LOGI(TAG, "output updated: state=%s", PowerOutput::get_state() ? "on" : "off");
+    } else {
+        ESP_LOGW(TAG, "output update rejected: reason=%s", output_result_to_str(result));
+    }
     snprintf(response_buffer, sizeof(response_buffer),
         "{\"ok\":%s,\"reason\":\"%s\",\"output_on\":%s}\n",
         result == PowerOutput::OutputResult::OK ? "true" : "false",
@@ -169,6 +191,7 @@ esp_err_t reboot_handler(WebServer::Request* request) {
     }
     esp_timer_stop(reboot_timer);
     esp_timer_start_once(reboot_timer, 300000);
+    ESP_LOGW(TAG, "reboot requested, restarting in 300 ms");
     return WebServer::send_json(request, "{\"ok\":true,\"reason\":\"rebooting\"}\n");
 }
 
@@ -182,7 +205,7 @@ esp_err_t system_handler(WebServer::Request* request) {
     snprintf(detail_response_buffer, sizeof(detail_response_buffer),
         "{"
         "\"hardware_version\":%u,"
-        "\"firmware\":{\"major\":%u,\"minor\":%u,\"patch\":%u,\"project\":\"%s\",\"idf\":\"%s\",\"build_date\":\"%s\",\"build_time\":\"%s\"},"
+        "\"firmware\":{\"major\":%u,\"minor\":%u,\"patch\":%u,\"project\":\"%s\",\"build_date\":\"%s\",\"build_time\":\"%s\"},"
         "\"mac\":{\"sta\":\"%s\",\"ap\":\"%s\"},"
         "\"uptime_ms\":%lld"
         "}\n",
@@ -191,7 +214,6 @@ esp_err_t system_handler(WebServer::Request* request) {
         static_cast<unsigned>(VERSION_MINOR),
         static_cast<unsigned>(VERSION_PATCH),
         app_desc->project_name,
-        app_desc->idf_ver,
         app_desc->date,
         app_desc->time,
         sta_mac,
@@ -216,6 +238,11 @@ esp_err_t backlight_handler(WebServer::Request* request) {
             return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"invalid_brightness\"}\n", strlen("{\"ok\":false,\"reason\":\"invalid_brightness\"}\n"));
         }
         ret = ST7735::set_backlight(static_cast<uint8_t>(brightness));
+        if (ret == ESP_OK) {
+            ESP_LOGD(TAG, "backlight updated: brightness=%lu", brightness);
+        } else {
+            ESP_LOGW(TAG, "backlight update failed: brightness=%lu reason=%s", brightness, esp_err_to_name(ret));
+        }
         snprintf(response_buffer, sizeof(response_buffer),
             "{\"ok\":%s,\"reason\":\"%s\",\"brightness\":%u}\n",
             ret == ESP_OK ? "true" : "false",
@@ -256,7 +283,9 @@ esp_err_t protect_handler(WebServer::Request* request) {
             return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"missing_enabled\"}\n", strlen("{\"ok\":false,\"reason\":\"missing_enabled\"}\n"));
         }
         protect_set_bypassed(!enabled);
+        ESP_LOGI(TAG, "protection updated: enabled=%s", enabled ? "true" : "false");
         if (enabled && protect_should_block_output()) {
+            ESP_LOGW(TAG, "protection enabled with active fault, forcing output off");
             PowerOutput::off();
         }
     }
@@ -302,7 +331,8 @@ esp_err_t protect_handler(WebServer::Request* request) {
  * 查询或修改 CAN 运行参数。当前只更新运行期变量，是否需要重启或重新初始化由上层提示。
  */
 esp_err_t can_handler(WebServer::Request* request) {
-    if (request->method == WebServer::Method::POST) {
+    const bool is_post = request->method == WebServer::Method::POST;
+    if (is_post) {
         esp_err_t ret = WebServer::load_body(request);
         if (ret != ESP_OK) {
             return ret;
@@ -322,6 +352,9 @@ esp_err_t can_handler(WebServer::Request* request) {
 
     uint32_t can_id = CanCallback::CAN_ID;
     uint32_t baudrate = CanCallback::CAN_BAUDRATE;
+    if (is_post) {
+        ESP_LOGI(TAG, "CAN config updated: baudrate=%lu id=0x%lX", baudrate, can_id);
+    }
     snprintf(response_buffer, sizeof(response_buffer),
         "{\"ok\":true,\"baudrate\":%lu,\"id\":%lu,\"id_hex\":\"0x%lX\",\"note\":\"changed values may require CAN reinitialization or reboot\"}\n",
         baudrate,
@@ -360,6 +393,11 @@ esp_err_t calibration_handler(WebServer::Request* request) {
 
 /** @brief GET /api/diagnostics，返回底层采样寄存器等诊断数据。 */
 esp_err_t diagnostics_handler(WebServer::Request* request) {
+    if (current_register_raw == nullptr || voltage_register_raw == nullptr) {
+        ESP_LOGW(TAG, "INA226 diagnostics unavailable: current_raw=%p voltage_raw=%p",
+            static_cast<void*>(current_register_raw),
+            static_cast<void*>(voltage_register_raw));
+    }
     snprintf(response_buffer, sizeof(response_buffer),
         "{\"ina226\":{\"current_register_raw\":%d,\"voltage_register_raw\":%u,\"available\":%s}}\n",
         current_register_raw == nullptr ? 0 : *current_register_raw,
@@ -368,23 +406,29 @@ esp_err_t diagnostics_handler(WebServer::Request* request) {
     return WebServer::send_json(request, response_buffer);
 }
 
-/** @brief GET /api/wifi/status，返回 WiFiService 当前状态和 MAC 信息。 */
+/** @brief GET /api/wifi/status，返回 WiFiService 当前状态、信号、信道和 MAC 信息。 */
 esp_err_t wifi_status_handler(WebServer::Request* request) {
     IP_t ip = WifiService::get_ip();
     char ip_text[16] = {};
     char sta_mac[18] = {};
     char ap_mac[18] = {};
+    uint8_t channel = 0;
     ip_to_str(ip, ip_text, sizeof(ip_text));
     mac_to_str(WiFiManager::instance().get_mac(WIFI_IF_STA), sta_mac, sizeof(sta_mac));
     mac_to_str(WiFiManager::instance().get_mac(WIFI_IF_AP), ap_mac, sizeof(ap_mac));
     auto cfg = WifiService::get_config();
+    const bool channel_available = WifiService::get_channel(&channel) == ESP_OK;
     snprintf(response_buffer, sizeof(response_buffer),
-        "{\"mode\":\"%s\",\"state\":%d,\"ip\":\"%s\",\"saved_ssid\":\"%s\",\"ap_ssid\":\"%s\",\"sta_mac\":\"%s\",\"ap_mac\":\"%s\",\"boot_enabled\":%s,\"last_error\":\"%s\"}\n",
+        "{\"mode\":\"%s\",\"state\":%d,\"ip\":\"%s\",\"saved_ssid\":\"%s\",\"ap_ssid\":\"%s\",\"rssi\":%d,\"signal_percent\":%u,\"channel\":%u,\"channel_available\":%s,\"sta_mac\":\"%s\",\"ap_mac\":\"%s\",\"boot_enabled\":%s,\"last_error\":\"%s\"}\n",
         mode_to_str(WifiService::get_mode()),
         (int)WifiService::get_wifi_state(),
         ip_text,
         cfg.ssid,
         WifiService::get_ap_ssid(),
+        static_cast<int>(WifiService::get_rssi()),
+        static_cast<unsigned>(WifiService::get_signal_percent()),
+        static_cast<unsigned>(channel),
+        channel_available ? "true" : "false",
         sta_mac,
         ap_mac,
         cfg.web_enabled_on_boot ? "true" : "false",
@@ -512,6 +556,7 @@ esp_err_t wifi_scan_handler(WebServer::Request* request) {
     size_t count = 0;
     esp_err_t ret = WifiService::scan_ap_list(results, WifiService::WIFI_SCAN_MAX_RESULTS, &count);
     if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "WiFi scan failed: reason=%s", esp_err_to_name(ret));
         snprintf(scan_response_buffer, sizeof(scan_response_buffer),
             "{\"ok\":false,\"reason\":\"%s\",\"aps\":[]}\n", esp_err_to_name(ret));
         return WebServer::send_json(request, scan_response_buffer);
@@ -556,13 +601,17 @@ esp_err_t wifi_connect_handler(WebServer::Request* request) {
     char ssid[WIFI_SSID_MAX_LEN + 1] = {};
     char password[WIFI_PASSWORD_MAX_LEN + 1] = {};
     if (!json_get_string(request->body, "ssid", ssid, sizeof(ssid))) {
+        ESP_LOGW(TAG, "WiFi connect rejected: missing SSID");
         return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"missing_ssid\"}\n", strlen("{\"ok\":false,\"reason\":\"missing_ssid\"}\n"));
     }
     json_get_string(request->body, "password", password, sizeof(password));
 
     ret = WifiService::connect_sta(ssid, password, true);
     if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "WiFi connect failed: ssid=%s reason=%s, restoring provision AP", ssid, esp_err_to_name(ret));
         WifiService::start_provision_ap();
+    } else {
+        ESP_LOGI(TAG, "WiFi connected: ssid=%s", ssid);
     }
 
     IP_t ip = WifiService::get_ip();
@@ -580,6 +629,11 @@ esp_err_t wifi_connect_handler(WebServer::Request* request) {
 /** @brief POST /api/wifi/ap，手动切换到 AP 配网模式。 */
 esp_err_t wifi_ap_handler(WebServer::Request* request) {
     esp_err_t ret = WifiService::start_provision_ap();
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "WiFi provision AP started: ssid=%s", WifiService::get_ap_ssid());
+    } else {
+        ESP_LOGW(TAG, "WiFi provision AP start failed: reason=%s", esp_err_to_name(ret));
+    }
     IP_t ip = WifiService::get_ip();
     char ip_text[16] = {};
     ip_to_str(ip, ip_text, sizeof(ip_text));
@@ -595,6 +649,11 @@ esp_err_t wifi_ap_handler(WebServer::Request* request) {
 /** @brief POST /api/wifi/off，关闭 WifiService 管理的网络功能。 */
 esp_err_t wifi_off_handler(WebServer::Request* request) {
     esp_err_t ret = WifiService::stop();
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "WiFi service stopped");
+    } else {
+        ESP_LOGW(TAG, "WiFi service stop failed: reason=%s", esp_err_to_name(ret));
+    }
     snprintf(response_buffer, sizeof(response_buffer),
         "{\"ok\":%s,\"reason\":\"%s\"}\n",
         ret == ESP_OK ? "true" : "false",
@@ -605,6 +664,11 @@ esp_err_t wifi_off_handler(WebServer::Request* request) {
 /** @brief POST /api/wifi/on，按 NVS 配置启动默认 WiFi/Web 网络模式。 */
 esp_err_t wifi_on_handler(WebServer::Request* request) {
     esp_err_t ret = WifiService::start_default();
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "WiFi service started: mode=%s", mode_to_str(WifiService::get_mode()));
+    } else {
+        ESP_LOGW(TAG, "WiFi service start failed: reason=%s", esp_err_to_name(ret));
+    }
     IP_t ip = WifiService::get_ip();
     char ip_text[16] = {};
     ip_to_str(ip, ip_text, sizeof(ip_text));
@@ -625,9 +689,15 @@ esp_err_t wifi_boot_handler(WebServer::Request* request) {
     }
     bool enabled = true;
     if (!json_get_bool(request->body, "enabled", &enabled)) {
+        ESP_LOGW(TAG, "WiFi boot config rejected: missing enabled");
         return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"missing_enabled\"}\n", strlen("{\"ok\":false,\"reason\":\"missing_enabled\"}\n"));
     }
     ret = WifiService::set_web_enabled_on_boot(enabled);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "WiFi boot config updated: enabled=%s", enabled ? "true" : "false");
+    } else {
+        ESP_LOGW(TAG, "WiFi boot config update failed: reason=%s", esp_err_to_name(ret));
+    }
     snprintf(response_buffer, sizeof(response_buffer),
         "{\"ok\":%s,\"reason\":\"%s\",\"boot_enabled\":%s}\n",
         ret == ESP_OK ? "true" : "false",
@@ -639,6 +709,11 @@ esp_err_t wifi_boot_handler(WebServer::Request* request) {
 /** @brief POST /api/wifi/clear，清除已保存的 STA 凭据。 */
 esp_err_t wifi_clear_handler(WebServer::Request* request) {
     esp_err_t ret = WifiService::clear_saved_sta();
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "saved WiFi credentials cleared");
+    } else {
+        ESP_LOGW(TAG, "clear saved WiFi credentials failed: reason=%s", esp_err_to_name(ret));
+    }
     snprintf(response_buffer, sizeof(response_buffer),
         "{\"ok\":%s,\"reason\":\"%s\"}\n",
         ret == ESP_OK ? "true" : "false",
