@@ -104,11 +104,12 @@ private:
         Backlight,
         WifiBoot,
         ProtectBypass,
+        CanBaudrate,
         CanTerm,
         ITEM_COUNT,
     };
 
-    static constexpr uint8_t VISIBLE_ROWS = 3;
+    static constexpr uint8_t VISIBLE_ROWS = 4;
 
     /**
      * @brief 获取设置项名称

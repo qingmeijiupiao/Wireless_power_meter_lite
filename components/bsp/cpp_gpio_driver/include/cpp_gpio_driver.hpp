@@ -1,6 +1,7 @@
 #ifndef CPP_GPIO_DRIVER_HPP
 #define CPP_GPIO_DRIVER_HPP
 #include <driver/gpio.h>
+#include <functional>
 
 enum class GpioMode {
     INPUT,

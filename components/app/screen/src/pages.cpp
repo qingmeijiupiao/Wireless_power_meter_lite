@@ -3,7 +3,7 @@
  * @LastEditors: qingmeijiupiao
  * @Description: 屏幕应用页面实现，包含主页数据渲染、无线状态页、设置页和预留页面
  * @Author: qingmeijiupiao
- * @LastEditTime: 2026-05-30 19:15:38
+ * @LastEditTime: 2026-05-31 01:12:56
  */
 #include "pages.h"
 
@@ -17,29 +17,40 @@
 #include "ErrorRectangle.h"
 #include "WarningRectangle.h"
 #include "can_callback.h"
+#include "can_resistor.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "global_state.h"
+#include "settings_logo.h"
 #include "st7735.h"
 #include "ui_close.h"
 #include "ui_open.h"
 #include "ui_static.h"
 #include "wifi_service.h"
+#include "ah_logo.h"
+#include "wh_logo.h"
 
 namespace SCREEN {
 namespace {
 
-void format_meter_line(char* line, size_t line_size, char label, int64_t value_u, const char* unit) {
+constexpr uint32_t CAN_BAUDRATES[] = {
+    1_Mbps,
+    500_Kbps,
+    250_Kbps,
+    125_Kbps,
+};
+
+void format_meter_line(char* line, size_t line_size, int64_t value_u, const char* unit) {
     const double value_m = std::abs(value_u / 1000.0);
     int precision = 0;
-    if (value_m < 10000.0) {
+    if (value_m < 1000.0) {
         precision = 3;
-    } else if (value_m < 100000.0) {
+    } else if (value_m < 10000.0) {
         precision = 2;
-    } else if (value_m < 1000000.0) {
+    } else if (value_m < 100000.0) {
         precision = 1;
     }
-    snprintf(line, line_size, "%c %.*f%s", label, precision, value_m, unit);
+    snprintf(line, line_size, "%.*f%s", precision, value_m, unit);
 }
 
 } // namespace
@@ -167,20 +178,26 @@ void BatteryPage::render(RenderMode mode) {
     const uint64_t meter_seconds = meter.meter_time_ms / 1000;
 
     char line[32];
-    format_meter_line(line, sizeof(line), 'E', meter_uwh, "mWh");
-    ST7735::draw_string(5, 4, line, ST7735::color_t(0x003ED0), ST7735::BLACK, DENGB20);
-    format_meter_line(line, sizeof(line), 'Q', meter_uah, "mAh");
-    ST7735::draw_string(5, 32, line, ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB20);
+    ST7735::draw_image(2, 8, WH_LOGO_WIDTH, WH_LOGO_HEIGHT, wh_logo_data);
+
+    ST7735::draw_image(2, 38, AH_LOGO_WIDTH, AH_LOGO_HEIGHT, ah_logo_data);
+
+    format_meter_line(line, sizeof(line), meter_uwh, "mWh");
+    ST7735::draw_string(34, 10, line, ST7735::color_t(0x003ED0), ST7735::BLACK, DENGB20);
+    format_meter_line(line, sizeof(line), meter_uah, "mAh");
+    ST7735::draw_string(34, 40, line, ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB20);
+
+    //time
     snprintf(line, sizeof(line), "S:%02lu:%02lu:%02lu",
              static_cast<unsigned long>(system_seconds / 3600),
              static_cast<unsigned long>((system_seconds / 60) % 60),
              static_cast<unsigned long>(system_seconds % 60));
-    ST7735::draw_string(5, 64, line, ST7735::WHITE, ST7735::BLACK, DENGB12);
+    ST7735::draw_string(2, 68, line, ST7735::color_t(0x2FC9EC), ST7735::BLACK, DENGB12);
     snprintf(line, sizeof(line), "M:%02lu:%02lu:%02lu",
              static_cast<unsigned long>(meter_seconds / 3600),
              static_cast<unsigned long>((meter_seconds / 60) % 60),
              static_cast<unsigned long>(meter_seconds % 60));
-    ST7735::draw_string(80, 64, line, ST7735::WHITE, ST7735::BLACK, DENGB12);
+    ST7735::draw_string(90, 68, line, ST7735::color_t(0x1EF851), ST7735::BLACK, DENGB12);
 }
 
 PageId CurvePage::id() const {
@@ -318,15 +335,20 @@ bool SettingsPage::handle_button(ButtonId button, ButtonEvent event) {
 void SettingsPage::render(RenderMode mode) {
     (void)mode;
     ST7735::fill_screen(ST7735::BLACK);
-    draw_page_title("Settings");
+    ST7735::draw_image(2, 16, SETTINGS_LOGO_WIDTH, SETTINGS_LOGO_HEIGHT, settings_logo_data);
 
-    // 小屏一次显示 3 行，第一行始终是当前选中的设置项。
+    // 左侧保留设置图标，右侧一次显示 4 行，第一行始终是当前选中的设置项。
     for (uint8_t row = 0; row < VISIBLE_ROWS; row++) {
         uint8_t item = (selected_ + row) % ITEM_COUNT;
-        uint16_t y = 27 + row * 17;
-        ST7735::color_t color = row == 0 && mode_ != Mode::View ? ST7735::YELLOW : ST7735::WHITE;
-        ST7735::draw_string(8, y, item_name(item), color, ST7735::BLACK, DENGB12);
-        ST7735::draw_string(94, y, item_value(item), color, ST7735::BLACK, DENGB12);
+        uint16_t y = 10 + row * 17;
+        bool selected = row == 0 && mode_ != Mode::View;
+        ST7735::color_t foreground = selected ? ST7735::BLACK : ST7735::WHITE;
+        ST7735::color_t background = selected ? ST7735::YELLOW : ST7735::BLACK;
+        if (selected) {
+            ST7735::fill_rect(54, y - 1, 106, 15, background);
+        }
+        ST7735::draw_string(56, y, item_name(item), foreground, background, DENGB12);
+        ST7735::draw_string(130, y, item_value(item), foreground, background, DENGB12);
     }
 }
 
@@ -344,7 +366,9 @@ const char* SettingsPage::item_name(uint8_t item) const {
         case WifiBoot:
             return "WiFi boot";
         case ProtectBypass:
-            return "Bypass";
+            return "Protect";
+        case CanBaudrate:
+            return "CAN baud";
         case CanTerm:
             return "CAN term";
         default:
@@ -362,9 +386,22 @@ const char* SettingsPage::item_value(uint8_t item) {
         case WifiBoot:
             return WifiService::is_web_enabled_on_boot() ? "ON" : "OFF";
         case ProtectBypass:
-            return protect_is_bypassed() ? "ON" : "OFF";
+            return protect_is_bypassed() ? "OFF" : "ON";
+        case CanBaudrate:
+            switch (CanCallback::CAN_BAUDRATE.read()) {
+                case 1_Mbps:
+                    return "1M";
+                case 500_Kbps:
+                    return "500K";
+                case 250_Kbps:
+                    return "250K";
+                case 125_Kbps:
+                    return "125K";
+                default:
+                    return "Other";
+            }
         case CanTerm:
-            return CanCallback::can_resistor.get() ? "ON" : "OFF";
+            return CanResistor::instance().get() ? "ON" : "OFF";
         default:
             return "";
     }
@@ -395,8 +432,20 @@ void SettingsPage::adjust_selected_item() {
         case ProtectBypass:
             protect_set_bypassed(!protect_is_bypassed());
             break;
+        case CanBaudrate: {
+            uint32_t current = CanCallback::CAN_BAUDRATE.read();
+            uint32_t next = CAN_BAUDRATES[0];
+            for (size_t i = 0; i < sizeof(CAN_BAUDRATES) / sizeof(CAN_BAUDRATES[0]); ++i) {
+                if (CAN_BAUDRATES[i] == current) {
+                    next = CAN_BAUDRATES[(i + 1) % (sizeof(CAN_BAUDRATES) / sizeof(CAN_BAUDRATES[0]))];
+                    break;
+                }
+            }
+            CanCallback::CAN_BAUDRATE = next;
+            break;
+        }
         case CanTerm:
-            CanCallback::can_resistor.set(!CanCallback::can_resistor.get());
+            CanResistor::instance().toggle();
             break;
         default:
             break;

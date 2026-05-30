@@ -98,8 +98,9 @@ sequenceDiagram
 | 屏幕旋转 | `Rotate` | `0` / `180` 之间切换，立即调用 `ST7735::set_rotation()` | `ui_rot` |
 | 背光档位 | `Bright` | 1-5 档循环，映射到 0-255 背光值 | `ui_bl` |
 | WiFi 开机启动 | `WiFi boot` | 调用 `WifiService::set_web_enabled_on_boot()` | `wifi_service` 内部 NVS |
-| 保护旁路 | `Bypass` | 调用 `protect_set_bypassed()` | 否，仅运行期 |
-| CAN 终端电阻 | `CAN term` | 调用 `CanCallback::can_resistor.set()` | 否，仅运行期 |
+| 保护开关 | `Protect` | 调用 `protect_set_bypassed()` | 否，仅运行期 |
+| CAN 波特率 | `CAN baud` | 在 `1M`、`500K`、`250K`、`125K` 之间循环切换，重启后生效 | `CAN_BAUDRATE` |
+| CAN 终端电阻 | `CAN term` | 调用 `CanResistor::instance().toggle()` | `can_term` |
 
 ## NVS Key
 

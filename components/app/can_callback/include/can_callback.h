@@ -12,7 +12,6 @@
 #include "HXC_TWAI.h"
 #include "HXC_NVS.h"
 #include "protect.h"
-#include "cpp_gpio_driver.hpp"
 
 namespace CanCallback {
 
@@ -57,7 +56,6 @@ constexpr uint32_t DEFAULT_CAN_BAUDRATE = 1_Mbps;
 constexpr uint32_t DEFAULT_DEVICE_CAN_ID = 0x400;//默认设备ID 设备ID大于0x700时使用扩展帧，否则使用标准帧
 extern HXC::NVS_DATA<uint32_t> CAN_BAUDRATE;
 extern HXC::NVS_DATA<uint32_t> CAN_ID;
-extern CppGpioDriver<GPIO_NUM_NC, GpioMode::OUTPUT> can_resistor;
 
 /**
  * @brief : CAN回调功能初始化
