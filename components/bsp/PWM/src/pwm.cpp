@@ -47,6 +47,7 @@ esp_err_t pwm_t::init(gpio_num_t _gpio_num,
         .timer_num = timer,
         .freq_hz = freq_hz,
         .clk_cfg = LEDC_AUTO_CLK,
+        .deconfigure = false,
     };
     esp_err_t ret = ledc_timer_config(&timer_conf);
     if (ret != ESP_OK) {
@@ -63,6 +64,8 @@ esp_err_t pwm_t::init(gpio_num_t _gpio_num,
         .duty = 0,
         .hpoint = 0,
         .sleep_mode = LEDC_SLEEP_MODE_NO_ALIVE_NO_PD,
+        .flags = {},
+        .deconfigure = false,
     };
     ret = ledc_channel_config(&chan_conf);
     if (ret != ESP_OK) {

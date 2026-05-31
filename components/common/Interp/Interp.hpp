@@ -75,8 +75,6 @@ public:
         if (i < 0) i = 0;
         if (i >= static_cast<int>(values.size()) - 1) i = values.size() - 2;
 
-        float t = index_d - i;
-
         OutputType y0 = values[i];
         OutputType y1 = values[i + 1];
         return this->map_value(x, start + i * step, start + (i + 1) * step, y0, y1);

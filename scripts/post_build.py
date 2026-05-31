@@ -227,7 +227,7 @@ def main():
     # 构建 esptool 命令
     output_path = join(project_root, output_file)
     cmd = [
-        sys.executable, "-m", "esptool", "--chip", chip, "merge_bin",
+        sys.executable, "-m", "esptool", "--chip", chip, "merge-bin",
         # "--fill-flash-size", "4MB",  # 指定Flash大小为4MB
         # "--target-offset", "0x0",    # 从地址0开始
         "-o", output_path
