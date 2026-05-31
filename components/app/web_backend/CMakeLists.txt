@@ -5,7 +5,8 @@ idf_component_register(
          "src/page_handlers.cpp"
          "src/request_json.cpp"
          "src/rtos_stats_api.cpp"
+         "src/ota_handlers.cpp"
     INCLUDE_DIRS "include"
     PRIV_INCLUDE_DIRS "private_include"
-    REQUIRES WebServer web_file wifi_service global_state power_output protect esp_timer esp_system esp_http_server st7735_driver can_callback current_calibration hardware esp_app_format json energy_meter
+    REQUIRES WebServer web_file wifi_service global_state power_output protect esp_timer esp_system esp_http_server st7735_driver can_callback current_calibration hardware esp_app_format json energy_meter ota_manager
 )

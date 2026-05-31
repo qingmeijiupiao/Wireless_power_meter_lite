@@ -108,8 +108,13 @@ static const char* status_to_string(int status_code) {
         case 403: return "403 Forbidden";
         case 404: return "404 Not Found";
         case 405: return "405 Method Not Allowed";
+        case 408: return "408 Request Timeout";
+        case 409: return "409 Conflict";
         case 413: return "413 Payload Too Large";
+        case 422: return "422 Unprocessable Content";
         case 500: return "500 Internal Server Error";
+        case 501: return "501 Not Implemented";
+        case 503: return "503 Service Unavailable";
         default: return "200 OK";
     }
 }
@@ -185,6 +190,44 @@ esp_err_t load_body(Request* request) {
     }
 
     request->body[received] = '\0';
+    request->body_len = received;
+    request->body_loaded = true;
+    return ESP_OK;
+}
+
+esp_err_t stream_body(Request* request, char* buffer, size_t buffer_size, BodyChunkHandler chunk_handler) {
+    if (request == nullptr || request->raw == nullptr || buffer == nullptr || buffer_size == 0 || chunk_handler == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (request->body_loaded) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    constexpr uint8_t MAX_CONSECUTIVE_TIMEOUTS = 3;
+    size_t received = 0;
+    uint8_t consecutive_timeouts = 0;
+    while (received < request->raw->content_len) {
+        size_t remaining = request->raw->content_len - received;
+        size_t chunk_size = remaining < buffer_size ? remaining : buffer_size;
+        int ret = httpd_req_recv(request->raw, buffer, chunk_size);
+        if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
+            if (++consecutive_timeouts >= MAX_CONSECUTIVE_TIMEOUTS) {
+                return ESP_ERR_TIMEOUT;
+            }
+            continue;
+        }
+        if (ret <= 0) {
+            return ESP_FAIL;
+        }
+
+        consecutive_timeouts = 0;
+        esp_err_t err = chunk_handler(buffer, static_cast<size_t>(ret));
+        if (err != ESP_OK) {
+            return err;
+        }
+        received += static_cast<size_t>(ret);
+    }
+
     request->body_len = received;
     request->body_loaded = true;
     return ESP_OK;

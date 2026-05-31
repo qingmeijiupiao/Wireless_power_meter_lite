@@ -9,6 +9,7 @@
 - **中间件链**：支持全局中间件，适合添加日志、CORS、鉴权、公共 Header 等处理。
 - **Flash 静态资源**：支持直接返回随固件烧录的内嵌 HTML/CSS/JS 等资源。
 - **请求体缓存**：POST/PUT 等请求体按固定上限读取到 `Request::body`，超过上限返回 413。
+- **流式请求体**：大文件上传可使用调用方固定缓冲分块消费，不受 1KB JSON 缓存限制。
 - **Captive Portal 兜底**：可将未匹配路径回落到 `/` 路由，方便 AP 配网弹窗。
 
 ## 架构与请求流程
@@ -129,11 +130,16 @@ WebServer::serve_static("/", index_html_file.data, index_html_file.size, "text/h
 
 读取请求体到 `Request::body`。请求体最大长度由 `WEB_SERVER_BODY_MAX_LEN` 限制。
 
+### `esp_err_t stream_body(Request* request, char* buffer, size_t buffer_size, BodyChunkHandler chunk_handler)`
+
+流式读取大请求体。数据按块交给调用方同步处理，不写入 `Request::body`。
+连续接收超时或连接断开时返回错误，适合固件上传等场景。
+
 ## 配置常量
 
 | 常量 | 默认值 | 说明 |
 |------|------|------|
-| `WEB_SERVER_MAX_ROUTES` | 32 | 最大路由数量 |
+| `WEB_SERVER_MAX_ROUTES` | 48 | 最大路由数量 |
 | `WEB_SERVER_MAX_MIDDLEWARES` | 8 | 最大中间件数量 |
 | `WEB_SERVER_URI_MAX_LEN` | 96 | URI缓存长度 |
 | `WEB_SERVER_QUERY_MAX_LEN` | 128 | Query缓存长度 |
@@ -145,6 +151,7 @@ WebServer::serve_static("/", index_html_file.data, index_html_file.size, "text/h
 - 当前实现使用单个静态 `Request` 上下文，适合低并发嵌入式后端；如需并发处理，需要改为每连接上下文。
 - 路由注册和中间件注册应在 `begin()` 之前完成。
 - 大响应建议使用 Flash 静态资源或后续扩展分块发送接口。
+- 大请求体不要使用 `load_body()`，应通过 `stream_body()` 分块处理。
 
 ## 环境与依赖
 

@@ -14,6 +14,8 @@ extern const uint8_t logs_html_start[] asm("_binary_logs_html_start");
 extern const uint8_t logs_html_end[]   asm("_binary_logs_html_end");
 extern const uint8_t blackbox_html_start[] asm("_binary_blackbox_html_start");
 extern const uint8_t blackbox_html_end[]   asm("_binary_blackbox_html_end");
+extern const uint8_t firmware_html_start[] asm("_binary_firmware_html_start");
+extern const uint8_t firmware_html_end[]   asm("_binary_firmware_html_end");
 extern const uint8_t provision_html_start[] asm("_binary_provision_html_start");
 extern const uint8_t provision_html_end[]   asm("_binary_provision_html_end");
 extern const uint8_t app_css_start[] asm("_binary_app_css_start");
@@ -49,6 +51,11 @@ const struct EmbeddedFile logs_html_file = {
 const struct EmbeddedFile blackbox_html_file = {
     .data = (const char*)blackbox_html_start,
     .size = (size_t)(blackbox_html_end - blackbox_html_start) - 1
+};
+
+const struct EmbeddedFile firmware_html_file = {
+    .data = (const char*)firmware_html_start,
+    .size = (size_t)(firmware_html_end - firmware_html_start) - 1
 };
 
 const struct EmbeddedFile provision_html_file = {

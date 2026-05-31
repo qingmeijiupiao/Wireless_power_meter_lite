@@ -61,6 +61,7 @@ struct Request {
 
 using Handler = std::function<esp_err_t(Request* request)>;
 using Middleware = std::function<esp_err_t(Request* request)>;
+using BodyChunkHandler = std::function<esp_err_t(const char* data, size_t size)>;
 
 /**
  * @brief 初始化WebServer模块
@@ -245,6 +246,20 @@ esp_err_t get_query_value(Request* request, const char* key, char* value, size_t
  * @note 请求体最大长度由WEB_SERVER_BODY_MAX_LEN限制。
  */
 esp_err_t load_body(Request* request);
+
+/**
+ * @brief 流式读取请求体，并将数据块交给调用方处理。
+ *
+ * 适合固件上传等大请求体。数据不会写入 Request::body，调用方应提供固定缓冲，
+ * 并在 chunk_handler 中同步消费数据。连续接收超时或连接断开时停止读取。
+ *
+ * @param request 请求上下文。
+ * @param buffer 分块接收缓冲区。
+ * @param buffer_size 缓冲区长度。
+ * @param chunk_handler 每次收到数据后的同步处理函数。
+ * @return ESP_OK 成功，其他值表示参数、网络接收或业务处理失败。
+ */
+esp_err_t stream_body(Request* request, char* buffer, size_t buffer_size, BodyChunkHandler chunk_handler);
 
 }
 

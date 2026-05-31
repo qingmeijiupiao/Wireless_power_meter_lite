@@ -9,7 +9,7 @@
 - 本地显示与控制：ST7735S 160x80 TFT 显示，按键与串口 Shell 调试。
 - 通信与联网：CAN(TWAI) 通信，WiFi STA/AP 配网，Web 页面与 REST API。
 - 数据与配置：NVS 持久化配置，Flash 循环日志，结构化黑匣子记录。
-- 固件布局：预留 OTA 双 APP 分区，当前在线 OTA 流程尚未实现。
+- 固件布局：已提供 OTA 双 APP 分区与固件切换中间件，下载与 APP 集成流程尚未实现。
 
 ## 硬件平台
 
@@ -87,6 +87,7 @@
 | DNS Server 中间件 | [components/middleware/DNSServer/README.md](components/middleware/DNSServer/README.md) |
 | 共享电量计量 | [components/middleware/energy_meter/README.md](components/middleware/energy_meter/README.md) |
 | CAN 终端电阻控制 | [components/middleware/can_resistor/README.md](components/middleware/can_resistor/README.md) |
+| OTA 固件切换 | [components/middleware/ota_manager/README.md](components/middleware/ota_manager/README.md) |
 | 插值工具 | [components/common/Interp/README.md](components/common/Interp/README.md) |
 | JSON 头文件库 | [components/common/json/README.md](components/common/json/README.md) |
 | 字体资源 | [components/assets/Fonts/README.md](components/assets/Fonts/README.md) |

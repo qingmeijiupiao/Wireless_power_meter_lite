@@ -17,6 +17,7 @@
         <a class="tab active" href="/status.html">状态诊断</a>
         <a class="tab" href="/logs.html">实时日志</a>
         <a class="tab" href="/blackbox.html">黑匣子日志</a>
+        <a class="tab" href="/firmware.html">固件升级</a>
       </nav>
     </aside>
     <main class="stack">
@@ -105,6 +106,7 @@
       $('systemText').innerHTML = infoHtml([
         ['硬件版本', `v${sys.hardware_version}`],
         ['固件版本', `${sys.firmware.major}.${sys.firmware.minor}.${sys.firmware.patch}`],
+        ['当前 APP 分区', `APP 分区 ${sys.app_partition.slot || '?'} (${sys.app_partition.label || '--'})`],
         ['构建时间', `${sys.firmware.build_date} ${sys.firmware.build_time}`],
         ['运行时间', `${Math.floor(sys.uptime_ms / 1000)}s`]
       ]);

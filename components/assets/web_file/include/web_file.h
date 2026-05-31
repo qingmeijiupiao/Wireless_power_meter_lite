@@ -23,6 +23,7 @@ extern const EmbeddedFile control_html_file;
 extern const EmbeddedFile status_html_file;
 extern const EmbeddedFile logs_html_file;
 extern const EmbeddedFile blackbox_html_file;
+extern const EmbeddedFile firmware_html_file;
 extern const EmbeddedFile provision_html_file;
 extern const EmbeddedFile app_css_file;
 // extern const EmbeddedFile StyleCss;

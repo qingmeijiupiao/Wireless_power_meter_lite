@@ -74,6 +74,7 @@ esp_err_t init() {
     ESP_ERROR_CHECK(WebServer::on("/status.html", WebServer::Method::GET, status_page_handler));
     ESP_ERROR_CHECK(WebServer::on("/logs.html", WebServer::Method::GET, logs_page_handler));
     ESP_ERROR_CHECK(WebServer::on("/blackbox.html", WebServer::Method::GET, blackbox_page_handler));
+    ESP_ERROR_CHECK(WebServer::on("/firmware.html", WebServer::Method::GET, firmware_page_handler));
     ESP_ERROR_CHECK(WebServer::on("/app.css", WebServer::Method::GET, app_css_handler));
     ESP_ERROR_CHECK(WebServer::on("/provision", WebServer::Method::GET, provision_handler));
     ESP_ERROR_CHECK(WebServer::on("/provision.html", WebServer::Method::GET, provision_handler));
@@ -104,6 +105,12 @@ esp_err_t init() {
     ESP_ERROR_CHECK(WebServer::on("/api/wifi/off", WebServer::Method::POST, wifi_off_handler));
     ESP_ERROR_CHECK(WebServer::on("/api/wifi/boot", WebServer::Method::POST, wifi_boot_handler));
     ESP_ERROR_CHECK(WebServer::on("/api/wifi/clear", WebServer::Method::POST, wifi_clear_handler));
+    ESP_ERROR_CHECK(WebServer::on("/api/ota/status", WebServer::Method::GET, ota_status_handler));
+    ESP_ERROR_CHECK(WebServer::on("/api/ota/upload", WebServer::Method::POST, ota_upload_handler));
+    ESP_ERROR_CHECK(WebServer::on("/api/ota/activate", WebServer::Method::POST, ota_activate_handler));
+    ESP_ERROR_CHECK(WebServer::on("/api/ota/abort", WebServer::Method::POST, ota_abort_handler));
+    ESP_ERROR_CHECK(WebServer::on("/api/ota/remote/check", WebServer::Method::GET, ota_remote_check_handler));
+    ESP_ERROR_CHECK(WebServer::on("/api/ota/remote/download", WebServer::Method::POST, ota_remote_download_handler));
 
     WebServer::enable_captive_portal(false);
     WebServer::on_not_found([](WebServer::Request* request) -> esp_err_t {

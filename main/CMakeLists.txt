@@ -26,6 +26,7 @@ idf_component_register(
         power_output
         current_calibration
         web_backend
+        ota_manager
 )
 
 # LP核程序配置

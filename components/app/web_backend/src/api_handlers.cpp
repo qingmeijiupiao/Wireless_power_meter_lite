@@ -21,6 +21,7 @@
 #include "energy_meter.h"
 #include "global_state.h"
 #include "hardware.h"
+#include "ota_manager.h"
 #include "power_output.h"
 #include "protect.h"
 #include "st7735.h"
@@ -198,6 +199,7 @@ esp_err_t reboot_handler(WebServer::Request* request) {
 /** @brief GET /api/system，返回固件版本、构建信息、MAC 和运行时间。 */
 esp_err_t system_handler(WebServer::Request* request) {
     const esp_app_desc_t* app_desc = esp_app_get_description();
+    const esp_partition_t* running_partition = OtaManager::get_running_partition();
     char sta_mac[18] = {};
     char ap_mac[18] = {};
     mac_to_str(WiFiManager::instance().get_mac(WIFI_IF_STA), sta_mac, sizeof(sta_mac));
@@ -206,6 +208,7 @@ esp_err_t system_handler(WebServer::Request* request) {
         "{"
         "\"hardware_version\":%u,"
         "\"firmware\":{\"major\":%u,\"minor\":%u,\"patch\":%u,\"project\":\"%s\",\"build_date\":\"%s\",\"build_time\":\"%s\"},"
+        "\"app_partition\":{\"slot\":%u,\"label\":\"%s\"},"
         "\"mac\":{\"sta\":\"%s\",\"ap\":\"%s\"},"
         "\"uptime_ms\":%lld"
         "}\n",
@@ -216,6 +219,8 @@ esp_err_t system_handler(WebServer::Request* request) {
         app_desc->project_name,
         app_desc->date,
         app_desc->time,
+        static_cast<unsigned>(ota_partition_slot(running_partition)),
+        running_partition == nullptr ? "" : running_partition->label,
         sta_mac,
         ap_mac,
         esp_timer_get_time() / 1000);

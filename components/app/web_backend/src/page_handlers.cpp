@@ -55,6 +55,11 @@ esp_err_t blackbox_page_handler(WebServer::Request* request) {
     return WebServer::send_html(request, blackbox_html_file.data, blackbox_html_file.size);
 }
 
+/** @brief 返回固件升级页面。 */
+esp_err_t firmware_page_handler(WebServer::Request* request) {
+    return WebServer::send_html(request, firmware_html_file.data, firmware_html_file.size);
+}
+
 /** @brief 返回 Web 公共样式表。 */
 esp_err_t app_css_handler(WebServer::Request* request) {
     return WebServer::send(request, 200, "text/css", app_css_file.data, app_css_file.size);

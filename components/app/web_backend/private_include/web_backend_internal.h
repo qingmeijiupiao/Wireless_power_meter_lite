@@ -12,6 +12,7 @@
 #include <cstdint>
 
 #include "esp_err.h"
+#include "esp_partition.h"
 #include "web_server.h"
 #include "wifi_manager.h"
 #include "wifi_service.h"
@@ -78,6 +79,7 @@ esp_err_t control_page_handler(WebServer::Request* request);
 esp_err_t status_page_handler(WebServer::Request* request);
 esp_err_t logs_page_handler(WebServer::Request* request);
 esp_err_t blackbox_page_handler(WebServer::Request* request);
+esp_err_t firmware_page_handler(WebServer::Request* request);
 esp_err_t app_css_handler(WebServer::Request* request);
 esp_err_t provision_handler(WebServer::Request* request);
 
@@ -103,6 +105,15 @@ esp_err_t wifi_off_handler(WebServer::Request* request);
 esp_err_t wifi_on_handler(WebServer::Request* request);
 esp_err_t wifi_boot_handler(WebServer::Request* request);
 esp_err_t wifi_clear_handler(WebServer::Request* request);
+esp_err_t ota_status_handler(WebServer::Request* request);
+esp_err_t ota_upload_handler(WebServer::Request* request);
+esp_err_t ota_activate_handler(WebServer::Request* request);
+esp_err_t ota_abort_handler(WebServer::Request* request);
+esp_err_t ota_remote_check_handler(WebServer::Request* request);
+esp_err_t ota_remote_download_handler(WebServer::Request* request);
+
+/** @brief 将 OTA APP 分区转换为用户可读槽位编号，未知时返回 0。 */
+uint8_t ota_partition_slot(const esp_partition_t* partition);
 
 } // namespace WebBackend
 
