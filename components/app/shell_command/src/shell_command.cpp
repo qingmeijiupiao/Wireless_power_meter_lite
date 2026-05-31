@@ -18,6 +18,10 @@
 #include "protect.h"
 #include "wifi_service.h"
 #include "web_backend.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include <algorithm>
+#include <vector>
 
 namespace ShellCommand {
 
@@ -50,6 +54,55 @@ esp_err_t init() {
     shell.register_command(ShellCommand_t("timestamp", "Get system timestamp since boot (us)", "",
         [](int argc, char** argv) -> int {
             printf("%lld us\n", esp_timer_get_time());
+            return 0;
+        }));
+
+    shell.register_command(ShellCommand_t("rtos_stats", "Sample per-task CPU usage and stack high-water marks", "[seconds]",
+        [](int argc, char** argv) -> int {
+            int sample_seconds = argc >= 2 ? atoi(argv[1]) : 10;
+            if (sample_seconds < 1 || sample_seconds > 300) {
+                printf("Usage: rtos_stats [seconds: 1-300]\n");
+                return 1;
+            }
+
+            auto snapshot = []() {
+                std::vector<TaskStatus_t> tasks(uxTaskGetNumberOfTasks() + 4);
+                configRUN_TIME_COUNTER_TYPE total_runtime = 0;
+                UBaseType_t count = uxTaskGetSystemState(tasks.data(), tasks.size(), &total_runtime);
+                tasks.resize(count);
+                return std::make_pair(std::move(tasks), total_runtime);
+            };
+
+            auto before = snapshot();
+            printf("Sampling RTOS statistics for %d second(s)...\n", sample_seconds);
+            vTaskDelay(pdMS_TO_TICKS(sample_seconds * 1000));
+            auto after = snapshot();
+            const configRUN_TIME_COUNTER_TYPE total_delta = after.second - before.second;
+
+            printf("RTOS_STATS_BEGIN sample_s=%d tasks=%u total_delta=%llu\n",
+                   sample_seconds,
+                   static_cast<unsigned>(after.first.size()),
+                   static_cast<unsigned long long>(total_delta));
+            printf("%-16s %5s %4s %9s %14s %14s %14s\n",
+                   "TASK", "STATE", "PRIO", "CPU(%)", "RUNTIME_DELTA", "RUNTIME_TOTAL", "STACK_FREE_MIN");
+            printf("---------------- ----- ---- --------- -------------- -------------- --------------\n");
+            for (const auto& task : after.first) {
+                auto previous = std::find_if(before.first.begin(), before.first.end(),
+                    [&task](const TaskStatus_t& item) { return item.xTaskNumber == task.xTaskNumber; });
+                const configRUN_TIME_COUNTER_TYPE runtime_delta =
+                    previous == before.first.end() ? 0 : task.ulRunTimeCounter - previous->ulRunTimeCounter;
+                const double cpu_pct = total_delta == 0 ? 0.0 :
+                    100.0 * static_cast<double>(runtime_delta) / static_cast<double>(total_delta);
+                printf("%-16s %5d %4u %9.3f %14llu %14llu %14u\n",
+                       task.pcTaskName,
+                       static_cast<int>(task.eCurrentState),
+                       static_cast<unsigned>(task.uxCurrentPriority),
+                       cpu_pct,
+                       static_cast<unsigned long long>(runtime_delta),
+                       static_cast<unsigned long long>(task.ulRunTimeCounter),
+                       static_cast<unsigned>(task.usStackHighWaterMark));
+            }
+            printf("RTOS_STATS_END\n");
             return 0;
         }));
 

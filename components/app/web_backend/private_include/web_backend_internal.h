@@ -92,6 +92,7 @@ esp_err_t protect_handler(WebServer::Request* request);
 esp_err_t can_handler(WebServer::Request* request);
 esp_err_t calibration_handler(WebServer::Request* request);
 esp_err_t diagnostics_handler(WebServer::Request* request);
+esp_err_t rtos_stats_handler(WebServer::Request* request);
 esp_err_t wifi_status_handler(WebServer::Request* request);
 esp_err_t logs_api_handler(WebServer::Request* request);
 esp_err_t logs_clear_handler(WebServer::Request* request);
