@@ -205,6 +205,125 @@ void fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, color_t color) {
     }
 }
 
+static uint16_t blend_aa_rgb565(uint16_t bg, uint16_t color, uint8_t alpha) {
+    const uint16_t bg_r = (bg >> 11) & 0x1F;
+    const uint16_t bg_g = (bg >> 5) & 0x3F;
+    const uint16_t bg_b = bg & 0x1F;
+    const uint16_t color_r = (color >> 11) & 0x1F;
+    const uint16_t color_g = (color >> 5) & 0x3F;
+    const uint16_t color_b = color & 0x1F;
+
+    const uint16_t result_r = (bg_r * (255 - alpha) + color_r * alpha + 127) / 255;
+    const uint16_t result_g = (bg_g * (255 - alpha) + color_g * alpha + 127) / 255;
+    const uint16_t result_b = (bg_b * (255 - alpha) + color_b * alpha + 127) / 255;
+    return uint16_t(result_r << 11) | uint16_t(result_g << 5) | result_b;
+}
+
+static uint8_t rounded_rect_coverage(int32_t pixel_x, int32_t pixel_y,
+                                     uint16_t w, uint16_t h, uint16_t radius) {
+    if (w == 0 || h == 0) {
+        return 0;
+    }
+
+    if (pixel_x < 0 || pixel_x >= w || pixel_y < 0 || pixel_y >= h) {
+        return 0;
+    }
+
+    radius = std::min<uint16_t>(radius, std::min<uint16_t>(w / 2, h / 2));
+    if (radius == 0) {
+        return 255;
+    }
+
+    if ((pixel_x >= radius && pixel_x < w - radius)
+        || (pixel_y >= radius && pixel_y < h - radius)) {
+        return 255;
+    }
+
+    // Four samples per axis provide stable anti-aliasing without floating-point math.
+    static constexpr int32_t SAMPLE_OFFSETS[] = {1, 3, 5, 7};
+    static constexpr int32_t SUBPIXEL_SCALE = 8;
+    const int32_t width = w * SUBPIXEL_SCALE;
+    const int32_t height = h * SUBPIXEL_SCALE;
+    const int32_t corner_radius = radius * SUBPIXEL_SCALE;
+    const int32_t radius_squared = corner_radius * corner_radius;
+    uint8_t inside_count = 0;
+
+    for (int32_t offset_y : SAMPLE_OFFSETS) {
+        const int32_t sample_y = pixel_y * SUBPIXEL_SCALE + offset_y;
+        if (sample_y < 0 || sample_y >= height) {
+            continue;
+        }
+
+        for (int32_t offset_x : SAMPLE_OFFSETS) {
+            const int32_t sample_x = pixel_x * SUBPIXEL_SCALE + offset_x;
+            if (sample_x < 0 || sample_x >= width) {
+                continue;
+            }
+
+            const int32_t corner_x = sample_x < corner_radius
+                ? corner_radius
+                : (sample_x >= width - corner_radius ? width - corner_radius : sample_x);
+            const int32_t corner_y = sample_y < corner_radius
+                ? corner_radius
+                : (sample_y >= height - corner_radius ? height - corner_radius : sample_y);
+            const int32_t dx = sample_x - corner_x;
+            const int32_t dy = sample_y - corner_y;
+            if (dx * dx + dy * dy <= radius_squared) {
+                inside_count++;
+            }
+        }
+    }
+
+    return static_cast<uint8_t>((inside_count * 255 + 8) / 16);
+}
+
+static void write_aa_pixel(uint16_t x, uint16_t y, uint8_t alpha, color_t color, color_t bg) {
+    if (x >= display_width || y >= display_height) {
+        return;
+    }
+
+    uint16_t px = blend_aa_rgb565(bg.get_color_raw(), color.get_color_raw(), alpha);
+    double_buffer.data[double_buffer.current_buffer][y * display_width + x] = (px >> 8) | (px << 8);
+}
+
+void fill_round_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                     uint16_t radius, color_t color, color_t bg) {
+    const uint32_t end_x = std::min<uint32_t>(uint32_t(x) + w, display_width);
+    const uint32_t end_y = std::min<uint32_t>(uint32_t(y) + h, display_height);
+    for (uint32_t screen_y = y; screen_y < end_y; screen_y++) {
+        for (uint32_t screen_x = x; screen_x < end_x; screen_x++) {
+            const uint8_t alpha = rounded_rect_coverage(screen_x - x, screen_y - y, w, h, radius);
+            write_aa_pixel(screen_x, screen_y, alpha, color, bg);
+        }
+    }
+}
+
+void draw_round_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                     uint16_t radius, uint16_t thickness, color_t color, color_t bg) {
+    if (thickness == 0) {
+        return;
+    }
+
+    const uint32_t end_x = std::min<uint32_t>(uint32_t(x) + w, display_width);
+    const uint32_t end_y = std::min<uint32_t>(uint32_t(y) + h, display_height);
+    const bool has_inner_rect = uint32_t(thickness) * 2 < w && uint32_t(thickness) * 2 < h;
+    const uint16_t inner_w = has_inner_rect ? w - thickness * 2 : 0;
+    const uint16_t inner_h = has_inner_rect ? h - thickness * 2 : 0;
+    const uint16_t inner_radius = radius > thickness ? radius - thickness : 0;
+
+    for (uint32_t screen_y = y; screen_y < end_y; screen_y++) {
+        for (uint32_t screen_x = x; screen_x < end_x; screen_x++) {
+            const int32_t local_x = screen_x - x;
+            const int32_t local_y = screen_y - y;
+            const uint8_t outer_alpha = rounded_rect_coverage(local_x, local_y, w, h, radius);
+            const uint8_t inner_alpha = rounded_rect_coverage(
+                local_x - thickness, local_y - thickness, inner_w, inner_h, inner_radius);
+            const uint8_t alpha = outer_alpha > inner_alpha ? outer_alpha - inner_alpha : 0;
+            write_aa_pixel(screen_x, screen_y, alpha, color, bg);
+        }
+    }
+}
+
 void draw_pixel(uint16_t x, uint16_t y, color_t color) {
     if (x >= display_width || y >= display_height) return;
     double_buffer.data[double_buffer.current_buffer][y * display_width + x] = color.get_color_raw_big_endian();

@@ -48,6 +48,8 @@ ST7735::set_backlight(200);
 | `init(cfg, rotation)` | 初始化 SPI + 显示屏，默认横屏 |
 | `draw_pixel(x, y, color)` | 绘制单像素 |
 | `fill_rect(x, y, w, h, color)` | 填充矩形 |
+| `fill_round_rect(x, y, w, h, radius, color, bg)` | 绘制带抗锯齿的填充圆角矩形 |
+| `draw_round_rect(x, y, w, h, radius, thickness, color, bg)` | 绘制带抗锯齿的圆角矩形边框 |
 | `fill_screen(color)` | 全屏填充 |
 | `draw_char(x, y, c, color, bg, font)` | 绘制单字符（`const Font_t&`） |
 | `draw_string(x, y, str, color, bg, font)` | 绘制字符串（`const Font_t&`） |

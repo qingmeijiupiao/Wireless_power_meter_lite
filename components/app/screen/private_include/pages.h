@@ -36,7 +36,7 @@ private:
 };
 
 /**
- * @brief 电量页占位实现
+ * @brief 电量页，显示实时测量值、输出状态、累计电量和计量时间。
  */
 class BatteryPage final : public Page {
 public:
@@ -48,7 +48,7 @@ public:
 };
 
 /**
- * @brief 曲线页占位实现
+ * @brief 曲线页占位实现。
  */
 class CurvePage final : public Page {
 public:

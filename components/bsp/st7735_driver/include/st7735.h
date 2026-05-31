@@ -92,6 +92,33 @@ void draw_pixel(uint16_t x, uint16_t y, color_t color);
 void fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, color_t color);
 
 /**
+ * @brief 绘制带抗锯齿的填充圆角矩形
+ * @param x 左上角的X坐标
+ * @param y 左上角的Y坐标
+ * @param w 矩形的宽度
+ * @param h 矩形的高度
+ * @param radius 圆角半径
+ * @param color 填充颜色
+ * @param bg 抗锯齿边缘使用的背景颜色
+ */
+void fill_round_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                     uint16_t radius, color_t color, color_t bg);
+
+/**
+ * @brief 绘制带抗锯齿的圆角矩形边框
+ * @param x 左上角的X坐标
+ * @param y 左上角的Y坐标
+ * @param w 矩形的宽度
+ * @param h 矩形的高度
+ * @param radius 圆角半径
+ * @param thickness 边框宽度，单位为像素
+ * @param color 边框颜色
+ * @param bg 抗锯齿边缘和边框内部使用的背景颜色
+ */
+void draw_round_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                     uint16_t radius, uint16_t thickness, color_t color, color_t bg);
+
+/**
  * @brief 用颜色填充整个屏幕
  * @param color RGB565格式的颜色
  */
