@@ -1,5 +1,5 @@
 /**
- * @file st7735.c
+ * @file st7735.cpp
  * @brief ST7735S显示屏驱动 (Adafruit Mini TFT 0.96" 160x80)
  */
 
@@ -7,7 +7,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
-#include "esp_heap_caps.h"
 #include "st7735.h"
 #include "st7735_commands.h"
 #include "pwm.h"
@@ -15,7 +14,6 @@
 #include "backlight_lut.h"
 #include <algorithm>
 
-#define U16_LITTLE_TO_BIG(x) ((((x) >> 8)&0xFF) | (((x) << 8)&0xFF))
 namespace ST7735 {
 
 static const char *TAG = "ST7735";
@@ -205,6 +203,13 @@ void fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, color_t color) {
     }
 }
 
+/**
+ * @brief 按透明度混合两个 RGB565 颜色。
+ * @param bg 背景色 RGB565 原始值。
+ * @param color 前景色 RGB565 原始值。
+ * @param alpha 前景色透明度，范围 0-255。
+ * @return 混合后的 RGB565 原始值。
+ */
 static uint16_t blend_aa_rgb565(uint16_t bg, uint16_t color, uint8_t alpha) {
     const uint16_t bg_r = (bg >> 11) & 0x1F;
     const uint16_t bg_g = (bg >> 5) & 0x3F;
@@ -219,6 +224,15 @@ static uint16_t blend_aa_rgb565(uint16_t bg, uint16_t color, uint8_t alpha) {
     return uint16_t(result_r << 11) | uint16_t(result_g << 5) | result_b;
 }
 
+/**
+ * @brief 计算像素被圆角矩形覆盖的比例。
+ * @param pixel_x 相对圆角矩形左上角的 X 坐标。
+ * @param pixel_y 相对圆角矩形左上角的 Y 坐标。
+ * @param w 圆角矩形宽度。
+ * @param h 圆角矩形高度。
+ * @param radius 圆角半径。
+ * @return 覆盖率，范围 0-255。
+ */
 static uint8_t rounded_rect_coverage(int32_t pixel_x, int32_t pixel_y,
                                      uint16_t w, uint16_t h, uint16_t radius) {
     if (w == 0 || h == 0) {
@@ -239,7 +253,7 @@ static uint8_t rounded_rect_coverage(int32_t pixel_x, int32_t pixel_y,
         return 255;
     }
 
-    // Four samples per axis provide stable anti-aliasing without floating-point math.
+    // 每轴 4 个采样点，在避免浮点计算的同时提供稳定抗锯齿效果。
     static constexpr int32_t SAMPLE_OFFSETS[] = {1, 3, 5, 7};
     static constexpr int32_t SUBPIXEL_SCALE = 8;
     const int32_t width = w * SUBPIXEL_SCALE;
@@ -277,6 +291,14 @@ static uint8_t rounded_rect_coverage(int32_t pixel_x, int32_t pixel_y,
     return static_cast<uint8_t>((inside_count * 255 + 8) / 16);
 }
 
+/**
+ * @brief 将抗锯齿像素写入当前帧缓冲。
+ * @param x 屏幕 X 坐标。
+ * @param y 屏幕 Y 坐标。
+ * @param alpha 前景色透明度，范围 0-255。
+ * @param color 前景色。
+ * @param bg 背景色。
+ */
 static void write_aa_pixel(uint16_t x, uint16_t y, uint8_t alpha, color_t color, color_t bg) {
     if (x >= display_width || y >= display_height) {
         return;
@@ -330,7 +352,6 @@ void draw_pixel(uint16_t x, uint16_t y, color_t color) {
 }
 
 void fill_screen(color_t color) {
-    //ST7735::fill_rect(0, 0, display_width, display_height, color);
     std::fill(double_buffer.data[double_buffer.current_buffer], double_buffer.data[double_buffer.current_buffer]+display_width*display_height, color.get_color_raw_big_endian());
 }
 

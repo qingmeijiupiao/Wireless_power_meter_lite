@@ -118,4 +118,4 @@ shell.register_command(ShellCommand_t("echo", "Echo input text", "<text>",
 ## 环境与依赖
 
 - **软件**：ESP-IDF v6.0+、C++11
-- **组件依赖**：`shell`、`hardware`、`st7735_driver`、`can_callback`、`current_calibration`、`global_state`、`power_output`、`protect`、`wifi_service`、`web_backend`、`esp_app_desc`
+- **组件依赖**：`shell`、`hardware`、`st7735_driver`、`can_callback`、`current_calibration`、`global_state`、`energy_meter`、`power_output`、`protect`、`wifi_service`、`web_backend`、`esp_app_desc`

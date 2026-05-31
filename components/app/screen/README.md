@@ -89,7 +89,7 @@ sequenceDiagram
 
 电量页通过 `energy_meter` 中间件读取 LP Core 自启动以来持续累加的 `uWh` 和 `uAh`。长按侧键时仅更新共享计量基线，不修改 LP Core 的底层积分值；Web 概览页会同步显示清零后的 `mWh`、`mAh` 和计量时间。
 
-`mWh` 和 `mAh` 的数值部分最多显示 7 位数字，小数点不计入位数。页面会随数值增大自动减少小数位数，依次显示为 `9999.999`、`99999.99`、`999999.9` 和整数。
+`mWh` 和 `mAh` 的数值部分最多显示 6 位数字，小数点不计入位数。页面会随数值增大自动减少小数位数，依次显示为 `999.999`、`9999.99`、`99999.9` 和整数。
 
 ## 设置项
 
@@ -194,3 +194,4 @@ Side_Button.bind_event(ButtonEvent::SHORT_PRESS, []() {
 | 资源组件 | `ui_resources`, `Fonts` |
 | BSP/驱动 | `st7735_driver`, `hardware`, `Button`, `HXC_NVS` |
 | 应用组件 | `global_state`, `protect`, `wifi_service`, `power_output`, `can_callback` |
+| 中间件 | `energy_meter`, `can_resistor` |

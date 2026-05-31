@@ -85,6 +85,8 @@
 | 按键中间件 | [components/middleware/Button/README.md](components/middleware/Button/README.md) |
 | WebServer 中间件 | [components/middleware/WebServer/README.md](components/middleware/WebServer/README.md) |
 | DNS Server 中间件 | [components/middleware/DNSServer/README.md](components/middleware/DNSServer/README.md) |
+| 共享电量计量 | [components/middleware/energy_meter/README.md](components/middleware/energy_meter/README.md) |
+| CAN 终端电阻控制 | [components/middleware/can_resistor/README.md](components/middleware/can_resistor/README.md) |
 | 插值工具 | [components/common/Interp/README.md](components/common/Interp/README.md) |
 | JSON 头文件库 | [components/common/json/README.md](components/common/json/README.md) |
 | 字体资源 | [components/assets/Fonts/README.md](components/assets/Fonts/README.md) |

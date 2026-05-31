@@ -79,4 +79,5 @@ python scripts/image_converter.py -n ErrorRectangle assets/error_rect.png includ
 
 ## 环境与依赖
 
-- **组件依赖**：`st7735_driver`（运行时绘制）
+- **组件依赖**：无。该组件仅导出编译期 RGB565 数组。
+- **使用方**：`screen` 通过 `st7735_driver::draw_image()` 绘制资源。

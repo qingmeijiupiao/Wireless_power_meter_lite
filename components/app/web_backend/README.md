@@ -254,7 +254,14 @@ sequenceDiagram
 | `wifi_service` | WiFi 状态、AP 配网和 NVS 凭据管理 |
 | `json` | 请求 JSON SAX 解析 |
 | `global_state` | 设备测量状态 |
+| `energy_meter` | 屏幕、Web 和 Shell 共用的相对电量计量会话 |
 | `power_output` | 输出控制策略链 |
 | `protect` | 保护状态查询 |
+| `st7735_driver` | 背光亮度查询和设置 |
+| `can_callback` | CAN 波特率和设备 ID 配置 |
+| `current_calibration` | 电流校准参数查询 |
+| `hardware` | 硬件版本信息 |
+| `esp_app_format` | 固件版本信息 |
+| `json` | 请求 JSON SAX 解析 |
 | `esp_timer` | 运行时间 |
 | `esp_http_server` | HTTP header/CORS 底层接口 |

@@ -8,7 +8,7 @@ ST7735S TFT 显示屏（0.96" 160×80）SPI 驱动，提供像素绘制、矩形
 - **RGB565 色彩**：`color_t` 类支持 RGB 三通道 / HEX 构造，自动转 RGB565 小/大端序
 - **等高变宽字体**：通过 `Font_t` 结构支持不等宽字符渲染，含抗锯齿插值（`map_px_data`）
 - **四方向旋转**：`Vertical / Horizontal / VerticalMirror / HorizontalMirror`
-- **40 MHz SPI**：使用 `spi_device_polling_transmit` 轮询传输，低延迟
+- **50 MHz SPI**：使用 `spi_device_polling_transmit` 轮询传输，低延迟
 
 ## 架构与原理
 

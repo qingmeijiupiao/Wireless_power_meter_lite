@@ -20,7 +20,7 @@ sequenceDiagram
     participant CB as CanCallback 回调
     participant GS as GlobalState
     participant PO as PowerOutput
-    participant GPIO as CAN 终端电阻 GPIO
+    participant CR as CanResistor
 
     Bus->>TWAI: 接收 CAN 帧
     TWAI->>CB: 按 identifier 分发回调
@@ -32,8 +32,8 @@ sequenceDiagram
     else SET_OUTPUT
         CB->>PO: PowerOutput::on()/off()
     else SET_RESISTOR
-        CB->>GPIO: CanResistor::instance().set()
-        GPIO->>GS: 更新 can_resistor_state
+        CB->>CR: set()
+        CR->>GS: 更新 can_resistor_state
     end
 ```
 
@@ -41,8 +41,7 @@ sequenceDiagram
 flowchart TD
     Init["CanCallback::init()"] --> HW["读取 hardware_config"]
     HW --> Resistor["初始化 CAN_RESISTOR_ENABLE GPIO"]
-    Resistor --> StateCb["绑定 on_change<br/>写入 GlobalState"]
-    StateCb --> Bus["new HXC_TWAI(CAN_TX, CAN_RX, CAN_BAUDRATE.read())"]
+    Resistor --> Bus["new HXC_TWAI(CAN_TX, CAN_RX, CAN_BAUDRATE.read())"]
     Bus --> Setup["can_bus->setup()"]
     Setup --> Register["注册 PING / GET_STATE / SET_OUTPUT / SET_RESISTOR / Catch-All"]
 ```
@@ -153,4 +152,4 @@ can_bus->add_can_receive_callback_func(0x456,
 ## 环境与依赖
 
 - **软件**：ESP-IDF v6.0+、C++11
-- **组件依赖**：`HXC_TWAI`、`HXC_NVS`、`hardware`、`cpp_gpio_driver`、`protect`、`global_state`、`power_output`
+- **组件依赖**：`HXC_TWAI`、`HXC_NVS`、`can_resistor`、`hardware`、`protect`、`global_state`、`power_output`

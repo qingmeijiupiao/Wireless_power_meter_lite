@@ -3,18 +3,18 @@
  * @brief ST7735S显示屏驱动
  * 
  * 通过SPI控制TFT ST7735S显示屏的公共API。
- * 包含绘制像素、矩形、文本等函数。
+ * 包含像素、矩形、抗锯齿圆角矩形、文本、图像和双缓冲同步接口。
  * 
  * @example
- * ```c
- * st7735_config_t cfg = {
+ * ```cpp
+ * ST7735::Config cfg = {
  *     .mosi_io_num = 19, .sclk_io_num = 21, .cs_io_num = 22,
  *     .dc_io_num = 2, .rst_io_num = 3, .bl_io_num = 15,
+ *     .bl_active_state = true,
  *     .host_id = SPI2_HOST
  * };
- * st7735_init(&cfg);
- * st7735_fill_screen(ST7735_BLACK);
- * st7735_draw_string(10, 10, "Hello!", ST7735_WHITE, ST7735_BLACK, 2);
+ * ST7735::init(&cfg);
+ * ST7735::fill_screen(ST7735::BLACK);
  * ```
  */
 
@@ -143,7 +143,7 @@ void invert_display(bool invert);
  * @param c ASCII字符（32-127）
  * @param color 文本颜色
  * @param bg 背景颜色
- * @param size 缩放比例（1 = 5x7, 2 = 10x14, 等）
+ * @param font 字体资源
  */
 void draw_char(uint16_t x, uint16_t y, char c, color_t color, color_t bg,const Font_t& font);
 
@@ -154,7 +154,7 @@ void draw_char(uint16_t x, uint16_t y, char c, color_t color, color_t bg,const F
  * @param str 以NULL结尾的字符串
  * @param color 文本颜色
  * @param bg 背景颜色
- * @param size 文本缩放比例
+ * @param font 字体资源
  */
 void draw_string(uint16_t x, uint16_t y, const char *str, color_t color, color_t bg,const Font_t& font);
 
@@ -176,7 +176,7 @@ uint16_t get_height(void);
  * @param y 左上角的Y坐标
  * @param w 图像的宽度
  * @param h 图像的高度
- * @param data 指向RGB565像素数组的指针（大端序）
+ * @param data 指向RGB565原始值数组的指针；驱动写入帧缓冲时转换为发送字节序
  */
 void draw_image(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t *data);
 
@@ -198,7 +198,7 @@ void copy_buffers();
 /**
  * @brief 设置背光亮度
  * @param brightness 亮度值 0-255，0为关闭，255为最亮
- * @return 成功返回ESP_OK，未初始化背光返回ESP_ERR_INVALID_STATE
+ * @return 成功返回ESP_OK，未配置背光引脚返回ESP_ERR_NOT_SUPPORTED
  */
 esp_err_t set_backlight(uint8_t brightness);
 

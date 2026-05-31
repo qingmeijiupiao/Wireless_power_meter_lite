@@ -19,7 +19,7 @@ flowchart LR
     Timer --> GS["GlobalState<br/>全局静态实例"]
 
     GS --> Protect["protect<br/>20Hz 状态机"]
-    GS --> Screen["screen<br/>60FPS 渲染"]
+    GS --> Screen["screen<br/>按页面周期渲染"]
     GS --> CAN["can_callback<br/>状态帧打包"]
     GS --> BlackBox["blackbox_structured<br/>结构化快照"]
     Power["PowerOutput / CAN resistor<br/>GPIO on_change 回调"] --> GS
@@ -30,6 +30,8 @@ classDiagram
     class GlobalState {
         +uint16_t voltage_mV
         +int32_t current_uA
+        +int32_t meter_uah
+        +int32_t meter_uwh
         +int16_t board_temperature
         +int16_t chip_temperature
         +protect_states_t protect_states
@@ -59,6 +61,8 @@ classDiagram
 |------|------|------|
 | `voltage_mV` | `uint16_t` | 电压，单位 mV |
 | `current_uA` | `int32_t` | 电流，单位 μA |
+| `meter_uah` | `int32_t` | LP Core 自启动累计电量，单位 μAh |
+| `meter_uwh` | `int32_t` | LP Core 自启动累计能量，单位 μWh |
 | `board_temperature` | `int16_t` | 板载温度，单位 0.01°C |
 | `chip_temperature` | `int16_t` | 芯片内部温度，单位 0.01°C |
 | `protect_states` | `protect_states_t` | 保护状态位域 |
