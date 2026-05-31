@@ -24,6 +24,11 @@ namespace CircularFlashBuffer {
 
     esp_err_t read_block(uint32_t index, uint8_t* data);
 
+    /**
+     * @brief 物理擦除整个分区并重置内部指针
+     */
+    esp_err_t erase_all();
+
     uint32_t get_count();
 
     void set_enable(bool enable);

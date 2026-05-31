@@ -25,8 +25,8 @@ namespace Blackbox {
     } __attribute__((packed));
 
     constexpr uint8_t PAYLOAD_SIZE = RECORD_SIZE - sizeof(RecordHeader) - 1;
-    /** 单条字符串日志最多占用的原始记录数。 */
-    constexpr uint8_t MAX_TEXT_FRAGMENTS = 3;
+    /** 单条字符串日志最多占用的原始记录数。最大字符数 = 24*MAX_TEXT_FRAGMENTS -1 */
+    constexpr uint8_t MAX_TEXT_FRAGMENTS = 8;
     /** 拼接字符串日志所需的缓冲区大小，包含结尾的 NUL 字符。 */
     constexpr size_t TEXT_BUFFER_SIZE = MAX_TEXT_FRAGMENTS * PAYLOAD_SIZE;
 
@@ -59,6 +59,11 @@ namespace Blackbox {
     uint32_t count();
 
     Record read(uint32_t index);
+
+    /**
+     * @brief 清空所有日志并重置黑匣子状态
+     */
+    esp_err_t erase_all();
 
     /**
      * @brief 读取并拼接字符串日志。
