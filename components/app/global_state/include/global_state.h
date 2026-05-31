@@ -2,27 +2,42 @@
 #define GLOBAL_STATE_H
 #include "protect.h"
 #include <cstdint>
-union GlobalState_bit{
+union GlobalStateFlags {
     uint32_t raw;
     struct {
-        uint32_t out_put_state      : 1;  // 输出状态
-        uint32_t can_resistor_state : 1;  // CAN电阻状态
-        uint32_t protect_bypassed   : 1;  // 保护旁路状态，0=保护生效，1=仅检测不阻断输出
-        uint32_t reverse : 29;
-    } state_bit; // 需要保证所有字段的默认值为0
-} __attribute__((packed)); //4字节对齐
-static_assert(sizeof(GlobalState_bit) == 4, "GlobalState_bit size must be 4 bytes");
+        uint32_t output_enabled           : 1;
+        uint32_t can_resistor_enabled     : 1;
+        uint32_t protect_bypassed         : 1;
+        uint32_t protect_initialized      : 1;
+        uint32_t lp_core_running          : 1;
+        uint32_t lp_ina226_initialized    : 1;
+        uint32_t lp_i2c_error             : 1;
+        uint32_t lp_ina226_read_timeout   : 1;
+        uint32_t wifi_service_initialized : 1;
+        uint32_t wifi_enabled             : 1;
+        uint32_t wifi_sta_connected       : 1;
+        uint32_t wifi_ap_mode             : 1;
+        uint32_t wifi_has_saved_sta       : 1;
+        uint32_t wifi_web_enabled_on_boot : 1;
+        uint32_t web_backend_running      : 1;
+        uint32_t screen_initialized       : 1;
+        uint32_t blackbox_enabled         : 1;
+        uint32_t reserved                 : 15;
+    } bits;
+};
+static_assert(sizeof(GlobalStateFlags) == 4, "GlobalStateFlags size must be 4 bytes");
 
 struct GlobalState{
+    GlobalStateFlags flags;
+    protect_states_t protect_states;
     uint16_t voltage_mV; 
     int32_t current_uA;
     int32_t meter_uah;
     int32_t meter_uwh;
     int16_t board_temperature;  //单位为0.01摄氏度
     int16_t chip_temperature;   //单位为0.01摄氏度
-    protect_states_t protect_states;
-    GlobalState_bit global_state_bits;
-}__attribute__((packed));
+};
+static_assert(sizeof(GlobalState) == 24, "GlobalState size mismatch");
 
 GlobalState& get_global_state();
 

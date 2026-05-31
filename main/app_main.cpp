@@ -25,8 +25,6 @@ Button Side_Button;
 pwm_t blk;
 
 auto& global_state   = get_global_state();
-auto& protect_states = global_state.protect_states.states_bit;
-
 auto& Chip_Temperature_Sensor = ESPChipTemperatureSensor_t::instance();
 auto& Board_Temperature_sensor = TMP235_t::instance();
 
@@ -39,6 +37,10 @@ void update_main_state(TimerHandle_t xTimer){
     global_state.board_temperature = Board_Temperature_sensor.getTemperature();
     global_state.chip_temperature = Chip_Temperature_Sensor.getTemperature()*100.0f;
     *(int32_t*)&(ulp_Board_temperature) = global_state.board_temperature;
+    global_state.flags.bits.lp_core_running = ulp_state.ulp_state_bits.ulp_run;
+    global_state.flags.bits.lp_ina226_initialized = ulp_state.ulp_state_bits.ulp_ina226_init_ok;
+    global_state.flags.bits.lp_i2c_error = ulp_state.ulp_state_bits.ulp_i2c_init_err;
+    global_state.flags.bits.lp_ina226_read_timeout = ulp_state.ulp_state_bits.ulp_ina226_read_timeout;
 }
 
 
@@ -52,7 +54,8 @@ void OUTPUT_ctrl(){
 
 extern "C" void app_main(void){
     ESP_ERROR_CHECK(hardware_config_init());
-    ESP_ERROR_CHECK(BlackBox::init());
+    ESP_ERROR_CHECK(Blackbox::init());
+    global_state.flags.bits.blackbox_enabled = Blackbox::is_enabled();
     HXC::NVS_Base::setup();
 
     ESP_ERROR_CHECK(Chip_Temperature_Sensor.init());

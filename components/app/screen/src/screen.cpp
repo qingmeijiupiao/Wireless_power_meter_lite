@@ -10,6 +10,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "global_state.h"
 #include "hardware.h"
 #include "protect.h"
 #include "st7735.h"
@@ -61,6 +62,7 @@ void screen_task(void* arg) {
     }
 
     UIManager::instance().apply_saved_display_config();
+    get_global_state().flags.bits.screen_initialized = true;
     ST7735::fill_screen(ST7735::BLACK);
     ST7735::copy_buffers();
     ST7735::sync_buffers();

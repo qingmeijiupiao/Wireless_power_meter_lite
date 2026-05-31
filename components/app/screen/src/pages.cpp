@@ -131,7 +131,7 @@ void DashboardPage::render(RenderMode mode) {
     (void)mode;
     char temp_str[16];
     auto& global_state = get_global_state();
-    auto& global_state_bits = global_state.global_state_bits;
+    auto& global_state_flags = global_state.flags;
     auto& protect_states = global_state.protect_states.states_bit;
     const float voltage = global_state.voltage_mV / 1000.0f;
     const float current = std::abs(global_state.current_uA / 1000000.0f);
@@ -167,7 +167,7 @@ void DashboardPage::render(RenderMode mode) {
     };
 
     auto draw_output_state = [&]() {
-        const bool enabled = global_state_bits.state_bit.out_put_state;
+        const bool enabled = global_state_flags.bits.output_enabled;
         ST7735::draw_image(62, 66,
                            enabled ? OPEN_WIDTH : CLOSE_WIDTH,
                            enabled ? OPEN_HEIGHT : CLOSE_HEIGHT,
@@ -282,7 +282,7 @@ void BatteryPage::render(RenderMode mode) {
         format_fixed_digits(line, sizeof(line), power, "W", 3, 2, true);
         ST7735::draw_string(106, 5, line, ST7735::WHITE, ST7735::BLACK, DENGB12);
 
-        const bool output_enabled = global_state.global_state_bits.state_bit.out_put_state;
+        const bool output_enabled = global_state.flags.bits.output_enabled;
         ST7735::draw_image(145, 4,
                            output_enabled ? METER_CIRCLE_GREEN_WIDTH : METER_CIRCLE_RED_WIDTH,
                            output_enabled ? METER_CIRCLE_GREEN_HEIGHT : METER_CIRCLE_RED_HEIGHT,

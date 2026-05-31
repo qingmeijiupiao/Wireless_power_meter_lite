@@ -5,8 +5,8 @@
 ## 模块特点
 
 - **单例引用**：`get_global_state()` 返回全局唯一 `GlobalState` 引用，零拷贝共享
-- **位域压缩**：`GlobalState_bit` 使用位域管理布尔标志，4 字节容纳 32 个开关量
-- **`packed` 对齐**：结构体 `__attribute__((packed))` 保证内存布局一致，适合 DMA / 持久化场景
+- **位域压缩**：`GlobalStateFlags` 使用位域管理诊断标志，4 字节容纳 32 个开关量
+- **自然对齐**：运行时结构按字段顺序自然对齐，共 24 字节；持久化使用独立的版本化黑匣子快照
 - **与 protect 联动**：内嵌 `protect_states_t` 直接承载保护状态
 
 ## 架构与数据流
@@ -35,12 +35,12 @@ classDiagram
         +int16_t board_temperature
         +int16_t chip_temperature
         +protect_states_t protect_states
-        +GlobalState_bit global_state_bits
+        +GlobalStateFlags flags
     }
-    class GlobalState_bit {
+    class GlobalStateFlags {
         +uint32_t raw
-        +out_put_state : 1
-        +can_resistor_state : 1
+        +output_enabled : 1
+        +can_resistor_enabled : 1
         +protect_bypassed : 1
         +reverse : 29
     }
@@ -51,7 +51,7 @@ classDiagram
         +low_voltage_protect_state : 2
         +current_protect_state : 2
     }
-    GlobalState *-- GlobalState_bit
+    GlobalState *-- GlobalStateFlags
     GlobalState *-- protect_states_t
 ```
 
@@ -66,7 +66,7 @@ classDiagram
 | `board_temperature` | `int16_t` | 板载温度，单位 0.01°C |
 | `chip_temperature` | `int16_t` | 芯片内部温度，单位 0.01°C |
 | `protect_states` | `protect_states_t` | 保护状态位域 |
-| `global_state_bits` | `GlobalState_bit` | 通用状态位域（输出、CAN 终端电阻、保护旁路等） |
+| `flags` | `GlobalStateFlags` | 诊断状态位域（输出、CAN 终端电阻、保护、LP Core、WiFi、Web、屏幕和黑匣子等） |
 
 ## 集成与使用
 
@@ -76,7 +76,7 @@ classDiagram
 auto& state = get_global_state();
 state.voltage_mV = 12000;
 state.current_uA = 1500000;
-bool out = state.global_state_bits.state_bit.out_put_state;
+bool out = state.flags.bits.output_enabled;
 ```
 
 ## 环境与依赖

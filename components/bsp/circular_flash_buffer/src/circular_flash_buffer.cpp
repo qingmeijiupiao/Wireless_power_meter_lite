@@ -23,6 +23,7 @@ static SemaphoreHandle_t cfb_mutex = nullptr;
 static uint32_t now_write_page = 0;
 static uint8_t block_page_index = 0;
 static uint32_t block_count = 0;
+static uint32_t max_retained_blocks = 0;
 static uint32_t total_pages = 0;
 static uint32_t total_sectors = 0;
 
@@ -33,6 +34,24 @@ static esp_err_t erase_sector(uint32_t sector_index) {
         return ESP_ERR_INVALID_ARG;
     }
     return esp_partition_erase_range(cfb_partition, sector_index * SECTOR_SIZE, SECTOR_SIZE);
+}
+
+static uint32_t count_valid_blocks_in_sector(uint32_t sector_index) {
+    uint8_t buffer[PAGE_SIZE];
+    uint32_t count = 0;
+    const uint32_t first_page = sector_index * PAGES_PER_SECTOR;
+
+    for (uint32_t page = 0; page < PAGES_PER_SECTOR; ++page) {
+        if (esp_partition_read(cfb_partition, (first_page + page) * PAGE_SIZE, buffer, PAGE_SIZE) != ESP_OK) {
+            return 0;
+        }
+        for (uint8_t block = 0; block < cfb_blocks_per_page; ++block) {
+            if (buffer[block * cfb_block_size] == BLOCK_SOF) {
+                ++count;
+            }
+        }
+    }
+    return count;
 }
 
 static esp_err_t write_page(uint32_t page_index, const uint8_t* data) {
@@ -73,6 +92,10 @@ esp_err_t CircularFlashBuffer::init(const char* partition_name, size_t block_siz
     cfb_partition = (esp_partition_t*)_partition;
     total_pages = cfb_partition->size / PAGE_SIZE;
     total_sectors = cfb_partition->size / SECTOR_SIZE;
+    if (total_sectors < 2) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    max_retained_blocks = (total_sectors - 1) * SECTOR_SIZE / cfb_block_size;
     memset(page_buffer, 0xFF, PAGE_SIZE);
 
     bool empty_page_found = false;
@@ -118,12 +141,12 @@ esp_err_t CircularFlashBuffer::init(const char* partition_name, size_t block_siz
         }
     }
 
-    esp_partition_read(cfb_partition, ((now_write_page + 2) % total_pages) * PAGE_SIZE, buffer, PAGE_SIZE);
-    if (memcmp(buffer, page_buffer, PAGE_SIZE)) {
-        uint32_t max_block_count = cfb_partition->size / cfb_block_size;
-        block_count = max_block_count - 2 * cfb_blocks_per_page + block_page_index;
-    } else {
-        block_count = now_write_page * cfb_blocks_per_page + block_page_index;
+    block_count = 0;
+    for (uint32_t sector = 0; sector < total_sectors; ++sector) {
+        block_count += count_valid_blocks_in_sector(sector);
+    }
+    if (block_count > max_retained_blocks) {
+        block_count = max_retained_blocks;
     }
 
     esp_partition_read(cfb_partition, now_write_page * PAGE_SIZE, buffer, PAGE_SIZE);
@@ -140,6 +163,9 @@ esp_err_t CircularFlashBuffer::init(const char* partition_name, size_t block_siz
 }
 
 esp_err_t CircularFlashBuffer::write_block(const uint8_t* data) {
+    if (data == nullptr || cfb_mutex == nullptr) {
+        return ESP_ERR_INVALID_STATE;
+    }
     if (!cfb_enable) {
         return ESP_ERR_NOT_SUPPORTED;
     }
@@ -149,7 +175,9 @@ esp_err_t CircularFlashBuffer::write_block(const uint8_t* data) {
     size_t offset = block_page_index * cfb_block_size;
     memcpy(page_buffer + offset, data, cfb_block_size);
     block_page_index = (block_page_index + 1) % cfb_blocks_per_page;
-    block_count++;
+    if (block_count < max_retained_blocks) {
+        block_count++;
+    }
 
     if (write_page(now_write_page, page_buffer) != ESP_OK) {
         ESP_LOGE("CircularFlashBuffer", "Failed to write page %d", now_write_page);
@@ -163,11 +191,14 @@ esp_err_t CircularFlashBuffer::write_block(const uint8_t* data) {
 
         if (now_write_page % PAGES_PER_SECTOR == 0) {
             uint32_t sector_index = now_write_page / PAGES_PER_SECTOR;
-            if (erase_sector((sector_index + 1) % total_sectors) != ESP_OK) {
-                ESP_LOGE("CircularFlashBuffer", "Failed to erase sector %d", sector_index + 1);
+            uint32_t erase_sector_index = (sector_index + 1) % total_sectors;
+            uint32_t erased_blocks = count_valid_blocks_in_sector(erase_sector_index);
+            if (erase_sector(erase_sector_index) != ESP_OK) {
+                ESP_LOGE("CircularFlashBuffer", "Failed to erase sector %d", erase_sector_index);
                 xSemaphoreGive(cfb_mutex);
                 return ESP_ERR_INVALID_STATE;
             }
+            block_count = erased_blocks > block_count ? 0 : block_count - erased_blocks;
         }
     }
 
@@ -176,6 +207,9 @@ esp_err_t CircularFlashBuffer::write_block(const uint8_t* data) {
 }
 
 esp_err_t CircularFlashBuffer::read_block(uint32_t index, uint8_t* data) {
+    if (data == nullptr || cfb_mutex == nullptr) {
+        return ESP_ERR_INVALID_STATE;
+    }
     xSemaphoreTake(cfb_mutex, portMAX_DELAY);
 
     if (index >= block_count) {
@@ -237,6 +271,9 @@ uint32_t CircularFlashBuffer::get_count() {
 }
 
 void CircularFlashBuffer::set_enable(bool enable) {
+    if (cfb_mutex == nullptr) {
+        return;
+    }
     xSemaphoreTake(cfb_mutex, portMAX_DELAY);
     cfb_enable = enable;
     xSemaphoreGive(cfb_mutex);

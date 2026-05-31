@@ -51,7 +51,7 @@ esp_err_t init() {
         state_data.current_mA        = std::abs(state.current_uA/1000);
         state_data.Board_temperature = state.board_temperature/100;
         state_data.Chip_temperature  = state.chip_temperature/100;
-        state_data.output_state      = state.global_state_bits.state_bit.out_put_state;
+        state_data.output_state      = state.flags.bits.output_enabled;
         state_data.current_direction = state.current_uA > 0 ? 1 : 0;
         state_data.CAN_resistor      = CanResistor::instance().get();
         state_data.UVP_flag          = state.protect_states.states_bit.low_voltage_protect_state;

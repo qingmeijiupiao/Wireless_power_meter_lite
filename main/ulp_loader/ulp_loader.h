@@ -11,7 +11,9 @@
 
 #include "esp_err.h"
 #include "ulp_main.h"
+#include "ulp_app/ulp_state.h"
 
 esp_err_t LP_Core_Load(void);
+extern ULP_CORE_STATE& ulp_state;
 
 #endif // ULP_LOADER_HPP

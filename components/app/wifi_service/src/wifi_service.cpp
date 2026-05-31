@@ -16,6 +16,7 @@
 #include "esp_log.h"
 #include "web_server.h"
 #include "freertos/semphr.h"
+#include "global_state.h"
 
 namespace WifiService {
 
@@ -32,6 +33,16 @@ static Mode mode = Mode::OFF;
 static char ap_ssid[WIFI_SSID_MAX_LEN + 1] = {};
 static char last_error[64] = "none";
 static SemaphoreHandle_t scan_mutex = nullptr;
+
+static void update_global_state_flags() {
+    auto& state = get_global_state();
+    state.flags.bits.wifi_service_initialized = initialized;
+    state.flags.bits.wifi_enabled = mode != Mode::OFF;
+    state.flags.bits.wifi_sta_connected = mode == Mode::STA && WiFiManager::instance().is_connected();
+    state.flags.bits.wifi_ap_mode = mode == Mode::AP_PROVISION;
+    state.flags.bits.wifi_has_saved_sta = has_saved_sta();
+    state.flags.bits.wifi_web_enabled_on_boot = is_web_enabled_on_boot();
+}
 
 /**
  * @brief 更新最近一次错误描述
@@ -87,6 +98,7 @@ esp_err_t init() {
         return ESP_ERR_NO_MEM;
     }
     initialized = true;
+    update_global_state_flags();
     return ESP_OK;
 }
 
@@ -109,6 +121,7 @@ bool is_web_enabled_on_boot() {
  */
 esp_err_t set_web_enabled_on_boot(bool enabled) {
     web_boot = enabled ? 1 : 0;
+    update_global_state_flags();
     return ESP_OK;
 }
 
@@ -118,6 +131,7 @@ esp_err_t set_web_enabled_on_boot(bool enabled) {
 esp_err_t clear_saved_sta() {
     sta_ssid = "";
     sta_pass = "";
+    update_global_state_flags();
     return ESP_OK;
 }
 
@@ -163,6 +177,7 @@ esp_err_t connect_sta(const char* ssid, const char* password, bool save) {
     esp_err_t ret = WiFiManager::instance().connect_sta(ssid, password, true);
     if (ret == ESP_OK) {
         mode = Mode::STA;
+        update_global_state_flags();
         set_last_error("none");
 
         // 只有业务层明确要求保存时才写入 NVS，启动自动连接不会重复写 Flash。
@@ -195,6 +210,7 @@ esp_err_t start_provision_ap() {
     ESP_RETURN_ON_ERROR(DNSServer::start(AP_IP_OCTET1, AP_IP_OCTET2, AP_IP_OCTET3, AP_IP_OCTET4), TAG, "start dns failed");
     WebServer::enable_captive_portal(true);
     mode = Mode::AP_PROVISION;
+    update_global_state_flags();
     set_last_error("none");
     ESP_LOGI(TAG, "Provision AP active: %s", ap_ssid);
     return ESP_OK;
@@ -283,6 +299,7 @@ esp_err_t start_default() {
     if (!is_web_enabled_on_boot()) {
         ESP_LOGI(TAG, "web/wifi startup disabled by NVS");
         mode = Mode::OFF;
+        update_global_state_flags();
         return ESP_OK;
     }
 
@@ -306,6 +323,7 @@ esp_err_t stop() {
     WebServer::enable_captive_portal(false);
     esp_err_t ret = WiFiManager::instance().stop();
     mode = Mode::OFF;
+    update_global_state_flags();
     return ret;
 }
 

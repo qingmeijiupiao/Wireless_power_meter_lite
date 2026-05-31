@@ -41,7 +41,7 @@ sequenceDiagram
         PO-->>Caller: OutputResult
     else 全部通过
         PO->>GPIO: set(new_state)
-        GPIO->>GS: on_change 更新 out_put_state
+        GPIO->>GS: on_change 更新 flags.bits.output_enabled
         PO->>Policy: on_state_applied(op, new_state)
         PO->>CB: notify_change(new_state)
         PO-->>Caller: OK

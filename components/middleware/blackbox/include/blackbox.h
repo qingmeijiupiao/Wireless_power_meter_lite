@@ -5,50 +5,77 @@
  */
 #ifndef BLACKBOX_H
 #define BLACKBOX_H
+#include <stddef.h>
 #include <stdint.h>
 #include "esp_err.h"
 #include "circular_flash_buffer.h"
 
-namespace BlackBox {
-    constexpr uint32_t BLACKBOX_DATA_SIZE = 32;
+namespace Blackbox {
+    constexpr uint32_t RECORD_SIZE = 32;
 
     enum class LogType : uint8_t {
         STRING = 0,
         STRUCTURED = 1,
     };
 
-    struct BlackBoxHeader_t {
+    struct RecordHeader {
         uint8_t sof = CircularFlashBuffer::BLOCK_SOF;
         LogType type;
         uint32_t timestamp;
     } __attribute__((packed));
 
-    constexpr uint8_t PAYLOAD_SIZE = BLACKBOX_DATA_SIZE - sizeof(BlackBoxHeader_t) - 1;
-    static_assert(PAYLOAD_SIZE == BLACKBOX_DATA_SIZE - sizeof(BlackBoxHeader_t) - sizeof(uint8_t), "PAYLOAD_SIZE mismatch");
+    constexpr uint8_t PAYLOAD_SIZE = RECORD_SIZE - sizeof(RecordHeader) - 1;
+    /** 单条字符串日志最多占用的原始记录数。 */
+    constexpr uint8_t MAX_TEXT_FRAGMENTS = 3;
+    /** 拼接字符串日志所需的缓冲区大小，包含结尾的 NUL 字符。 */
+    constexpr size_t TEXT_BUFFER_SIZE = MAX_TEXT_FRAGMENTS * PAYLOAD_SIZE;
 
-    union BlackBoxPayload_t {
+    union RecordPayload {
         uint8_t bytes[PAYLOAD_SIZE];
         char str[PAYLOAD_SIZE];
     } __attribute__((packed));
 
-    struct BlackBoxRaw_t {
-        BlackBoxHeader_t header;
-        BlackBoxPayload_t payload;
+    struct Record {
+        RecordHeader header;
+        RecordPayload payload;
         uint8_t crc_checksum;
     } __attribute__((packed));
-    static_assert(sizeof(BlackBoxRaw_t) == BLACKBOX_DATA_SIZE, "BlackBoxRaw_t size mismatch");
+    static_assert(sizeof(Record) == RECORD_SIZE, "Blackbox record size mismatch");
+
+    /** 由一条或多条原始记录拼接得到的完整字符串日志。 */
+    struct TextRecord {
+        /** 以 NUL 结尾的完整字符串。 */
+        char str[TEXT_BUFFER_SIZE];
+        /** 本次读取占用的原始记录数，为零表示未读取到字符串。 */
+        uint8_t record_count;
+    };
 
     esp_err_t init();
 
-    esp_err_t add_string_log(const char *fmt, ...);
+    esp_err_t append_text(const char *fmt, ...);
 
-    esp_err_t add_typed_log(LogType type, const uint8_t* payload, size_t len);
+    esp_err_t append_typed(LogType type, const uint8_t* payload, size_t len);
 
-    uint32_t get_count();
+    uint32_t count();
 
-    BlackBoxRaw_t get_log(uint32_t index);
+    Record read(uint32_t index);
 
-    void set_log_enable(bool enable);
+    /**
+     * @brief 读取并拼接字符串日志。
+     *
+     * index 必须指向字符串日志最新的一条原始记录。原始记录按从新到旧的
+     * 顺序读取，因此成功读取后，调用方应将轮询索引增加
+     * TextRecord::record_count。
+     *
+     * @param index 按从新到旧顺序计算的原始记录索引。
+     * @return 完整字符串和占用的原始记录数。记录无效、记录不是字符串类型，
+     *         或索引指向非末尾字符串分片时，record_count 为零。
+     */
+    TextRecord read_text(uint32_t index);
+
+    void set_enabled(bool enable);
+
+    bool is_enabled();
 }
 
 #endif

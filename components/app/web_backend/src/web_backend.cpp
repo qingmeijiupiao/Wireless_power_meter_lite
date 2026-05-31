@@ -12,6 +12,7 @@
 
 #include "esp_log.h"
 #include "esp_system.h"
+#include "global_state.h"
 #include "web_file.h"
 #include "web_server.h"
 #include "wifi_service.h"
@@ -137,6 +138,7 @@ esp_err_t start() {
     esp_err_t ret = WebServer::begin();
     if (ret == ESP_OK) {
         running = true;
+        get_global_state().flags.bits.web_backend_running = true;
     }
     return ret;
 }
@@ -177,6 +179,7 @@ esp_err_t start_with_wifi_service() {
 /** @brief 停止 HTTP 服务并更新运行标志。 */
 esp_err_t stop() {
     running = false;
+    get_global_state().flags.bits.web_backend_running = false;
     return WebServer::stop();
 }
 

@@ -111,7 +111,7 @@ esp_err_t state_handler(WebServer::Request* request) {
         meter.energy_uwh / 1000.0,
         meter.charge_uah / 1000.0,
         meter.meter_time_ms,
-        state.global_state_bits.state_bit.out_put_state ? "true" : "false",
+        state.flags.bits.output_enabled ? "true" : "false",
         protect_is_bypassed() ? "true" : "false",
         esp_timer_get_time() / 1000,
         (unsigned)protect.temperature_protect_state,

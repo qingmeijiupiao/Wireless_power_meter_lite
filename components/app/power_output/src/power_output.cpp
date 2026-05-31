@@ -83,7 +83,7 @@ esp_err_t init(gpio_num_t output_gpio_num) {
     ESP_ERROR_CHECK(_output_gpio.init(output_gpio_num));
     _output_gpio.set_on_change_callback([](bool value){
         auto& state = get_global_state();
-        state.global_state_bits.state_bit.out_put_state = value;
+        state.flags.bits.output_enabled = value;
     });
     _output_gpio.set(false);
 

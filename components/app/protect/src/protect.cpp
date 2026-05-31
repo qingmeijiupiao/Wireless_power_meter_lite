@@ -136,12 +136,12 @@ bool protect_has_active_fault(){
 }
 
 void protect_set_bypassed(bool bypassed){
-    glb_states.global_state_bits.state_bit.protect_bypassed = bypassed;
+    glb_states.flags.bits.protect_bypassed = bypassed;
     PROTECT_LOGW("protect bypass %s", bypassed ? "enabled" : "disabled");
 }
 
 bool protect_is_bypassed(){
-    return glb_states.global_state_bits.state_bit.protect_bypassed;
+    return glb_states.flags.bits.protect_bypassed;
 }
 
 bool protect_should_block_output(){
@@ -253,6 +253,7 @@ void protect_task(void* pvParameters){
         if(first_check){
             first_check = false;
             _protect_init_ok = true;
+            glb_states.flags.bits.protect_initialized = true;
             ESP_LOGI(PROTECT_LOG_TAG, "protect first check complete");
         }
 
@@ -279,6 +280,7 @@ bool protect_init_ok(){
 esp_err_t protect_deinit(){
     if(protect_task_handle){
         glb_states.protect_states.protect_states_raw = 0; //清除保护状态
+        glb_states.flags.bits.protect_initialized = false;
         vTaskDelete(protect_task_handle);
         protect_task_handle = nullptr;
     }else{

@@ -33,7 +33,7 @@ sequenceDiagram
         CB->>PO: PowerOutput::on()/off()
     else SET_RESISTOR
         CB->>CR: set()
-        CR->>GS: 更新 can_resistor_state
+        CR->>GS: 更新 flags.bits.can_resistor_enabled
     end
 ```
 

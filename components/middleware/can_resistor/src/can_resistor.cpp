@@ -13,7 +13,7 @@ CppGpioDriver<GPIO_NUM_NC, GpioMode::OUTPUT> resistor_gpio;
 HXC::NVS_DATA<uint8_t> saved_state("can_term", 0);
 
 void update_global_state(bool enabled) {
-    get_global_state().global_state_bits.state_bit.can_resistor_state = enabled;
+    get_global_state().flags.bits.can_resistor_enabled = enabled;
 }
 
 } // namespace

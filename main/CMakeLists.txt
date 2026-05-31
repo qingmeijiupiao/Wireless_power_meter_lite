@@ -5,6 +5,7 @@ idf_component_register(
                  "ulp_loader"
     REQUIRES
         blackbox
+        blackbox_structured
         Temperature
         HXC_TWAI
         global_state
