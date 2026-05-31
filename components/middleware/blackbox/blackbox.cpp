@@ -12,6 +12,7 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 #include <cstdarg>
 #include <cstdio>
@@ -25,8 +26,23 @@ static bool enabled = true;
 static QueueHandle_t log_queue = nullptr;
 // 异步写入任务句柄
 static TaskHandle_t blackbox_task_handle = nullptr;
+// 保护启停状态和控制操作，避免清空过程中有新记录进入队列
+static SemaphoreHandle_t state_mutex = nullptr;
 // 队列深度：可缓冲的记录条数。设为 64 可应对短时间的日志爆发
 static constexpr uint32_t QUEUE_SIZE = 64;
+
+enum class QueueItemType : uint8_t {
+    WRITE,
+    ERASE_ALL,
+    BARRIER,
+};
+
+struct QueueItem {
+    QueueItemType type;
+    Record record;
+    SemaphoreHandle_t completion;
+    esp_err_t* result;
+};
 
 /**
  * @brief 计算 CRC8 校验值，用于检测 Flash 数据损坏
@@ -64,13 +80,27 @@ static esp_err_t write_record_internal(Record& raw) {
  * @details 持续监听队列，一旦有新日志则执行 Flash 写入操作。
  */
 static void blackbox_task(void* arg) {
-    Record record;
+    QueueItem item;
     ESP_LOGI("Blackbox", "Async task started");
     while (true) {
         // 无限期等待队列消息
-        if (xQueueReceive(log_queue, &record, portMAX_DELAY) == pdPASS) {
-            if (enabled) {
-                write_record_internal(record);
+        if (xQueueReceive(log_queue, &item, portMAX_DELAY) == pdPASS) {
+            esp_err_t result = ESP_OK;
+            switch (item.type) {
+                case QueueItemType::WRITE:
+                    result = write_record_internal(item.record);
+                    break;
+                case QueueItemType::ERASE_ALL:
+                    result = CircularFlashBuffer::erase_all();
+                    break;
+                case QueueItemType::BARRIER:
+                    break;
+            }
+            if (item.result != nullptr) {
+                *item.result = result;
+            }
+            if (item.completion != nullptr) {
+                xSemaphoreGive(item.completion);
             }
         }
     }
@@ -81,17 +111,62 @@ static void blackbox_task(void* arg) {
  * @param raw 构造好的日志记录
  * @return esp_err_t ESP_OK 表示成功，ESP_FAIL 表示队列满导致丢弃
  */
-static esp_err_t queue_record(Record& raw) {
+static esp_err_t queue_item(const QueueItem& item, TickType_t ticks_to_wait = 0) {
     if (log_queue == nullptr) {
         return ESP_ERR_INVALID_STATE;
     }
-    
-    // 超时时间设为 0：如果队列满了，立即返回失败并丢弃日志。
-    // 这样做是为了绝对保证调用者（如过流保护任务）不会因为日志拥堵而产生延迟。
-    if (xQueueSend(log_queue, &raw, 0) != pdPASS) {
-        return ESP_FAIL; 
+
+    // 普通日志使用 0 超时，队列满时立即丢弃，避免保护任务因日志拥堵产生延迟。
+    // 控制操作使用 portMAX_DELAY，确保启停和擦除命令可以可靠进入消费者队列。
+    if (xQueueSend(log_queue, &item, ticks_to_wait) != pdPASS) {
+        return ESP_FAIL;
     }
     return ESP_OK;
+}
+
+static esp_err_t queue_record(const Record& raw, TickType_t ticks_to_wait = 0) {
+    QueueItem item = {
+        .type = QueueItemType::WRITE,
+        .record = raw,
+        .completion = nullptr,
+        .result = nullptr,
+    };
+    return queue_item(item, ticks_to_wait);
+}
+
+static esp_err_t wait_for_item(QueueItemType type) {
+    SemaphoreHandle_t completion = xSemaphoreCreateBinary();
+    if (completion == nullptr) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    esp_err_t operation_result = ESP_OK;
+    QueueItem item = {
+        .type = type,
+        .record = {},
+        .completion = completion,
+        .result = &operation_result,
+    };
+    esp_err_t err = queue_item(item, portMAX_DELAY);
+    if (err == ESP_OK && xSemaphoreTake(completion, portMAX_DELAY) != pdTRUE) {
+        err = ESP_FAIL;
+    }
+    if (err == ESP_OK) {
+        err = operation_result;
+    }
+    vSemaphoreDelete(completion);
+    return err;
+}
+
+static Record make_text_record(const char* text) {
+    Record raw = {};
+    raw.header.sof = CircularFlashBuffer::BLOCK_SOF;
+    raw.header.type = LogType::STRING;
+    raw.header.timestamp = esp_timer_get_time() / 1000;
+    size_t len = strnlen(text, PAYLOAD_SIZE - 1);
+    memcpy(raw.payload.str, text, len);
+    raw.payload.str[len] = '\0';
+    return raw;
 }
 
 /**
@@ -108,14 +183,23 @@ esp_err_t Blackbox::init() {
     if (err != ESP_OK) return err;
 
     // 创建 FreeRTOS 队列
-    log_queue = xQueueCreate(QUEUE_SIZE, sizeof(Record));
+    log_queue = xQueueCreate(QUEUE_SIZE, sizeof(QueueItem));
     if (log_queue == nullptr) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    state_mutex = xSemaphoreCreateMutex();
+    if (state_mutex == nullptr) {
+        vQueueDelete(log_queue);
+        log_queue = nullptr;
         return ESP_ERR_NO_MEM;
     }
 
     // 创建异步日志任务，优先级设为 3（适中），堆栈 3KB
     BaseType_t ret = xTaskCreate(blackbox_task, "blackbox_t", 3072, nullptr, 3, &blackbox_task_handle);
     if (ret != pdPASS) {
+        vSemaphoreDelete(state_mutex);
+        state_mutex = nullptr;
         vQueueDelete(log_queue);
         log_queue = nullptr;
         return ESP_ERR_NO_MEM;
@@ -131,8 +215,18 @@ esp_err_t Blackbox::init() {
  * @details 支持长字符串自动切片存储。
  */
 esp_err_t Blackbox::append_text(const char *fmt, ...) {
-    if (fmt == nullptr || !enabled) {
+    if (fmt == nullptr) {
         return ESP_ERR_INVALID_ARG;
+    }
+    if (state_mutex == nullptr) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (xSemaphoreTake(state_mutex, 0) != pdTRUE) {
+        return ESP_FAIL;
+    }
+    if (!enabled) {
+        xSemaphoreGive(state_mutex);
+        return ESP_ERR_INVALID_STATE;
     }
 
     char buf[TEXT_BUFFER_SIZE];
@@ -151,18 +245,25 @@ esp_err_t Blackbox::append_text(const char *fmt, ...) {
         raw.header.timestamp = esp_timer_get_time() / 1000;
         memset(raw.payload.bytes, 0, PAYLOAD_SIZE);
         memcpy(raw.payload.str, buf, len + 1);
-        return queue_record(raw);
+        esp_err_t err = queue_record(raw);
+        xSemaphoreGive(state_mutex);
+        return err;
     }
 
     // 情况 B：长字符串，需要切分为多个碎片
-    uint8_t fragments = (len + PAYLOAD_SIZE - 1) / PAYLOAD_SIZE;
+    uint8_t fragments = (len + PAYLOAD_SIZE) / PAYLOAD_SIZE;
     if (fragments > MAX_TEXT_FRAGMENTS) fragments = MAX_TEXT_FRAGMENTS;
+    if (uxQueueSpacesAvailable(log_queue) < fragments) {
+        xSemaphoreGive(state_mutex);
+        return ESP_FAIL;
+    }
+    uint32_t timestamp = esp_timer_get_time() / 1000;
 
     for (uint8_t i = 0; i < fragments; i++) {
         Record raw;
         raw.header.sof = CircularFlashBuffer::BLOCK_SOF;
         raw.header.type = LogType::STRING;
-        raw.header.timestamp = esp_timer_get_time() / 1000;
+        raw.header.timestamp = timestamp;
         memset(raw.payload.bytes, 0, PAYLOAD_SIZE);
 
         size_t offset = i * PAYLOAD_SIZE;
@@ -177,9 +278,13 @@ esp_err_t Blackbox::append_text(const char *fmt, ...) {
         }
 
         esp_err_t err = queue_record(raw);
-        if (err != ESP_OK) return err;
+        if (err != ESP_OK) {
+            xSemaphoreGive(state_mutex);
+            return err;
+        }
     }
 
+    xSemaphoreGive(state_mutex);
     return ESP_OK;
 }
 
@@ -190,8 +295,18 @@ esp_err_t Blackbox::append_text(const char *fmt, ...) {
  * @param len 数据长度
  */
 esp_err_t Blackbox::append_typed(LogType type, const uint8_t* payload, size_t len) {
-    if (payload == nullptr || len > PAYLOAD_SIZE || !enabled) {
+    if (payload == nullptr || len > PAYLOAD_SIZE) {
         return ESP_ERR_INVALID_ARG;
+    }
+    if (state_mutex == nullptr) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (xSemaphoreTake(state_mutex, 0) != pdTRUE) {
+        return ESP_FAIL;
+    }
+    if (!enabled) {
+        xSemaphoreGive(state_mutex);
+        return ESP_ERR_INVALID_STATE;
     }
 
     Record raw;
@@ -201,7 +316,19 @@ esp_err_t Blackbox::append_typed(LogType type, const uint8_t* payload, size_t le
     memset(raw.payload.bytes, 0, PAYLOAD_SIZE);
     memcpy(raw.payload.bytes, payload, len);
 
-    return queue_record(raw);
+    esp_err_t err = queue_record(raw);
+    xSemaphoreGive(state_mutex);
+    return err;
+}
+
+esp_err_t Blackbox::sync() {
+    if (log_queue == nullptr || state_mutex == nullptr) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    xSemaphoreTake(state_mutex, portMAX_DELAY);
+    esp_err_t err = wait_for_item(QueueItemType::BARRIER);
+    xSemaphoreGive(state_mutex);
+    return err;
 }
 
 /**
@@ -234,18 +361,24 @@ Record Blackbox::read(uint32_t index) {
 }
 
 esp_err_t Blackbox::erase_all() {
-    if (log_queue == nullptr) {
+    if (log_queue == nullptr || state_mutex == nullptr) {
         return ESP_ERR_INVALID_STATE;
     }
 
-    // 1. 重置异步队列，丢弃所有尚未写入 Flash 的日志
+    xSemaphoreTake(state_mutex, portMAX_DELAY);
+
+    // 丢弃尚未出队的记录。消费者若正在写入，会先完成该次写入，再执行擦除。
     xQueueReset(log_queue);
 
-    // 2. 调用底层物理擦除
-    esp_err_t err = CircularFlashBuffer::erase_all();
+    esp_err_t err = wait_for_item(QueueItemType::ERASE_ALL);
     if (err == ESP_OK) {
-        append_text("[Blackbox]: Factory Reset Performed");
+        Record marker = make_text_record("[Blackbox]: reset");
+        err = queue_record(marker, portMAX_DELAY);
+        if (err == ESP_OK) {
+            err = wait_for_item(QueueItemType::BARRIER);
+        }
     }
+    xSemaphoreGive(state_mutex);
     return err;
 }
 
@@ -274,6 +407,7 @@ TextRecord Blackbox::read_text(uint32_t index) {
         Record previous = read(index + text.record_count);
         if (previous.header.sof != CircularFlashBuffer::BLOCK_SOF ||
             previous.header.type != LogType::STRING ||
+            previous.header.timestamp != fragments[0].header.timestamp ||
             memchr(previous.payload.str, '\0', PAYLOAD_SIZE) != nullptr) {
             break; // 遇到非字符串或带 NUL 的记录，说明碎片结束
         }
@@ -297,18 +431,37 @@ TextRecord Blackbox::read_text(uint32_t index) {
  * @brief 动态启用或禁用黑匣子功能
  */
 void Blackbox::set_enabled(bool enable) {
-    if (enable) {
-        enabled = true;
-        append_text("[Blackbox]: enabled");
+    if (state_mutex == nullptr) {
         return;
     }
-    append_text("[Blackbox]: disabled");
+    xSemaphoreTake(state_mutex, portMAX_DELAY);
+    if (enabled == enable) {
+        xSemaphoreGive(state_mutex);
+        return;
+    }
+
+    if (enable) {
+        enabled = true;
+        queue_record(make_text_record("[Blackbox]: enabled"), portMAX_DELAY);
+        wait_for_item(QueueItemType::BARRIER);
+        xSemaphoreGive(state_mutex);
+        return;
+    }
+    queue_record(make_text_record("[Blackbox]: disabled"), portMAX_DELAY);
+    wait_for_item(QueueItemType::BARRIER);
     enabled = false;
+    xSemaphoreGive(state_mutex);
 }
 
 /**
  * @brief 查询黑匣子当前是否启用
  */
 bool Blackbox::is_enabled() {
-    return enabled;
+    if (state_mutex == nullptr) {
+        return false;
+    }
+    xSemaphoreTake(state_mutex, portMAX_DELAY);
+    bool result = enabled;
+    xSemaphoreGive(state_mutex);
+    return result;
 }

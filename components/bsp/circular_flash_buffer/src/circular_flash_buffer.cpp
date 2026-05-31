@@ -209,24 +209,30 @@ esp_err_t CircularFlashBuffer::init(const char* partition_name, size_t block_siz
 
 esp_err_t CircularFlashBuffer::write_block(const uint8_t* data) {
     if (data == nullptr || cfb_mutex == nullptr) return ESP_ERR_INVALID_STATE;
-    if (!cfb_enable) return ESP_ERR_NOT_SUPPORTED;
 
     xSemaphoreTake(cfb_mutex, portMAX_DELAY);
+    if (!cfb_enable) {
+        xSemaphoreGive(cfb_mutex);
+        return ESP_ERR_NOT_SUPPORTED;
+    }
 
     // 1. 数据暂存至内存页缓冲区
     size_t offset = block_page_index * cfb_block_size;
+    uint8_t previous_block[PAGE_SIZE];
+    memcpy(previous_block, page_buffer + offset, cfb_block_size);
     memcpy(page_buffer + offset, data, cfb_block_size);
-    
-    // 2. 只有未写满一圈时，计数才增加。回绕后计数维持在 Max 附近
-    if (block_count < max_retained_blocks) {
-        block_count++;
-    }
 
-    // 3. 将更新后的页写回 Flash (由于 Flash 位能从 1 变 0，所以页内连续写 Block 无需先擦除)
+    // 2. 将更新后的页写回 Flash (由于 Flash 位能从 1 变 0，所以页内连续写 Block 无需先擦除)
     if (write_page(now_write_page, page_buffer) != ESP_OK) {
         ESP_LOGE("CircularFlashBuffer", "Flash write failed at page %lu", now_write_page);
+        memcpy(page_buffer + offset, previous_block, cfb_block_size);
         xSemaphoreGive(cfb_mutex);
         return ESP_ERR_INVALID_STATE;
+    }
+
+    // 3. 物理写入成功后再更新计数，避免失败记录被暴露给读取方
+    if (block_count < max_retained_blocks) {
+        block_count++;
     }
 
     // 4. 更新 Head 索引
@@ -243,16 +249,16 @@ esp_err_t CircularFlashBuffer::write_block(const uint8_t* data) {
             // 预擦除“下下个”扇区，确保存储环路始终有一个“空白间隙”
             uint32_t erase_sector_index = (sector_index + 1) % total_sectors;
             
-            // 维护计数：如果擦除的那个扇区里有旧数据，block_count 需要扣除对应的量
-            uint32_t blocks_per_sector = PAGES_PER_SECTOR * cfb_blocks_per_page;
-            if (block_count > (max_retained_blocks - blocks_per_sector)) {
-                block_count -= blocks_per_sector;
-            }
-
             if (erase_sector(erase_sector_index) != ESP_OK) {
                 ESP_LOGE("CircularFlashBuffer", "Pre-erase failed at sector %lu", erase_sector_index);
                 xSemaphoreGive(cfb_mutex);
                 return ESP_ERR_INVALID_STATE;
+            }
+
+            // 擦除成功后再扣减旧数据，避免错误路径提前隐藏仍可读取的记录。
+            uint32_t blocks_per_sector = PAGES_PER_SECTOR * cfb_blocks_per_page;
+            if (block_count > (max_retained_blocks - blocks_per_sector)) {
+                block_count -= blocks_per_sector;
             }
         }
     }
@@ -343,7 +349,13 @@ esp_err_t CircularFlashBuffer::erase_all() {
 }
 
 uint32_t CircularFlashBuffer::get_count() {
-    return block_count;
+    if (cfb_mutex == nullptr) {
+        return 0;
+    }
+    xSemaphoreTake(cfb_mutex, portMAX_DELAY);
+    uint32_t count = block_count;
+    xSemaphoreGive(cfb_mutex);
+    return count;
 }
 
 void CircularFlashBuffer::set_enable(bool enable) {

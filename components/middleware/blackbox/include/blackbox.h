@@ -19,13 +19,13 @@ namespace Blackbox {
     };
 
     struct RecordHeader {
-        uint8_t sof = CircularFlashBuffer::BLOCK_SOF;
+        uint8_t sof;
         LogType type;
         uint32_t timestamp;
     } __attribute__((packed));
 
     constexpr uint8_t PAYLOAD_SIZE = RECORD_SIZE - sizeof(RecordHeader) - 1;
-    /** 单条字符串日志最多占用的原始记录数。最大字符数 = 24*MAX_TEXT_FRAGMENTS -1 */
+    /** 单条字符串日志最多占用的原始记录数。最大字符数 = PAYLOAD_SIZE*MAX_TEXT_FRAGMENTS - 1 */
     constexpr uint8_t MAX_TEXT_FRAGMENTS = 8;
     /** 拼接字符串日志所需的缓冲区大小，包含结尾的 NUL 字符。 */
     constexpr size_t TEXT_BUFFER_SIZE = MAX_TEXT_FRAGMENTS * PAYLOAD_SIZE;
@@ -55,6 +55,11 @@ namespace Blackbox {
     esp_err_t append_text(const char *fmt, ...);
 
     esp_err_t append_typed(LogType type, const uint8_t* payload, size_t len);
+
+    /**
+     * @brief 等待此前已入队的日志处理完成
+     */
+    esp_err_t sync();
 
     uint32_t count();
 
