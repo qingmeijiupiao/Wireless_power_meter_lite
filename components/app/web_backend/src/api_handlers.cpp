@@ -26,6 +26,7 @@
 #include "protect.h"
 #include "st7735.h"
 #include "wifi_service.h"
+#include "blackbox_service.h"
 
 namespace WebBackend {
 
@@ -132,6 +133,7 @@ esp_err_t state_handler(WebServer::Request* request) {
 esp_err_t meter_reset_handler(WebServer::Request* request) {
     EnergyMeter::reset();
     ESP_LOGI(TAG, "meter session reset");
+    BlackboxService::append_event("meter: reset source=web");
     return WebServer::send_json(request, "{\"ok\":true}\n");
 }
 
@@ -359,6 +361,9 @@ esp_err_t can_handler(WebServer::Request* request) {
     uint32_t baudrate = CanCallback::CAN_BAUDRATE;
     if (is_post) {
         ESP_LOGI(TAG, "CAN config updated: baudrate=%lu id=0x%lX", baudrate, can_id);
+        BlackboxService::append_event("can: config baud=%lu id=0x%lx source=web reboot_required=1",
+                                      static_cast<unsigned long>(baudrate),
+                                      static_cast<unsigned long>(can_id));
     }
     snprintf(response_buffer, sizeof(response_buffer),
         "{\"ok\":true,\"baudrate\":%lu,\"id\":%lu,\"id_hex\":\"0x%lX\",\"note\":\"changed values may require CAN reinitialization or reboot\"}\n",

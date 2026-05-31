@@ -1,0 +1,106 @@
+# blackbox_service
+
+应用层黑匣子服务。该组件在 `middleware/blackbox` 通用循环存储之上定义版本化状态快照，
+并统一管理 ESP_LOG 自动采集、关键事件记录、周期快照和 NVS 配置。
+
+## 模块特点
+
+- **应用层策略集中管理**：middleware 只负责通用异步落盘，本组件决定何时保存快照和事件
+- **版本化快照协议**：`SnapshotV1` 首字节为版本号，字段变化时新增版本以保持历史日志可解析
+- **ESP_LOG 自动采集**：`INFO` 及以上日志触发快照，`WARN` 及以上日志额外保存文本
+- **轻量日志钩子**：vprintf 钩子复用静态缓冲并只写固定 RAM 环，后台任务负责向 Flash 队列提交记录
+- **周期快照**：后台任务按 NVS 配置周期采样，间隔为 `0` 时关闭
+- **关键事件接口**：`append_event()` 优先保存事件文本，再尝试追加状态快照
+
+## 文件职责
+
+| 文件 | 职责 |
+|------|------|
+| `src/blackbox_service.cpp` | 服务初始化、公开事件接口和公开配置接口 |
+| `src/blackbox_snapshot.cpp` | `SnapshotV1` 状态采样与结构化记录写入 |
+| `src/blackbox_config.cpp` | `bb_snap_s` NVS 配置和运行期线程安全访问 |
+| `src/blackbox_log_capture.cpp` | ESP_LOG 钩子、Log V1 解析和固定 RAM 事件环 |
+| `src/blackbox_worker.cpp` | 自动日志事件消费和周期快照任务 |
+| `private_include/blackbox_service_internal.h` | 组件内部接口，不向其他组件暴露 |
+
+## 数据流
+
+```mermaid
+flowchart LR
+    Log["ESP_LOG vprintf 钩子"] --> Ring["固定 RAM 事件环"]
+    Ring --> Worker["blackbox_service 后台任务"]
+    Timer["周期配置 bb_snap_s"] --> Worker
+    App["业务模块<br/>append_event() / append_snapshot()"] --> Snapshot
+    Worker --> Snapshot["采样 get_global_state()"]
+    Snapshot --> Payload["SnapshotV1"]
+    Payload --> MW["middleware/blackbox<br/>append_typed()"]
+    MW --> Flash["circular_flash_buffer"]
+```
+
+## SnapshotV1
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `version` | `uint8_t` | 快照版本，当前为 1 |
+| `flags` | `GlobalStateFlags` | 诊断状态位 |
+| `protect_states` | `protect_states_t` | 四路保护状态 |
+| `voltage_mV` / `current_uA` | 整数 | 电压与电流 |
+| `meter_mwh` | `int32_t` | LP Core 开机以来累计能量 |
+| `board_temperature` / `chip_temperature` | `int16_t` | 温度，单位 0.01°C |
+
+不要直接持久化 `GlobalState`。字段语义变化时新增快照版本，并在读取端分版本解析。
+
+## ESP_LOG 规则
+
+| ESP_LOG 级别 | 行为 |
+|-------------|------|
+| `INFO` | 保存一条全局快照 |
+| `WARN` / `ERROR` | 保存格式为 `[级别][TAG] 正文` 的文本，再尝试保存一条全局快照 |
+| `DEBUG` / `VERBOSE` | 忽略 |
+
+为避免 Flash 错误形成反馈循环，自动采集排除 `Blackbox`、`BlackBox` 和
+`CircularFlashBuffer` TAG。为避免 WiFi 驱动启动日志产生大量低价值快照，还会排除
+`wifi`、`wifi_init`、`phy_init`、`pp` 和 `net80211` TAG。应用层
+`WiFiManager` 与 `WifiService` 日志仍会正常记录。当前解析逻辑基于工程启用的 ESP-IDF Log V1；
+切换到 Log V2 时需要同步调整。
+
+## 集成与使用
+
+```cpp
+#include "blackbox_service.h"
+
+// Blackbox::init() 和 NVS 初始化完成后尽早调用
+BlackboxService::init();
+
+// 写入一条结构化快照
+BlackboxService::append_snapshot();
+
+// 写入关键事件文本，并尝试追加当前快照
+BlackboxService::append_event("Output disabled: reason=%d", reason);
+
+// 设置周期快照，单位秒；0 表示关闭
+BlackboxService::set_snapshot_interval_s(10);
+```
+
+## API
+
+| API | 说明 |
+|-----|------|
+| `init()` | 恢复 NVS 配置、创建后台任务并安装 ESP_LOG 捕获钩子 |
+| `append_snapshot()` | 采样当前 `GlobalState` 并写入 `STRUCTURED` 记录 |
+| `append_event(fmt, ...)` | 保存关键事件文本，再尝试追加全局快照 |
+| `get_snapshot_interval_s()` | 获取周期快照间隔，`0` 表示关闭 |
+| `set_snapshot_interval_s(seconds)` | 设置周期快照间隔并持久化 |
+
+## NVS Key
+
+| Key | 类型 | 默认值 | 说明 |
+|-----|------|-------:|------|
+| `bb_snap_s` | blob(uint32_t) | `0` | 周期快照间隔，单位秒；`0` 表示关闭 |
+
+## 环境与依赖
+
+| 类别 | 要求 |
+|------|------|
+| 框架 | ESP-IDF v6.0+ |
+| 组件依赖 | `blackbox`, `global_state`, `HXC_NVS`, `esp_timer`, `log`, `freertos` |

@@ -1,6 +1,6 @@
 # Blackbox
 
-黑匣子日志系统中间件，支持字符串日志与类型化数据日志，与具体业务数据结构解耦。底层使用 `circular_flash_buffer` 实现循环存储，上层由 `blackbox_structured`（app 层）定义具体的结构化数据格式。
+黑匣子日志系统中间件，支持字符串日志与类型化数据日志，与具体业务数据结构解耦。底层使用 `circular_flash_buffer` 实现循环存储，上层由 `blackbox_service`（app 层）定义具体的结构化数据格式。
 
 ## 模块特点
 
@@ -44,7 +44,7 @@
 %%{init: { 'theme': 'base', 'themeVariables': { 'primaryColor': '#E3F2FD', 'primaryBorderColor': '#1E88E5', 'primaryTextColor': '#0D47A1', 'lineColor': '#37474F' } }}%%
 flowchart LR
     TEXT["业务模块<br/>append_text()"] --> BUILD["middleware/blackbox<br/>格式化与字符串分片"]
-    APP["app/blackbox_structured<br/>append_snapshot()"] -->|append_typed| BUILD
+    APP["app/blackbox_service<br/>append_snapshot()"] -->|append_typed| BUILD
     BUILD -->|QueueItem::WRITE| QUEUE["FreeRTOS Queue<br/>最多 64 个 QueueItem"]
     CTRL["erase_all() / set_enabled()<br/>控制操作"] -->|ERASE_ALL / BARRIER| QUEUE
     QUEUE --> TASK["blackbox_task<br/>单一消费者任务"]
@@ -55,7 +55,7 @@ flowchart LR
 
 - **bsp/circular_flash_buffer**：Flash 循环读写，与数据结构无关
 - **middleware/blackbox**：通用帧格式、CRC 校验、字符串分片和异步写入队列，不依赖具体业务结构
-- **app/blackbox_structured**：定义版本化业务快照，调用 `append_typed()`
+- **app/blackbox_service**：定义版本化业务快照和应用层记录策略，调用 `append_typed()`
 
 ## 异步写入流程
 
@@ -257,7 +257,7 @@ for (uint32_t index = 0; index < Blackbox::count();) {
 
 ### `esp_err_t append_typed(LogType type, const uint8_t* payload, size_t len)`
 
-异步写入类型化二进制数据，由上层（如 `blackbox_structured`）调用。`len` 不得超过
+异步写入类型化二进制数据，由上层（如 `blackbox_service`）调用。`len` 不得超过
 `PAYLOAD_SIZE`。返回 `ESP_OK` 表示记录已经入队，不表示已经落盘。
 
 ### `esp_err_t sync()`

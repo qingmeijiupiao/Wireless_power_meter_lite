@@ -16,6 +16,7 @@
 #include "energy_meter.h"
 #include "ErrorRectangle.h"
 #include "WarningRectangle.h"
+#include "blackbox_service.h"
 #include "can_callback.h"
 #include "can_resistor.h"
 #include "freertos/FreeRTOS.h"
@@ -43,6 +44,15 @@ constexpr uint32_t CAN_BAUDRATES[] = {
     500_Kbps,
     250_Kbps,
     125_Kbps,
+};
+
+constexpr uint32_t BLACKBOX_SNAPSHOT_INTERVALS_S[] = {
+    0,
+    1,
+    5,
+    10,
+    30,
+    60,
 };
 
 /**
@@ -246,6 +256,7 @@ bool BatteryPage::handle_button(ButtonId button, ButtonEvent event) {
     }
 
     EnergyMeter::reset();
+    BlackboxService::append_event("meter: reset source=screen");
     return true;
 }
 
@@ -560,6 +571,8 @@ const char* SettingsPage::item_name(uint8_t item) const {
             return "WiFi boot";
         case ProtectBypass:
             return "Protect";
+        case BlackboxSnapshot:
+            return "BB snap";
         case CanBaudrate:
             return "CAN baud";
         case CanTerm:
@@ -585,6 +598,17 @@ const char* SettingsPage::item_value(uint8_t item) {
             return WifiService::is_web_enabled_on_boot() ? "ON" : "OFF";
         case ProtectBypass:
             return protect_is_bypassed() ? "OFF" : "ON";
+        case BlackboxSnapshot: {
+            switch (BlackboxService::get_snapshot_interval_s()) {
+                case 0: return "OFF";
+                case 1: return "1s";
+                case 5: return "5s";
+                case 10: return "10s";
+                case 30: return "30s";
+                case 60: return "60s";
+                default: return "Other";
+            }
+        }
         case CanBaudrate:
             switch (CanCallback::CAN_BAUDRATE.read()) {
                 case 1_Mbps:
@@ -629,6 +653,18 @@ void SettingsPage::adjust_selected_item() {
         case ProtectBypass:
             protect_set_bypassed(!protect_is_bypassed());
             break;
+        case BlackboxSnapshot: {
+            const uint32_t current = BlackboxService::get_snapshot_interval_s();
+            uint32_t next = BLACKBOX_SNAPSHOT_INTERVALS_S[0];
+            for (size_t i = 0; i < sizeof(BLACKBOX_SNAPSHOT_INTERVALS_S) / sizeof(BLACKBOX_SNAPSHOT_INTERVALS_S[0]); ++i) {
+                if (BLACKBOX_SNAPSHOT_INTERVALS_S[i] == current) {
+                    next = BLACKBOX_SNAPSHOT_INTERVALS_S[(i + 1) % (sizeof(BLACKBOX_SNAPSHOT_INTERVALS_S) / sizeof(BLACKBOX_SNAPSHOT_INTERVALS_S[0]))];
+                    break;
+                }
+            }
+            BlackboxService::set_snapshot_interval_s(next);
+            break;
+        }
         case CanBaudrate: {
             uint32_t current = CanCallback::CAN_BAUDRATE.read();
             uint32_t next = CAN_BAUDRATES[0];
@@ -639,11 +675,17 @@ void SettingsPage::adjust_selected_item() {
                 }
             }
             CanCallback::CAN_BAUDRATE = next;
+            BlackboxService::append_event("can: config baud=%lu source=screen reboot_required=1",
+                                          static_cast<unsigned long>(next));
             break;
         }
-        case CanTerm:
-            CanResistor::instance().toggle();
+        case CanTerm: {
+            const esp_err_t ret = CanResistor::instance().toggle();
+            BlackboxService::append_event("can: set_resistor source=screen state=%u result=%s",
+                                          CanResistor::instance().get() ? 1U : 0U,
+                                          esp_err_to_name(ret));
             break;
+        }
         default:
             break;
     }

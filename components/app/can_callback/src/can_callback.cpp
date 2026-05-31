@@ -5,6 +5,7 @@
 #include <cstdio>
 #include "global_state.h"
 #include "power_output.h"
+#include "blackbox_service.h"
 namespace CanCallback {
 
 static const char* TAG = "CanCallback";
@@ -78,11 +79,15 @@ esp_err_t init() {
      */
     can_bus->add_can_receive_callback_func(CAN_ID+CALLBACK_SET_OUTPUT, [](HXC_CAN_message_t* msg) {
         ESP_LOGI(TAG, "Setting output");
+        PowerOutput::OutputResult result;
         if (msg->data[0] == 0x01) {
-            PowerOutput::on();
+            result = PowerOutput::on();
         } else {
-            PowerOutput::off();
+            result = PowerOutput::off();
         }
+        BlackboxService::append_event("can: set_output target=%u result=%u",
+                                      msg->data[0] == 0x01 ? 1U : 0U,
+                                      static_cast<unsigned>(result));
     });
     /**
      * @brief  设置终端电阻 回调
@@ -90,7 +95,11 @@ esp_err_t init() {
      */
     can_bus->add_can_receive_callback_func(CAN_ID+CALLBACK_SET_RESISTOR, [](HXC_CAN_message_t* msg) {
         ESP_LOGI(TAG, "Setting CAN resistor");
-        CanResistor::instance().set(msg->data[0] == 0x01);
+        const bool enabled = msg->data[0] == 0x01;
+        const esp_err_t ret = CanResistor::instance().set(enabled);
+        BlackboxService::append_event("can: set_resistor target=%u result=%s",
+                                      enabled ? 1U : 0U,
+                                      esp_err_to_name(ret));
     });
 
     /**
@@ -120,6 +129,10 @@ esp_err_t init() {
     //     });
 
     ESP_LOGI(TAG, "CAN initialized and callbacks registered");
+    BlackboxService::append_event("can: init id=0x%lx baud=%lu resistor=%u",
+                                  static_cast<unsigned long>(CAN_ID.read()),
+                                  static_cast<unsigned long>(CAN_BAUDRATE.read()),
+                                  can_resistor.get() ? 1U : 0U);
     return ESP_OK;
 }
 

@@ -1,9 +1,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_err.h"
+#include "esp_app_desc.h"
 #include "esp_log.h"
 
 #include "blackbox.h"
+#include "blackbox_service.h"
 #include "ulp_loader.h"
 #include "HXC_NVS.h"
 #include "hardware.h"
@@ -57,6 +59,13 @@ extern "C" void app_main(void){
     ESP_ERROR_CHECK(Blackbox::init());
     global_state.flags.bits.blackbox_enabled = Blackbox::is_enabled();
     HXC::NVS_Base::setup();
+    ESP_ERROR_CHECK(BlackboxService::init());
+    const esp_app_desc_t* app_desc = esp_app_get_description();
+    BlackboxService::append_event("system: boot_start fw=%s build=%s_%s hw_version=%u",
+                                  app_desc->version,
+                                  app_desc->date,
+                                  app_desc->time,
+                                  static_cast<unsigned>(get_hardware_version()));
 
     ESP_ERROR_CHECK(Chip_Temperature_Sensor.init());
     ESP_ERROR_CHECK(Board_Temperature_sensor.init(get_hardware_config().temperature_channel));
@@ -89,6 +98,7 @@ extern "C" void app_main(void){
     ESP_ERROR_CHECK(ShellCommand::init());
 
     WebBackend::start_with_wifi_service();
+    BlackboxService::append_event("system: app_ready");
 
     while (1){
         // Main loop only use for debug

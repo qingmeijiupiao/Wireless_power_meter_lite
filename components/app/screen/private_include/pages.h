@@ -104,6 +104,7 @@ private:
         Backlight,
         WifiBoot,
         ProtectBypass,
+        BlackboxSnapshot,
         CanBaudrate,
         CanTerm,
         ITEM_COUNT,

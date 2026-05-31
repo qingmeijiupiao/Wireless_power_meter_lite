@@ -6,6 +6,8 @@
 #include "hardware.h"
 #include "st7735.h"
 #include "can_callback.h"
+#include "blackbox.h"
+#include "blackbox_service.h"
 #include "current_calibration.h"
 #include "energy_meter.h"
 #include "global_state.h"
@@ -21,11 +23,39 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <algorithm>
+#include <cctype>
 #include <vector>
 
 namespace ShellCommand {
 
 static const char* TAG = "ShellCommand";
+
+static void print_escaped_text(const char* text) {
+    putchar('"');
+    for (const uint8_t* cursor = reinterpret_cast<const uint8_t*>(text); *cursor != '\0'; ++cursor) {
+        switch (*cursor) {
+            case '\\': printf("\\\\"); break;
+            case '"': printf("\\\""); break;
+            case '\r': printf("\\r"); break;
+            case '\n': printf("\\n"); break;
+            case '\t': printf("\\t"); break;
+            default:
+                if (std::isprint(static_cast<unsigned char>(*cursor))) {
+                    putchar(*cursor);
+                } else {
+                    printf("\\x%02X", *cursor);
+                }
+                break;
+        }
+    }
+    putchar('"');
+}
+
+static void print_hex(const uint8_t* data, size_t len) {
+    for (size_t i = 0; i < len; ++i) {
+        printf("%02X", data[i]);
+    }
+}
 
 // ====== 命令列表 ======
 
@@ -171,6 +201,8 @@ esp_err_t init() {
                 return 1;
             }
             CanCallback::CAN_BAUDRATE = baudrate;
+            BlackboxService::append_event("can: config baud=%lu source=shell reboot_required=1",
+                                          static_cast<unsigned long>(baudrate));
             printf("CAN baudrate set to %lu\n", baudrate);
             return 0;
         }));
@@ -190,6 +222,8 @@ esp_err_t init() {
             }
             uint32_t id = (uint32_t)strtoul(argv[1], nullptr, 0);
             CanCallback::CAN_ID = id;
+            BlackboxService::append_event("can: config id=0x%lx source=shell reboot_required=1",
+                                          static_cast<unsigned long>(id));
             printf("CAN ID set to %lu (0x%lX)\n", id, id);
             return 0;
         }));
@@ -213,6 +247,7 @@ esp_err_t init() {
         [](int argc, char** argv) -> int {
             if (argc >= 2 && strcmp(argv[1], "reset") == 0) {
                 EnergyMeter::reset();
+                BlackboxService::append_event("meter: reset source=shell");
                 printf("Shared meter session reset\n");
             } else if (argc >= 2 && strcmp(argv[1], "status") != 0) {
                 printf("Usage: meter [status|reset]\n");
@@ -248,6 +283,111 @@ esp_err_t init() {
             printf("  current:      %.6f A\n", current_a);
             printf("  power:        %.3f W\n", voltage_v * current_a);
             return 0;
+        }));
+
+    /**
+     * @brief  blackbox - 黑匣子日志管理
+     * @usage  blackbox [status|dump [count|all]|pull [count|all]|clear]
+     * @param  status - 查看启用状态和已落盘原始记录数
+     * @param  dump/pull - 同步在途记录后，按从新到旧顺序拉取日志；默认 100 条
+     * @param  clear - 同步清空分区；成功后保留一条 reset 标记
+     */
+    shell.register_command(ShellCommand_t("blackbox", "Blackbox log control", "[status|dump [count|all]|pull [count|all]|clear]",
+        [](int argc, char** argv) -> int {
+            const char* action = argc >= 2 ? argv[1] : "status";
+
+            if (strcmp(action, "status") == 0) {
+                printf("Blackbox status: enabled=%d persisted_records=%lu\n",
+                       Blackbox::is_enabled(),
+                       static_cast<unsigned long>(Blackbox::count()));
+                return 0;
+            }
+
+            if (strcmp(action, "clear") == 0) {
+                esp_err_t ret = Blackbox::erase_all();
+                printf("Blackbox clear: %s, persisted_records=%lu\n",
+                       esp_err_to_name(ret),
+                       static_cast<unsigned long>(Blackbox::count()));
+                return ret == ESP_OK ? 0 : 1;
+            }
+
+            if (strcmp(action, "dump") == 0 || strcmp(action, "pull") == 0) {
+                uint32_t limit = 100;
+                const char* limit_label = "100";
+                if (argc >= 3) {
+                    if (strcmp(argv[2], "all") == 0) {
+                        limit = UINT32_MAX;
+                        limit_label = "all";
+                    } else {
+                        char* end = nullptr;
+                        unsigned long parsed = strtoul(argv[2], &end, 10);
+                        if (argv[2][0] == '\0' || *end != '\0' || parsed == 0 || parsed > UINT32_MAX) {
+                            printf("Usage: blackbox %s [count|all]\n", action);
+                            return 1;
+                        }
+                        limit = static_cast<uint32_t>(parsed);
+                        limit_label = argv[2];
+                    }
+                }
+                if (argc >= 4) {
+                    printf("Usage: blackbox %s [count|all]\n", action);
+                    return 1;
+                }
+
+                esp_err_t ret = Blackbox::sync();
+                if (ret != ESP_OK) {
+                    printf("Blackbox sync failed: %s\n", esp_err_to_name(ret));
+                    return 1;
+                }
+
+                const uint32_t raw_count = Blackbox::count();
+                printf("BLACKBOX_DUMP_BEGIN persisted_records=%lu limit=%s order=newest_first\n",
+                       static_cast<unsigned long>(raw_count),
+                       limit_label);
+                uint32_t emitted = 0;
+                uint32_t index = 0;
+                for (; index < raw_count && emitted < limit;) {
+                    const Blackbox::Record record = Blackbox::read(index);
+                    if (record.header.sof != CircularFlashBuffer::BLOCK_SOF) {
+                        printf("record=%lu type=INVALID\n", static_cast<unsigned long>(index));
+                        ++index;
+                        ++emitted;
+                        continue;
+                    }
+
+                    if (record.header.type == Blackbox::LogType::STRING) {
+                        const Blackbox::TextRecord text = Blackbox::read_text(index);
+                        if (text.record_count != 0) {
+                            printf("record=%lu timestamp_ms=%lu type=STRING fragments=%u text=",
+                                   static_cast<unsigned long>(index),
+                                   static_cast<unsigned long>(record.header.timestamp),
+                                   static_cast<unsigned>(text.record_count));
+                            print_escaped_text(text.str);
+                            putchar('\n');
+                            index += text.record_count;
+                            ++emitted;
+                            continue;
+                        }
+                    }
+
+                    printf("record=%lu timestamp_ms=%lu type=%s payload=",
+                           static_cast<unsigned long>(index),
+                           static_cast<unsigned long>(record.header.timestamp),
+                           record.header.type == Blackbox::LogType::STRUCTURED ? "STRUCTURED" : "UNKNOWN");
+                    print_hex(record.payload.bytes, Blackbox::PAYLOAD_SIZE);
+                    putchar('\n');
+                    ++index;
+                    ++emitted;
+                }
+                printf("BLACKBOX_DUMP_END emitted=%lu consumed_records=%lu remaining_records=%lu\n",
+                       static_cast<unsigned long>(emitted),
+                       static_cast<unsigned long>(index),
+                       static_cast<unsigned long>(raw_count - index));
+                return 0;
+            }
+
+            printf("Usage: blackbox [status|dump [count|all]|pull [count|all]|clear]\n");
+            return 1;
         }));
         
     /**
@@ -495,6 +635,7 @@ esp_err_t init() {
             int basek = atoi(argv[1]);
             params.current_base_K = basek;
             CurrentCalib::params_data = params;
+            BlackboxService::append_event("calib: base_k=%d reboot_required=1", basek);
             printf("Calibration basek set to %d restart required\n", basek);
             return 0;
         });
@@ -510,6 +651,7 @@ esp_err_t init() {
             int temperatureK = atoi(argv[1]);
             params.temperature_K = temperatureK;
             CurrentCalib::params_data = params;
+            BlackboxService::append_event("calib: temperature_k=%d reboot_required=1", temperatureK);
             printf("Calibration temperatureK set to %d restart required\n", temperatureK);
             return 0;
         });
@@ -532,6 +674,10 @@ esp_err_t init() {
             params.points[point_index].register_value = register_value;
             params.points[point_index].offset_current_100uA = new_offset_current_100uA;
             CurrentCalib::params_data = params;
+            BlackboxService::append_event("calib: point=%d reg=%d offset_100ua=%d reboot_required=1",
+                                          point_index,
+                                          register_value,
+                                          new_offset_current_100uA);
             printf("Calibration current points set to %d, %d(uA) restart required\n", register_value, atoi(argv[3]));
             return 0;
         });
@@ -544,6 +690,8 @@ esp_err_t init() {
             params.temperature_K = 0;
             params.current_base_K = base_k;
             CurrentCalib::params_data = params;
+            BlackboxService::append_event("calib: cleared base_k=%u reboot_required=1",
+                                          static_cast<unsigned>(base_k));
             printf("Calibration params cleared (base_K=%d preserved)\n", base_k);
             return 0;
         });

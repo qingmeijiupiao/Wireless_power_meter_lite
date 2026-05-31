@@ -5,7 +5,7 @@ idf_component_register(
                  "ulp_loader"
     REQUIRES
         blackbox
-        blackbox_structured
+        blackbox_service
         Temperature
         HXC_TWAI
         global_state
@@ -13,6 +13,7 @@ idf_component_register(
         ulp
         soc
         log
+        esp_app_format
         freertos
         Button
         HXC_NVS

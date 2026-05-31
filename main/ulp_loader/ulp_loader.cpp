@@ -16,6 +16,7 @@
 #include "soc/lp_clkrst_struct.h"
 #include "current_calibration.h"
 #include "global_state.h"
+#include "blackbox_service.h"
 const char *LPTAG = "LP_CORE";
 
 ulp_lp_core_cfg_t lp_core_init_cfg={
@@ -68,6 +69,10 @@ void print_lp_core_log_task(void* arg){
  */
 void load_current_calib_params(bool need_flag = true){
     *ulp_calib_params = CurrentCalib::params_data.read();
+    BlackboxService::append_event("lp: calib_loaded base_k=%u temperature_k=%d reload=%u",
+                                  static_cast<unsigned>(ulp_calib_params->current_base_K),
+                                  ulp_calib_params->temperature_K,
+                                  need_flag ? 1U : 0U);
     if(need_flag){
         ulp_state.ulp_state_bits.ulp_reload_calib_params = true;
     }
@@ -76,6 +81,8 @@ void load_current_calib_params(bool need_flag = true){
 
 esp_err_t LP_Core_Load(void){
     ESP_LOGI(LPTAG, "main core start init lp core...");
+    BlackboxService::append_event("lp: init_start i2c_hz=%lu",
+                                  static_cast<unsigned long>(i2c_cfg.i2c_timing_cfg.clk_speed_hz));
     ulp_state.ulp_state_raw = 0; // 初始化 LP 核状态
     LP_CLKRST.lp_clk_conf.fast_clk_sel = 1; //IDF 6.0版本默认是内部RC时钟(17.5MHz)，且没有API可以切换到外部时钟源，需要手动操作寄存器切换到外部时钟源(20MHz)
 
@@ -100,18 +107,23 @@ esp_err_t LP_Core_Load(void){
 
     if(ulp_state.ulp_state_bits.ulp_i2c_init_err){
         ESP_LOGE(LPTAG, "lp core i2c init error");
+        BlackboxService::append_event("lp: i2c_init_error");
     }else{
         ESP_LOGI(LPTAG, "lp core i2c init success...");
     }
 
     if(timeout <= 0){
         ESP_LOGE(LPTAG, "lp core run timeout");
+        BlackboxService::append_event("lp: run_timeout");
         return ESP_ERR_TIMEOUT;
     }else{
         current_register_raw = (int16_t*)&ulp_shunt_register_raw;
         voltage_register_raw = (uint16_t*)&ulp_voltage_register_raw;
         ESP_LOGI(LPTAG, "lp core run success...");
         ESP_LOGI(LPTAG, "first read value: voltageuV=%d currentuA=%d", ulp_voltage_uv, ulp_current_uA);
+        BlackboxService::append_event("lp: run_ok voltage_uv=%ld current_ua=%ld",
+                                      static_cast<long>(ulp_voltage_uv),
+                                      static_cast<long>(ulp_current_uA));
     }
 
     xTaskCreate(print_lp_core_log_task, "print_lp_core_log", 2048, NULL, 4, NULL);

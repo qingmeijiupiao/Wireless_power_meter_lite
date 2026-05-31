@@ -1,15 +1,16 @@
 /*
- * @LastEditors: qingmeijiupiao
- * @Description: 黑匣子结构化数据日志实现
- * @Author: qingmeijiupiao
+ * @Description: 黑匣子全局状态快照协议与采样
  */
-#include "blackbox_structured.h"
+#include "blackbox_service.h"
 
-using namespace BlackboxStructured;
+namespace BlackboxService {
+namespace {
 
-static auto& global_state_ref = get_global_state();
+auto& global_state_ref = get_global_state();
 
-esp_err_t BlackboxStructured::append_snapshot() {
+} // namespace
+
+esp_err_t append_snapshot() {
     SnapshotV1 snapshot = {
         .version = SNAPSHOT_VERSION,
         .flags = global_state_ref.flags,
@@ -24,3 +25,5 @@ esp_err_t BlackboxStructured::append_snapshot() {
                                   reinterpret_cast<uint8_t*>(&snapshot),
                                   sizeof(snapshot));
 }
+
+} // namespace BlackboxService

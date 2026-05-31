@@ -9,6 +9,7 @@
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "ota_manager.h"
+#include "blackbox_service.h"
 
 namespace WebBackend {
 namespace {
@@ -143,6 +144,7 @@ esp_err_t ota_status_handler(WebServer::Request* request) {
 esp_err_t ota_upload_handler(WebServer::Request* request) {
     const size_t image_size = request->raw->content_len;
     if (image_size == 0) {
+        BlackboxService::append_event("ota: upload_rejected reason=empty_image");
         return WebServer::send(request, 400, "application/json",
             "{\"ok\":false,\"reason\":\"empty_image\"}\n",
             strlen("{\"ok\":false,\"reason\":\"empty_image\"}\n"));
@@ -151,11 +153,15 @@ esp_err_t ota_upload_handler(WebServer::Request* request) {
     esp_err_t err = OtaManager::begin(image_size);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "OTA begin failed: %s", ota_error_to_str(err));
+        BlackboxService::append_event("ota: begin_failed size=%u err=%s",
+                                      static_cast<unsigned>(image_size),
+                                      ota_error_to_str(err));
         snprintf(response_buffer, sizeof(response_buffer),
             "{\"ok\":false,\"reason\":\"%s\"}\n", ota_error_to_str(err));
         return WebServer::send(request, err == ESP_ERR_INVALID_SIZE ? 413 : 409,
             "application/json", response_buffer, strlen(response_buffer));
     }
+    BlackboxService::append_event("ota: upload_started size=%u", static_cast<unsigned>(image_size));
 
     err = WebServer::stream_body(request, ota_upload_buffer, sizeof(ota_upload_buffer),
         [](const char* data, size_t size) -> esp_err_t {
@@ -164,6 +170,7 @@ esp_err_t ota_upload_handler(WebServer::Request* request) {
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "OTA upload interrupted: %s", ota_error_to_str(err));
         OtaManager::abort();
+        BlackboxService::append_event("ota: upload_interrupted err=%s", ota_error_to_str(err));
         snprintf(response_buffer, sizeof(response_buffer),
             "{\"ok\":false,\"reason\":\"%s\"}\n", ota_error_to_str(err));
         return WebServer::send(request, 500, "application/json", response_buffer, strlen(response_buffer));
@@ -172,6 +179,7 @@ esp_err_t ota_upload_handler(WebServer::Request* request) {
     err = OtaManager::finish();
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "OTA validation failed: %s", ota_error_to_str(err));
+        BlackboxService::append_event("ota: validation_failed err=%s", ota_error_to_str(err));
         snprintf(response_buffer, sizeof(response_buffer),
             "{\"ok\":false,\"reason\":\"%s\"}\n", ota_error_to_str(err));
         return WebServer::send(request, 400, "application/json", response_buffer, strlen(response_buffer));
@@ -182,12 +190,14 @@ esp_err_t ota_upload_handler(WebServer::Request* request) {
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "OTA APP description unavailable: %s", ota_error_to_str(err));
         OtaManager::abort();
+        BlackboxService::append_event("ota: app_desc_failed err=%s", ota_error_to_str(err));
         return WebServer::send(request, 422, "application/json",
             "{\"ok\":false,\"reason\":\"app_description_unavailable\"}\n",
             strlen("{\"ok\":false,\"reason\":\"app_description_unavailable\"}\n"));
     }
 
     ESP_LOGI(TAG, "OTA image verified, waiting for activation");
+    BlackboxService::append_event("ota: verified version=%s", target_desc.version);
     return send_ota_status(request, true, "verified");
 }
 
@@ -199,12 +209,14 @@ esp_err_t ota_activate_handler(WebServer::Request* request) {
     }
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "OTA activate failed: %s", ota_error_to_str(err));
+        BlackboxService::append_event("ota: activate_failed err=%s", ota_error_to_str(err));
         snprintf(response_buffer, sizeof(response_buffer),
             "{\"ok\":false,\"reason\":\"%s\"}\n", ota_error_to_str(err));
         return WebServer::send(request, 409, "application/json", response_buffer, strlen(response_buffer));
     }
 
     ESP_LOGW(TAG, "OTA activated, restarting in 1 second");
+    BlackboxService::append_event("ota: activated reboot_delay_ms=1000");
     return send_ota_status(request, true, "restarting");
 }
 
@@ -212,10 +224,12 @@ esp_err_t ota_activate_handler(WebServer::Request* request) {
 esp_err_t ota_abort_handler(WebServer::Request* request) {
     esp_err_t err = OtaManager::abort();
     if (err != ESP_OK) {
+        BlackboxService::append_event("ota: abort_failed err=%s", ota_error_to_str(err));
         snprintf(response_buffer, sizeof(response_buffer),
             "{\"ok\":false,\"reason\":\"%s\"}\n", ota_error_to_str(err));
         return WebServer::send(request, 409, "application/json", response_buffer, strlen(response_buffer));
     }
+    BlackboxService::append_event("ota: aborted");
     return send_ota_status(request, true, "aborted");
 }
 

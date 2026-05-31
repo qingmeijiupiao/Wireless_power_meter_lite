@@ -21,7 +21,7 @@ flowchart LR
     GS --> Protect["protect<br/>20Hz 状态机"]
     GS --> Screen["screen<br/>按页面周期渲染"]
     GS --> CAN["can_callback<br/>状态帧打包"]
-    GS --> BlackBox["blackbox_structured<br/>结构化快照"]
+    GS --> BlackBox["blackbox_service<br/>结构化快照"]
     Power["PowerOutput / CAN resistor<br/>GPIO on_change 回调"] --> GS
 ```
 

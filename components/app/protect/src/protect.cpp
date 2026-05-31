@@ -2,6 +2,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "global_state.h"
+#include "blackbox_service.h"
 #include <vector>
 #ifndef ENABLE_PROTECT_LOG
 #define ENABLE_PROTECT_LOG 1
@@ -25,6 +26,14 @@ GlobalState& glb_states = get_global_state();
 
 static int32_t to_milli(float value) {
     return static_cast<int32_t>(value * 1000.0f);
+}
+
+static void append_state_change_event(const char* channel, ProtectState_t last_state, ProtectState_t new_state, float value) {
+    BlackboxService::append_event("protect: channel=%s state=%u->%u value_milli=%ld",
+                                  channel,
+                                  static_cast<unsigned>(last_state),
+                                  static_cast<unsigned>(new_state),
+                                  static_cast<long>(to_milli(value)));
 }
 
 protect_threshold_t temperature_threshold ={
@@ -136,8 +145,12 @@ bool protect_has_active_fault(){
 }
 
 void protect_set_bypassed(bool bypassed){
+    if (glb_states.flags.bits.protect_bypassed == bypassed) {
+        return;
+    }
     glb_states.flags.bits.protect_bypassed = bypassed;
     PROTECT_LOGW("protect bypass %s", bypassed ? "enabled" : "disabled");
+    BlackboxService::append_event("protect: bypass=%u", bypassed ? 1U : 0U);
 }
 
 bool protect_is_bypassed(){
@@ -215,6 +228,7 @@ void protect_task(void* pvParameters){
         if(temp_state != global_state_protects.temperature_protect_state){
             last_state = global_state_protects.temperature_protect_state;
             global_state_protects.temperature_protect_state = temp_state;
+            append_state_change_event("OTP", last_state, temp_state, glb_states.board_temperature / 100.0f);
             for(auto& cb : protect_change_callbacks){
                 cb(last_state, temp_state);
             }
@@ -225,6 +239,7 @@ void protect_task(void* pvParameters){
         if(temp_state != global_state_protects.high_voltage_protect_state){
             last_state = global_state_protects.high_voltage_protect_state;
             global_state_protects.high_voltage_protect_state = temp_state;
+            append_state_change_event("OVP", last_state, temp_state, glb_states.voltage_mV / 1e3);
             for(auto& cb : protect_change_callbacks){
                 cb(last_state, temp_state);
             }
@@ -235,6 +250,7 @@ void protect_task(void* pvParameters){
         if(temp_state != global_state_protects.low_voltage_protect_state){
             last_state = global_state_protects.low_voltage_protect_state;
             global_state_protects.low_voltage_protect_state = temp_state;
+            append_state_change_event("UVP", last_state, temp_state, glb_states.voltage_mV / 1e3);
             for(auto& cb : protect_change_callbacks){
                 cb(last_state, temp_state);
             }
@@ -245,6 +261,7 @@ void protect_task(void* pvParameters){
         if(temp_state != global_state_protects.current_protect_state){
             last_state = global_state_protects.current_protect_state;
             global_state_protects.current_protect_state = temp_state;
+            append_state_change_event("OCP", last_state, temp_state, std::abs(glb_states.current_uA) / 1e6);
             for(auto& cb : protect_change_callbacks){
                 cb(last_state, temp_state);
             }
@@ -255,6 +272,7 @@ void protect_task(void* pvParameters){
             _protect_init_ok = true;
             glb_states.flags.bits.protect_initialized = true;
             ESP_LOGI(PROTECT_LOG_TAG, "protect first check complete");
+            BlackboxService::append_event("protect: first_check_complete");
         }
 
         xTaskDelayUntil(&ticks, configTICK_RATE_HZ / protect_check_HZ);
@@ -283,6 +301,7 @@ esp_err_t protect_deinit(){
         glb_states.flags.bits.protect_initialized = false;
         vTaskDelete(protect_task_handle);
         protect_task_handle = nullptr;
+        BlackboxService::append_event("protect: deinit");
     }else{
         ESP_LOGW(PROTECT_LOG_TAG, "protect task not running");
     }

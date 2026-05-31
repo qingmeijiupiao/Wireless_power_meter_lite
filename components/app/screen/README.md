@@ -99,6 +99,7 @@ sequenceDiagram
 | 背光档位 | `Bright` | 1-5 档循环，映射到 0-255 背光值 | `ui_bl` |
 | WiFi 开机启动 | `WiFi boot` | 调用 `WifiService::set_web_enabled_on_boot()` | `wifi_service` 内部 NVS |
 | 保护开关 | `Protect` | 调用 `protect_set_bypassed()` | 否，仅运行期 |
+| 黑匣子周期快照 | `BB snap` | 在 `OFF`、`1s`、`5s`、`10s`、`30s`、`60s` 之间循环切换 | `blackbox_service` 内部 NVS |
 | CAN 波特率 | `CAN baud` | 在 `1M`、`500K`、`250K`、`125K` 之间循环切换，重启后生效 | `CAN_BAUDRATE` |
 | CAN 终端电阻 | `CAN term` | 调用 `CanResistor::instance().toggle()` | `can_term` |
 
@@ -192,6 +193,6 @@ Side_Button.bind_event(ButtonEvent::SHORT_PRESS, []() {
 | 框架 | ESP-IDF v6.0+ |
 | RTOS | FreeRTOS |
 | 资源组件 | `ui_resources`, `Fonts` |
-| BSP/驱动 | `st7735_driver`, `hardware`, `Button`, `HXC_NVS` |
+| BSP/驱动 | `st7735_driver`, `hardware`, `Button`, `HXC_NVS`, `blackbox_service` |
 | 应用组件 | `global_state`, `protect`, `wifi_service`, `power_output`, `can_callback` |
 | 中间件 | `energy_meter`, `can_resistor` |

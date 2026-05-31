@@ -17,6 +17,7 @@
 #include "web_server.h"
 #include "freertos/semphr.h"
 #include "global_state.h"
+#include "blackbox_service.h"
 
 namespace WifiService {
 
@@ -99,6 +100,9 @@ esp_err_t init() {
     }
     initialized = true;
     update_global_state_flags();
+    BlackboxService::append_event("wifi: init web_boot=%u saved_sta=%u",
+                                  is_web_enabled_on_boot() ? 1U : 0U,
+                                  has_saved_sta() ? 1U : 0U);
     return ESP_OK;
 }
 
@@ -122,6 +126,7 @@ bool is_web_enabled_on_boot() {
 esp_err_t set_web_enabled_on_boot(bool enabled) {
     web_boot = enabled ? 1 : 0;
     update_global_state_flags();
+    BlackboxService::append_event("wifi: web_boot=%u", enabled ? 1U : 0U);
     return ESP_OK;
 }
 
@@ -132,6 +137,7 @@ esp_err_t clear_saved_sta() {
     sta_ssid = "";
     sta_pass = "";
     update_global_state_flags();
+    BlackboxService::append_event("wifi: saved_sta_cleared");
     return ESP_OK;
 }
 
@@ -187,11 +193,20 @@ esp_err_t connect_sta(const char* ssid, const char* password, bool save) {
         }
         IP_t ip = WiFiManager::instance().get_ip();
         ESP_LOGI(TAG, "STA connected: %u.%u.%u.%u", ip.octet1, ip.octet2, ip.octet3, ip.octet4);
+        BlackboxService::append_event("wifi: sta_connected save=%u ip=%u.%u.%u.%u",
+                                      save ? 1U : 0U,
+                                      ip.octet1,
+                                      ip.octet2,
+                                      ip.octet3,
+                                      ip.octet4);
         return ESP_OK;
     }
 
     set_last_error(esp_err_to_name(ret));
     ESP_LOGW(TAG, "STA connect failed: %s", esp_err_to_name(ret));
+    BlackboxService::append_event("wifi: sta_connect_failed save=%u err=%s",
+                                  save ? 1U : 0U,
+                                  esp_err_to_name(ret));
     return ret;
 }
 
@@ -213,6 +228,7 @@ esp_err_t start_provision_ap() {
     update_global_state_flags();
     set_last_error("none");
     ESP_LOGI(TAG, "Provision AP active: %s", ap_ssid);
+    BlackboxService::append_event("wifi: provision_ap ssid=%s", ap_ssid);
     return ESP_OK;
 }
 
@@ -300,6 +316,7 @@ esp_err_t start_default() {
         ESP_LOGI(TAG, "web/wifi startup disabled by NVS");
         mode = Mode::OFF;
         update_global_state_flags();
+        BlackboxService::append_event("wifi: startup_disabled");
         return ESP_OK;
     }
 
@@ -324,6 +341,7 @@ esp_err_t stop() {
     esp_err_t ret = WiFiManager::instance().stop();
     mode = Mode::OFF;
     update_global_state_flags();
+    BlackboxService::append_event("wifi: stop result=%s", esp_err_to_name(ret));
     return ret;
 }
 
