@@ -31,6 +31,9 @@ namespace CircularFlashBuffer {
 
     uint32_t get_count();
 
+    /** @brief 返回环形缓冲最多可保留的数据块数量。 */
+    uint32_t get_capacity();
+
     void set_enable(bool enable);
 }
 

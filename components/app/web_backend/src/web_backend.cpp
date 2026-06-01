@@ -98,6 +98,9 @@ esp_err_t init() {
     ESP_ERROR_CHECK(WebServer::on("/api/rtos/stats", WebServer::Method::POST, rtos_stats_handler));
     ESP_ERROR_CHECK(WebServer::on("/api/logs", WebServer::Method::GET, logs_api_handler));
     ESP_ERROR_CHECK(WebServer::on("/api/logs/clear", WebServer::Method::POST, logs_clear_handler));
+    ESP_ERROR_CHECK(WebServer::on("/api/blackbox", WebServer::Method::GET, blackbox_api_handler));
+    ESP_ERROR_CHECK(WebServer::on("/api/blackbox/clear", WebServer::Method::POST, blackbox_clear_handler));
+    ESP_ERROR_CHECK(WebServer::on("/api/blackbox/config", WebServer::Method::POST, blackbox_config_handler));
     ESP_ERROR_CHECK(WebServer::on("/api/wifi/status", WebServer::Method::GET, wifi_status_handler));
     ESP_ERROR_CHECK(WebServer::on("/api/wifi/scan", WebServer::Method::GET, wifi_scan_handler));
     ESP_ERROR_CHECK(WebServer::on("/api/wifi/on", WebServer::Method::POST, wifi_on_handler));

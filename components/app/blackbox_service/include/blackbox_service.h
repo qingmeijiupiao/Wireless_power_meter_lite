@@ -16,6 +16,7 @@ namespace BlackboxService {
 
 constexpr uint8_t SNAPSHOT_VERSION = 1;
 constexpr uint32_t DEFAULT_SNAPSHOT_INTERVAL_S = 0;
+constexpr uint32_t MIN_SNAPSHOT_INTERVAL_MS = 100;
 
 struct SnapshotV1 {
     uint8_t version;
@@ -35,8 +36,13 @@ static_assert(sizeof(SnapshotV1) <= Blackbox::PAYLOAD_SIZE,
 /** @brief 初始化 ESP_LOG 捕获和周期快照后台任务。 */
 esp_err_t init();
 
-/** @brief 将当前全局状态写入一条结构化快照。 */
-esp_err_t append_snapshot();
+/**
+ * @brief 将当前全局状态写入一条结构化快照。
+ *
+ * 默认限制相邻快照至少间隔 MIN_SNAPSHOT_INTERVAL_MS。force=true 用于关键
+ * 业务事件，忽略该限制并立即尝试入队。
+ */
+esp_err_t append_snapshot(bool force = false);
 
 /**
  * @brief 写入关键事件文本，并尝试追加一条全局状态快照。

@@ -43,7 +43,7 @@ esp_err_t append_event(const char* fmt, ...) {
     va_end(args);
 
     const esp_err_t text_ret = Blackbox::append_text("%s", text);
-    const esp_err_t snapshot_ret = append_snapshot();
+    const esp_err_t snapshot_ret = append_snapshot(true);
     return snapshot_ret != ESP_OK ? snapshot_ret : text_ret;
 }
 

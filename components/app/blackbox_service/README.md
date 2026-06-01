@@ -10,6 +10,7 @@
 - **ESP_LOG 自动采集**：`INFO` 及以上日志触发快照，`WARN` 及以上日志额外保存文本
 - **轻量日志钩子**：vprintf 钩子复用静态缓冲并只写固定 RAM 环，后台任务负责向 Flash 队列提交记录
 - **周期快照**：后台任务按 NVS 配置周期采样，间隔为 `0` 时关闭
+- **结构化快照限流**：默认限制相邻快照至少间隔 `100ms`，关键事件可强制记录
 - **关键事件接口**：`append_event()` 优先保存事件文本，再尝试追加状态快照
 
 ## 文件职责
@@ -75,6 +76,9 @@ BlackboxService::init();
 // 写入一条结构化快照
 BlackboxService::append_snapshot();
 
+// 关键场景忽略 100ms 最小间隔
+BlackboxService::append_snapshot(true);
+
 // 写入关键事件文本，并尝试追加当前快照
 BlackboxService::append_event("Output disabled: reason=%d", reason);
 
@@ -87,7 +91,7 @@ BlackboxService::set_snapshot_interval_s(10);
 | API | 说明 |
 |-----|------|
 | `init()` | 恢复 NVS 配置、创建后台任务并安装 ESP_LOG 捕获钩子 |
-| `append_snapshot()` | 采样当前 `GlobalState` 并写入 `STRUCTURED` 记录 |
+| `append_snapshot(force=false)` | 采样当前 `GlobalState` 并写入 `STRUCTURED` 记录；默认受 `100ms` 最小间隔限制 |
 | `append_event(fmt, ...)` | 保存关键事件文本，再尝试追加全局快照 |
 | `get_snapshot_interval_s()` | 获取周期快照间隔，`0` 表示关闭 |
 | `set_snapshot_interval_s(seconds)` | 设置周期快照间隔并持久化 |

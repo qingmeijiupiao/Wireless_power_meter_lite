@@ -3,30 +3,215 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>黑匣子日志 - Wireless Power Meter Lite</title>
+  <title>历史日志 - Wireless Power Meter Lite</title>
   <link rel="stylesheet" href="/app.css">
 </head>
 <body>
   <div class="layout">
     <aside>
-      <div class="brand"><h1>Wireless Power Meter Lite</h1><div class="sub">黑匣子日志</div></div>
+      <div class="brand"><h1>Wireless Power Meter Lite</h1><div class="sub">历史日志</div></div>
       <nav>
         <a class="tab" href="/">实时概览</a>
         <a class="tab" href="/charts.html">趋势曲线</a>
         <a class="tab" href="/control.html">控制设置</a>
         <a class="tab" href="/status.html">状态诊断</a>
         <a class="tab" href="/logs.html">实时日志</a>
-        <a class="tab active" href="/blackbox.html">黑匣子日志</a>
+        <a class="tab active" href="/blackbox.html">历史日志</a>
         <a class="tab" href="/firmware.html">固件升级</a>
       </nav>
     </aside>
     <main class="stack">
-      <div class="page-head"><div><h2>黑匣子日志</h2><div class="sub">查看设备保存的历史运行记录</div></div></div>
+      <div class="page-head">
+        <div><h2>历史日志</h2><div class="sub" id="topStatus">查看设备保存的历史运行记录</div></div>
+      </div>
+      <div class="grid grid-2">
+        <div class="card">
+          <strong>存储状态</strong>
+          <div class="info-list" id="storageInfo"><div class="muted">读取中...</div></div>
+          <div class="actions history-actions">
+            <input class="history-limit" id="limitInput" type="number" min="20" max="30000" value="100" title="拉取日志条数">
+            <button class="secondary" id="refreshBtn">拉取日志</button>
+            <button class="secondary" id="exportBtn">导出 CSV</button>
+            <button class="danger" id="clearBtn">清空历史</button>
+          </div>
+          <div class="muted history-note">日志使用环形缓冲存储。容量写满后，设备会自动覆盖最久的历史日志。</div>
+        </div>
+        <div class="card">
+          <strong>周期快照</strong>
+          <div class="actions blackbox-config">
+            <input id="intervalInput" type="number" min="0" max="86400" value="0">
+            <button id="saveIntervalBtn">保存</button>
+          </div>
+          <div class="muted">单位为秒，0 表示关闭。</div>
+        </div>
+      </div>
       <div class="card stack">
-        <div class="muted">持久化日志拉取入口已预留。后续接入后，这里会提供历史记录列表、导出和清空功能。</div>
-        <button class="secondary" disabled>等待后端接口</button>
+        <div class="card-title"><strong>历史记录</strong><span class="sub" id="listMeta">默认拉取最新 100 条</span></div>
+        <div style="overflow:auto">
+          <table class="history-table" id="recordTable">
+            <tr><th>记录</th><th>时间戳</th><th>类型</th><th>内容</th></tr>
+          </table>
+        </div>
       </div>
     </main>
   </div>
+  <script>
+    const $ = id => document.getElementById(id);
+    const API_PAGE_LIMIT = 16;
+    let records = [];
+    let busy = false;
+    async function api(url, options) {
+      const res = await fetch(url, Object.assign({ cache: 'no-store' }, options || {}));
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+    async function postJson(url, body) {
+      return api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+    }
+    function escapeHtml(text) {
+      return String(text).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    }
+    function infoHtml(items) {
+      return items.map(([label, value]) => `<div class="info-line"><span>${label}</span><span>${escapeHtml(value)}</span></div>`).join('');
+    }
+    function fmtTemp(value) {
+      return Number.isFinite(value) ? `${Number(value).toFixed(2)} C` : '--';
+    }
+    function recordContent(record) {
+      if (record.type === 'string') return `<span class="blackbox-text">${escapeHtml(record.text)}</span>`;
+      if (record.snapshot) {
+        const s = record.snapshot;
+        return `<div class="blackbox-detail">电压 ${s.voltage_mv} mV · 电流 ${s.current_ua} uA · 板温 ${fmtTemp(s.board_temp_c)} · 芯片温度 ${fmtTemp(s.chip_temp_c)} · 能量 ${s.meter_mwh} mWh · flags 0x${Number(s.flags).toString(16).toUpperCase()}</div><code>${escapeHtml(record.payload_hex)}</code>`;
+      }
+      return record.payload_hex ? `<code>${escapeHtml(record.payload_hex)}</code>` : '--';
+    }
+    function renderTable() {
+      $('recordTable').innerHTML = '<tr><th>记录</th><th>时间戳</th><th>类型</th><th>内容</th></tr>' +
+        records.map(record => `<tr><td>#${record.index}</td><td>${record.timestamp_ms == null ? '--' : `${record.timestamp_ms} ms`}</td><td>${escapeHtml(record.type)}</td><td>${recordContent(record)}</td></tr>`).join('');
+      $('listMeta').textContent = `${records.length} 条逻辑记录`;
+    }
+    function renderInfo(data) {
+      $('storageInfo').innerHTML = infoHtml([
+        ['记录开关', data.enabled ? '开启' : '关闭'],
+        ['原始记录数', `${data.persisted_records} / ${data.capacity_records}`],
+        ['当前已加载', String(records.length)]
+      ]);
+      $('intervalInput').value = data.snapshot_interval_s;
+      $('topStatus').textContent = data.enabled ? '持久化记录已开启' : '持久化记录已关闭';
+    }
+    async function loadInfo() {
+      const data = await api('/api/blackbox?metadata=1');
+      if (!data.ok) throw new Error(data.reason || '读取失败');
+      renderInfo(data);
+    }
+    function selectedLimit() {
+      const limit = Number($('limitInput').value);
+      if (!Number.isInteger(limit) || limit < 20 || limit > 30000) {
+        throw new Error('拉取数量必须为 20-30000 条整数');
+      }
+      return limit;
+    }
+    function setBusy(value) {
+      busy = value;
+      $('refreshBtn').disabled = value;
+      $('exportBtn').disabled = value;
+      $('clearBtn').disabled = value;
+      $('limitInput').disabled = value;
+    }
+    async function loadSelected() {
+      if (busy) return;
+      const target = selectedLimit();
+      setBusy(true);
+      try {
+        records = [];
+        let cursor = 0;
+        let meta = null;
+        while (records.length < target) {
+          $('topStatus').textContent = `正在拉取 ${records.length}/${target} 条...`;
+          const pageLimit = Math.min(API_PAGE_LIMIT, target - records.length);
+          const data = await api(`/api/blackbox?start=${cursor}&limit=${pageLimit}`);
+          if (!data.ok) throw new Error(data.reason || '读取失败');
+          meta = data;
+          records.push(...data.records);
+          cursor = data.next;
+          if (!data.has_more || data.records.length === 0) break;
+        }
+        if (meta) renderInfo(meta);
+        renderTable();
+      } finally {
+        setBusy(false);
+      }
+    }
+    async function exportSelected() {
+      if (busy) return;
+      const target = selectedLimit();
+      setBusy(true);
+      try {
+        let cursor = 0;
+        let all = [];
+        let meta = null;
+        while (all.length < target) {
+          const pageLimit = Math.min(API_PAGE_LIMIT, target - all.length);
+          const data = await api(`/api/blackbox?start=${cursor}&limit=${pageLimit}`);
+          if (!data.ok) throw new Error(data.reason || '导出失败');
+          meta = data;
+          all.push(...data.records);
+          cursor = data.next;
+          const percent = Math.min(100, Math.round(all.length * 100 / target));
+          $('topStatus').textContent = `正在导出 ${percent}% · 已读取 ${all.length} 条`;
+          $('exportBtn').textContent = `导出中 ${percent}%`;
+          if (!data.has_more || data.records.length === 0) break;
+        }
+        const csvCell = value => {
+          const text = value == null ? '' : String(value);
+          return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+        };
+        const columns = [
+          'index', 'timestamp_ms', 'type', 'fragments', 'text', 'payload_hex',
+          'snapshot_version', 'flags', 'protect', 'voltage_mv', 'current_ua',
+          'meter_mwh', 'board_temp_c', 'chip_temp_c'
+        ];
+        const rows = all.map(record => {
+          const snapshot = record.snapshot || {};
+          return [
+            record.index, record.timestamp_ms, record.type, record.fragments, record.text,
+            record.payload_hex, snapshot.version, snapshot.flags, snapshot.protect,
+            snapshot.voltage_mv, snapshot.current_ua, snapshot.meter_mwh,
+            snapshot.board_temp_c, snapshot.chip_temp_c
+          ].map(csvCell).join(',');
+        });
+        const csv = '\uFEFF' + [columns.join(','), ...rows].join('\r\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `wireless-power-meter-history-${Date.now()}.csv`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+        $('topStatus').textContent = `导出完成，共 ${all.length} 条`;
+      } finally {
+        $('exportBtn').textContent = '导出 CSV';
+        setBusy(false);
+      }
+    }
+    $('refreshBtn').onclick = () => loadSelected().catch(e => $('topStatus').textContent = e.message);
+    $('exportBtn').onclick = () => exportSelected().catch(e => $('topStatus').textContent = e.message);
+    $('clearBtn').onclick = async () => {
+      if (!confirm('确认清空设备中保存的全部历史日志？此操作不会只清空当前页面。')) return;
+      const data = await postJson('/api/blackbox/clear');
+      if (!data.ok) throw new Error(data.reason || '清空失败');
+      await loadSelected();
+    };
+    $('saveIntervalBtn').onclick = async () => {
+      const seconds = Number($('intervalInput').value);
+      if (!Number.isInteger(seconds) || seconds < 0 || seconds > 86400) {
+        $('topStatus').textContent = '周期快照间隔必须为 0-86400 秒整数';
+        return;
+      }
+      const data = await postJson('/api/blackbox/config', { snapshot_interval_s: seconds });
+      $('intervalInput').value = data.snapshot_interval_s;
+      $('topStatus').textContent = seconds === 0 ? '周期快照已关闭' : `周期快照已设为 ${seconds}s`;
+    };
+    loadInfo().catch(e => $('topStatus').textContent = e.message);
+  </script>
 </body>
 </html>

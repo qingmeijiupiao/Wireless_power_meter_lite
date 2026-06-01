@@ -358,6 +358,16 @@ uint32_t CircularFlashBuffer::get_count() {
     return count;
 }
 
+uint32_t CircularFlashBuffer::get_capacity() {
+    if (cfb_mutex == nullptr) {
+        return 0;
+    }
+    xSemaphoreTake(cfb_mutex, portMAX_DELAY);
+    uint32_t capacity = max_retained_blocks;
+    xSemaphoreGive(cfb_mutex);
+    return capacity;
+}
+
 void CircularFlashBuffer::set_enable(bool enable) {
     if (cfb_mutex == nullptr) {
         return;

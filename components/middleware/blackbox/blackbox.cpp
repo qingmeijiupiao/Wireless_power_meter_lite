@@ -338,6 +338,10 @@ uint32_t Blackbox::count() {
     return CircularFlashBuffer::get_count();
 }
 
+uint32_t Blackbox::capacity() {
+    return CircularFlashBuffer::get_capacity();
+}
+
 /**
  * @brief 从 Flash 中读取单条原始记录并进行校验
  * @param index 索引（0 为最新记录）

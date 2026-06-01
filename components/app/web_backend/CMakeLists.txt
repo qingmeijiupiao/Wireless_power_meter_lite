@@ -5,6 +5,7 @@ idf_component_register(
          "src/page_handlers.cpp"
          "src/request_json.cpp"
          "src/rtos_stats_api.cpp"
+         "src/blackbox_api.cpp"
          "src/ota_handlers.cpp"
     INCLUDE_DIRS "include"
     PRIV_INCLUDE_DIRS "private_include"

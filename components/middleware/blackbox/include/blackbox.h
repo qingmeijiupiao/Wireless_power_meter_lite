@@ -63,6 +63,9 @@ namespace Blackbox {
 
     uint32_t count();
 
+    /** @brief 返回最多可保留的原始记录数。 */
+    uint32_t capacity();
+
     Record read(uint32_t index);
 
     /**
