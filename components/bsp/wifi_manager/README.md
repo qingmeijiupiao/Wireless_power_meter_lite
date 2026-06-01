@@ -111,7 +111,7 @@ ESP_ERROR_CHECK(wifi.start_ap("WPM-Lite", "", WIFI_AP_MAX_CONN, 1));
 ## 注意事项
 
 - 调用 `init()` 前需要完成 NVS 初始化，否则 ESP-IDF WiFi 初始化可能失败。
-- `connect_sta(..., true)` 最多等待 `WIFI_CONNECT_TIMEOUT_MS`。
+- `connect_sta(..., true)` 最多等待 `WIFI_CONNECT_TIMEOUT_MS`（当前为 30 秒），并在失败日志中区分 AP 关联失败与已关联但 DHCP 未分配 IP。
 - 该组件不保存 SSID/password，也不负责 DNS Captive Portal；这些逻辑在 `wifi_service` 中维护。
 
 ## 环境与依赖

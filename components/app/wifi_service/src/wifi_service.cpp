@@ -21,7 +21,12 @@
 
 namespace WifiService {
 
-static const char* TAG = "WifiService";
+static constexpr char TAG[] = "WifiService";
+static constexpr uint8_t STA_CONNECT_MAX_ATTEMPTS = 2;
+
+static const char* source_or_unknown(const char* source) {
+    return source == nullptr ? "unknown" : source;
+}
 
 // NVS key 长度需小于 16 字节，存储于 HXC 默认命名空间。
 static HXC::NVS_DATA<char*> sta_ssid("wifi_ssid", "");
@@ -123,21 +128,21 @@ bool is_web_enabled_on_boot() {
 /**
  * @brief 写入启动启用开关
  */
-esp_err_t set_web_enabled_on_boot(bool enabled) {
+esp_err_t set_web_enabled_on_boot(bool enabled, const char* source) {
     web_boot = enabled ? 1 : 0;
     update_global_state_flags();
-    BlackboxService::append_event("wifi: web_boot=%u", enabled ? 1U : 0U);
+    BlackboxService::append_event("wifi: config source=%s web_boot=%u", source_or_unknown(source), enabled ? 1U : 0U);
     return ESP_OK;
 }
 
 /**
  * @brief 清除已保存 STA 凭据
  */
-esp_err_t clear_saved_sta() {
+esp_err_t clear_saved_sta(const char* source) {
     sta_ssid = "";
     sta_pass = "";
     update_global_state_flags();
-    BlackboxService::append_event("wifi: saved_sta_cleared");
+    BlackboxService::append_event("wifi: config source=%s saved_sta_cleared", source_or_unknown(source));
     return ESP_OK;
 }
 
@@ -169,7 +174,7 @@ Config get_config() {
 /**
  * @brief 连接指定 STA WiFi
  */
-esp_err_t connect_sta(const char* ssid, const char* password, bool save) {
+esp_err_t connect_sta(const char* ssid, const char* password, bool save, const char* source) {
     if (ssid == nullptr || ssid[0] == '\0' || password == nullptr) {
         set_last_error("invalid sta config");
         return ESP_ERR_INVALID_ARG;
@@ -180,7 +185,20 @@ esp_err_t connect_sta(const char* ssid, const char* password, bool save) {
     DNSServer::stop();
     WebServer::enable_captive_portal(false);
 
-    esp_err_t ret = WiFiManager::instance().connect_sta(ssid, password, true);
+    esp_err_t ret = ESP_FAIL;
+    for (uint8_t attempt = 1; attempt <= STA_CONNECT_MAX_ATTEMPTS; ++attempt) {
+        ESP_LOGI(TAG, "STA connect attempt %u/%u: ssid=%s",
+                 static_cast<unsigned>(attempt),
+                 static_cast<unsigned>(STA_CONNECT_MAX_ATTEMPTS),
+                 ssid);
+        ret = WiFiManager::instance().connect_sta(ssid, password, true);
+        if (ret != ESP_ERR_TIMEOUT || attempt == STA_CONNECT_MAX_ATTEMPTS) {
+            break;
+        }
+        ESP_LOGW(TAG, "STA connect attempt %u/%u timed out, retrying once",
+                 static_cast<unsigned>(attempt),
+                 static_cast<unsigned>(STA_CONNECT_MAX_ATTEMPTS));
+    }
     if (ret == ESP_OK) {
         mode = Mode::STA;
         update_global_state_flags();
@@ -193,7 +211,9 @@ esp_err_t connect_sta(const char* ssid, const char* password, bool save) {
         }
         IP_t ip = WiFiManager::instance().get_ip();
         ESP_LOGI(TAG, "STA connected: %u.%u.%u.%u", ip.octet1, ip.octet2, ip.octet3, ip.octet4);
-        BlackboxService::append_event("wifi: sta_connected save=%u ip=%u.%u.%u.%u",
+        BlackboxService::append_event("wifi: sta_connected source=%s ssid=%s save=%u ip=%u.%u.%u.%u",
+                                      source_or_unknown(source),
+                                      ssid,
                                       save ? 1U : 0U,
                                       ip.octet1,
                                       ip.octet2,
@@ -204,7 +224,9 @@ esp_err_t connect_sta(const char* ssid, const char* password, bool save) {
 
     set_last_error(esp_err_to_name(ret));
     ESP_LOGW(TAG, "STA connect failed: %s", esp_err_to_name(ret));
-    BlackboxService::append_event("wifi: sta_connect_failed save=%u err=%s",
+    BlackboxService::append_event("wifi: sta_connect_failed source=%s ssid=%s save=%u err=%s",
+                                  source_or_unknown(source),
+                                  ssid,
                                   save ? 1U : 0U,
                                   esp_err_to_name(ret));
     return ret;
@@ -213,7 +235,7 @@ esp_err_t connect_sta(const char* ssid, const char* password, bool save) {
 /**
  * @brief 启动开放 AP 配网模式
  */
-esp_err_t start_provision_ap() {
+esp_err_t start_provision_ap(const char* source) {
     ESP_RETURN_ON_ERROR(init(), TAG, "init failed");
     if (ap_ssid[0] == '\0') {
         make_ap_ssid();
@@ -228,7 +250,7 @@ esp_err_t start_provision_ap() {
     update_global_state_flags();
     set_last_error("none");
     ESP_LOGI(TAG, "Provision AP active: %s", ap_ssid);
-    BlackboxService::append_event("wifi: provision_ap ssid=%s", ap_ssid);
+    BlackboxService::append_event("wifi: provision_ap source=%s ssid=%s", source_or_unknown(source), ap_ssid);
     return ESP_OK;
 }
 
@@ -309,39 +331,39 @@ esp_err_t scan_ap_list(ScanResult* results, size_t max_results, size_t* out_coun
 /**
  * @brief 按 NVS 配置启动默认模式
  */
-esp_err_t start_default() {
+esp_err_t start_default(const char* source) {
     ESP_RETURN_ON_ERROR(init(), TAG, "init failed");
 
     if (!is_web_enabled_on_boot()) {
         ESP_LOGI(TAG, "web/wifi startup disabled by NVS");
         mode = Mode::OFF;
         update_global_state_flags();
-        BlackboxService::append_event("wifi: startup_disabled");
+        BlackboxService::append_event("wifi: startup_disabled source=%s", source_or_unknown(source));
         return ESP_OK;
     }
 
     Config cfg = get_config();
     if (cfg.ssid[0] != '\0') {
-        esp_err_t ret = connect_sta(cfg.ssid, cfg.password, false);
+        esp_err_t ret = connect_sta(cfg.ssid, cfg.password, false, source);
         if (ret == ESP_OK) {
             return ESP_OK;
         }
     }
 
     // 没有保存凭据，或保存的凭据连接超时/失败时，进入 AP 配网兜底模式。
-    return start_provision_ap();
+    return start_provision_ap(source);
 }
 
 /**
  * @brief 停止 WiFiService 管理的网络功能
  */
-esp_err_t stop() {
+esp_err_t stop(const char* source) {
     DNSServer::stop();
     WebServer::enable_captive_portal(false);
     esp_err_t ret = WiFiManager::instance().stop();
     mode = Mode::OFF;
     update_global_state_flags();
-    BlackboxService::append_event("wifi: stop result=%s", esp_err_to_name(ret));
+    BlackboxService::append_event("wifi: stop source=%s result=%s", source_or_unknown(source), esp_err_to_name(ret));
     return ret;
 }
 

@@ -11,6 +11,8 @@
 #include <cstring>
 
 #include "esp_log.h"
+#include "lwip/inet.h"
+#include "lwip/sockets.h"
 
 namespace WebServer {
 
@@ -135,6 +137,25 @@ static void copy_uri_without_query(const char* src, char* dst, size_t dst_size) 
     dst[i] = '\0';
 }
 
+static void load_peer_ip(httpd_req_t* req, char* out, size_t out_size) {
+    if (out_size == 0) {
+        return;
+    }
+    strncpy(out, "unknown", out_size - 1);
+    out[out_size - 1] = '\0';
+
+    sockaddr_storage address = {};
+    socklen_t address_len = sizeof(address);
+    const int socket_fd = httpd_req_to_sockfd(req);
+    if (socket_fd < 0 || getpeername(socket_fd, reinterpret_cast<sockaddr*>(&address), &address_len) != 0) {
+        return;
+    }
+    if (address.ss_family == AF_INET) {
+        const auto* ipv4 = reinterpret_cast<const sockaddr_in*>(&address);
+        inet_ntoa_r(ipv4->sin_addr, out, static_cast<int>(out_size));
+    }
+}
+
 /**
  * @brief 路由匹配
  * @note  业务路由使用精确匹配，通配符只用于esp_http_server统一入口
@@ -243,6 +264,7 @@ static esp_err_t dispatch(httpd_req_t* req) {
     request->raw = req;
     request->method = from_httpd_method((httpd_method_t)req->method);
     copy_uri_without_query(req->uri, request->uri, sizeof(request->uri));
+    load_peer_ip(req, request->peer_ip, sizeof(request->peer_ip));
 
     if (httpd_req_get_url_query_str(req, request->query, sizeof(request->query)) != ESP_OK) {
         request->query[0] = '\0';

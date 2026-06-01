@@ -49,6 +49,7 @@ bool is_ignored_tag(const char* tag, size_t len) {
         "phy_init",
         "pp",
         "net80211",
+        "WebBackend",
     };
     for (const char* ignored : IGNORED_TAGS) {
         if (strlen(ignored) == len && strncmp(tag, ignored, len) == 0) {

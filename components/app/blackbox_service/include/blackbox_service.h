@@ -51,11 +51,18 @@ esp_err_t append_snapshot(bool force = false);
  */
 esp_err_t append_event(const char* fmt, ...);
 
+/**
+ * @brief 仅写入文本事件，不追加状态快照。
+ *
+ * 用于启动诊断块等多行低频信息，避免为每一行重复写入相同快照。
+ */
+esp_err_t append_text_event(const char* fmt, ...);
+
 /** @brief 获取周期快照间隔，0 表示关闭。 */
 uint32_t get_snapshot_interval_s();
 
 /** @brief 设置并持久化周期快照间隔，0 表示关闭。 */
-void set_snapshot_interval_s(uint32_t seconds);
+void set_snapshot_interval_s(uint32_t seconds, const char* source);
 
 } // namespace BlackboxService
 

@@ -30,7 +30,7 @@
 
 namespace WebBackend {
 
-static const char* TAG = "WebBackendApi";
+static constexpr char TAG[] = "WebBackendApi";
 static constexpr size_t LOG_RESPONSE_RAW_MAX = 2400;
 static char log_snapshot_buffer[LOG_RESPONSE_RAW_MAX + 1];
 
@@ -153,9 +153,9 @@ esp_err_t output_handler(WebServer::Request* request) {
     bool has_state = json_get_bool(request->body, "state", &target);
     PowerOutput::OutputResult result = PowerOutput::OutputResult::OK;
     if (json_has_key(request->body, "toggle")) {
-        result = PowerOutput::toggle();
+        result = PowerOutput::toggle(TAG);
     } else if (has_state) {
-        result = target ? PowerOutput::on() : PowerOutput::off();
+        result = target ? PowerOutput::on(TAG) : PowerOutput::off(TAG);
     } else {
         ESP_LOGW(TAG, "output request rejected: missing state");
         return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"missing_state\"}\n", strlen("{\"ok\":false,\"reason\":\"missing_state\"}\n"));
@@ -195,6 +195,7 @@ esp_err_t reboot_handler(WebServer::Request* request) {
     esp_timer_stop(reboot_timer);
     esp_timer_start_once(reboot_timer, 300000);
     ESP_LOGW(TAG, "reboot requested, restarting in 300 ms");
+    BlackboxService::append_event("system: reboot source=%s delay_ms=300 ip=%s", TAG, request->peer_ip);
     return WebServer::send_json(request, "{\"ok\":true,\"reason\":\"rebooting\"}\n");
 }
 
@@ -246,7 +247,9 @@ esp_err_t backlight_handler(WebServer::Request* request) {
         }
         ret = ST7735::set_backlight(static_cast<uint8_t>(brightness));
         if (ret == ESP_OK) {
-            ESP_LOGD(TAG, "backlight updated: brightness=%lu", brightness);
+            ESP_LOGI(TAG, "backlight updated: brightness=%lu", brightness);
+            BlackboxService::append_event("ui: config source=%s backlight=%lu ip=%s",
+                                          TAG, static_cast<unsigned long>(brightness), request->peer_ip);
         } else {
             ESP_LOGW(TAG, "backlight update failed: brightness=%lu reason=%s", brightness, esp_err_to_name(ret));
         }
@@ -289,11 +292,11 @@ esp_err_t protect_handler(WebServer::Request* request) {
         if (!json_get_bool(request->body, "enabled", &enabled)) {
             return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"missing_enabled\"}\n", strlen("{\"ok\":false,\"reason\":\"missing_enabled\"}\n"));
         }
-        protect_set_bypassed(!enabled);
+        protect_set_bypassed(!enabled, TAG);
         ESP_LOGI(TAG, "protection updated: enabled=%s", enabled ? "true" : "false");
         if (enabled && protect_should_block_output()) {
             ESP_LOGW(TAG, "protection enabled with active fault, forcing output off");
-            PowerOutput::off();
+            PowerOutput::off(TAG);
         }
     }
 
@@ -408,11 +411,23 @@ esp_err_t diagnostics_handler(WebServer::Request* request) {
             static_cast<void*>(current_register_raw),
             static_cast<void*>(voltage_register_raw));
     }
+    twai_node_status_t can_status = {};
+    twai_node_record_t can_statistics = {};
+    HXC_TWAI& can = CanCallback::get_can_bus();
+    const bool can_info_available = can.get_info(&can_status, &can_statistics) == ESP_OK;
     snprintf(response_buffer, sizeof(response_buffer),
-        "{\"ina226\":{\"current_register_raw\":%d,\"voltage_register_raw\":%u,\"available\":%s}}\n",
+        "{\"ina226\":{\"current_register_raw\":%d,\"voltage_register_raw\":%u,\"available\":%s},\"can\":{\"info_available\":%s,\"state\":%u,\"tx_error_count\":%u,\"rx_error_count\":%u,\"bus_error_count\":%lu,\"bus_off_count\":%lu,\"tx_failed_count\":%lu,\"rx_overflow_count\":%lu}}\n",
         current_register_raw == nullptr ? 0 : *current_register_raw,
         voltage_register_raw == nullptr ? 0 : *voltage_register_raw,
-        (current_register_raw != nullptr && voltage_register_raw != nullptr) ? "true" : "false");
+        (current_register_raw != nullptr && voltage_register_raw != nullptr) ? "true" : "false",
+        can_info_available ? "true" : "false",
+        static_cast<unsigned>(can_status.state),
+        static_cast<unsigned>(can_status.tx_error_count),
+        static_cast<unsigned>(can_status.rx_error_count),
+        static_cast<unsigned long>(can_statistics.bus_err_num),
+        static_cast<unsigned long>(can.get_bus_off_count()),
+        static_cast<unsigned long>(can.get_tx_failed_count()),
+        static_cast<unsigned long>(can.get_rx_overflow_count()));
     return WebServer::send_json(request, response_buffer);
 }
 
@@ -616,10 +631,10 @@ esp_err_t wifi_connect_handler(WebServer::Request* request) {
     }
     json_get_string(request->body, "password", password, sizeof(password));
 
-    ret = WifiService::connect_sta(ssid, password, true);
+    ret = WifiService::connect_sta(ssid, password, true, TAG);
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "WiFi connect failed: ssid=%s reason=%s, restoring provision AP", ssid, esp_err_to_name(ret));
-        WifiService::start_provision_ap();
+        WifiService::start_provision_ap(TAG);
     } else {
         ESP_LOGI(TAG, "WiFi connected: ssid=%s", ssid);
     }
@@ -638,7 +653,7 @@ esp_err_t wifi_connect_handler(WebServer::Request* request) {
 
 /** @brief POST /api/wifi/ap，手动切换到 AP 配网模式。 */
 esp_err_t wifi_ap_handler(WebServer::Request* request) {
-    esp_err_t ret = WifiService::start_provision_ap();
+    esp_err_t ret = WifiService::start_provision_ap(TAG);
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "WiFi provision AP started: ssid=%s", WifiService::get_ap_ssid());
     } else {
@@ -658,7 +673,7 @@ esp_err_t wifi_ap_handler(WebServer::Request* request) {
 
 /** @brief POST /api/wifi/off，关闭 WifiService 管理的网络功能。 */
 esp_err_t wifi_off_handler(WebServer::Request* request) {
-    esp_err_t ret = WifiService::stop();
+    esp_err_t ret = WifiService::stop(TAG);
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "WiFi service stopped");
     } else {
@@ -673,7 +688,7 @@ esp_err_t wifi_off_handler(WebServer::Request* request) {
 
 /** @brief POST /api/wifi/on，按 NVS 配置启动默认 WiFi/Web 网络模式。 */
 esp_err_t wifi_on_handler(WebServer::Request* request) {
-    esp_err_t ret = WifiService::start_default();
+    esp_err_t ret = WifiService::start_default(TAG);
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "WiFi service started: mode=%s", mode_to_str(WifiService::get_mode()));
     } else {
@@ -702,7 +717,7 @@ esp_err_t wifi_boot_handler(WebServer::Request* request) {
         ESP_LOGW(TAG, "WiFi boot config rejected: missing enabled");
         return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"missing_enabled\"}\n", strlen("{\"ok\":false,\"reason\":\"missing_enabled\"}\n"));
     }
-    ret = WifiService::set_web_enabled_on_boot(enabled);
+    ret = WifiService::set_web_enabled_on_boot(enabled, TAG);
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "WiFi boot config updated: enabled=%s", enabled ? "true" : "false");
     } else {
@@ -718,7 +733,7 @@ esp_err_t wifi_boot_handler(WebServer::Request* request) {
 
 /** @brief POST /api/wifi/clear，清除已保存的 STA 凭据。 */
 esp_err_t wifi_clear_handler(WebServer::Request* request) {
-    esp_err_t ret = WifiService::clear_saved_sta();
+    esp_err_t ret = WifiService::clear_saved_sta(TAG);
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "saved WiFi credentials cleared");
     } else {

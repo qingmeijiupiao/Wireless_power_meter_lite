@@ -28,12 +28,21 @@ static int32_t to_milli(float value) {
     return static_cast<int32_t>(value * 1000.0f);
 }
 
-static void append_state_change_event(const char* channel, ProtectState_t last_state, ProtectState_t new_state, float value) {
-    BlackboxService::append_event("protect: channel=%s state=%u->%u value_milli=%ld",
+static void append_state_change_event(const char* channel, ProtectState_t last_state, ProtectState_t new_state,
+                                      float value, const protect_threshold_t& threshold) {
+    const int current_raw = current_register_raw == nullptr ? 0 : *current_register_raw;
+    const unsigned voltage_raw = voltage_register_raw == nullptr ? 0U : *voltage_register_raw;
+    BlackboxService::append_event("protect: channel=%s state=%u->%u value_milli=%ld warn=%ld protect=%ld bypass=%u output=%u raw_i=%d raw_v=%u",
                                   channel,
                                   static_cast<unsigned>(last_state),
                                   static_cast<unsigned>(new_state),
-                                  static_cast<long>(to_milli(value)));
+                                  static_cast<long>(to_milli(value)),
+                                  static_cast<long>(to_milli(threshold.warning_threshold)),
+                                  static_cast<long>(to_milli(threshold.protect_threshold)),
+                                  protect_is_bypassed() ? 1U : 0U,
+                                  glb_states.flags.bits.output_enabled ? 1U : 0U,
+                                  current_raw,
+                                  voltage_raw);
 }
 
 protect_threshold_t temperature_threshold ={
@@ -144,13 +153,18 @@ bool protect_has_active_fault(){
         global_state_protects.current_protect_state == PROTECT_STATE_PROTECT;
 }
 
-void protect_set_bypassed(bool bypassed){
+void protect_set_bypassed(bool bypassed, const char* source){
+    source = source == nullptr ? "unknown" : source;
     if (glb_states.flags.bits.protect_bypassed == bypassed) {
         return;
     }
     glb_states.flags.bits.protect_bypassed = bypassed;
-    PROTECT_LOGW("protect bypass %s", bypassed ? "enabled" : "disabled");
-    BlackboxService::append_event("protect: bypass=%u", bypassed ? 1U : 0U);
+    PROTECT_LOGW("bypass source=%s state=%u", source, bypassed ? 1U : 0U);
+    BlackboxService::append_event("protect: bypass source=%s state=%u active_fault=%u output=%u",
+                                  source,
+                                  bypassed ? 1U : 0U,
+                                  protect_has_active_fault() ? 1U : 0U,
+                                  glb_states.flags.bits.output_enabled ? 1U : 0U);
 }
 
 bool protect_is_bypassed(){
@@ -228,7 +242,7 @@ void protect_task(void* pvParameters){
         if(temp_state != global_state_protects.temperature_protect_state){
             last_state = global_state_protects.temperature_protect_state;
             global_state_protects.temperature_protect_state = temp_state;
-            append_state_change_event("OTP", last_state, temp_state, glb_states.board_temperature / 100.0f);
+            append_state_change_event("OTP", last_state, temp_state, glb_states.board_temperature / 100.0f, temperature_threshold);
             for(auto& cb : protect_change_callbacks){
                 cb(last_state, temp_state);
             }
@@ -239,7 +253,7 @@ void protect_task(void* pvParameters){
         if(temp_state != global_state_protects.high_voltage_protect_state){
             last_state = global_state_protects.high_voltage_protect_state;
             global_state_protects.high_voltage_protect_state = temp_state;
-            append_state_change_event("OVP", last_state, temp_state, glb_states.voltage_mV / 1e3);
+            append_state_change_event("OVP", last_state, temp_state, glb_states.voltage_mV / 1e3, high_voltage_threshold);
             for(auto& cb : protect_change_callbacks){
                 cb(last_state, temp_state);
             }
@@ -250,7 +264,7 @@ void protect_task(void* pvParameters){
         if(temp_state != global_state_protects.low_voltage_protect_state){
             last_state = global_state_protects.low_voltage_protect_state;
             global_state_protects.low_voltage_protect_state = temp_state;
-            append_state_change_event("UVP", last_state, temp_state, glb_states.voltage_mV / 1e3);
+            append_state_change_event("UVP", last_state, temp_state, glb_states.voltage_mV / 1e3, low_voltage_threshold);
             for(auto& cb : protect_change_callbacks){
                 cb(last_state, temp_state);
             }
@@ -261,7 +275,7 @@ void protect_task(void* pvParameters){
         if(temp_state != global_state_protects.current_protect_state){
             last_state = global_state_protects.current_protect_state;
             global_state_protects.current_protect_state = temp_state;
-            append_state_change_event("OCP", last_state, temp_state, std::abs(glb_states.current_uA) / 1e6);
+            append_state_change_event("OCP", last_state, temp_state, std::abs(glb_states.current_uA) / 1e6, current_threshold);
             for(auto& cb : protect_change_callbacks){
                 cb(last_state, temp_state);
             }

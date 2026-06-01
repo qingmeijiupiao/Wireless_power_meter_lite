@@ -243,7 +243,7 @@ esp_err_t blackbox_config_handler(WebServer::Request* request) {
             strlen("{\"ok\":false,\"reason\":\"invalid_snapshot_interval\"}\n"));
     }
 
-    BlackboxService::set_snapshot_interval_s(seconds);
+    BlackboxService::set_snapshot_interval_s(seconds, "WebBackend");
     snprintf(blackbox_response_buffer, sizeof(blackbox_response_buffer),
              "{\"ok\":true,\"snapshot_interval_s\":%lu}\n",
              static_cast<unsigned long>(BlackboxService::get_snapshot_interval_s()));

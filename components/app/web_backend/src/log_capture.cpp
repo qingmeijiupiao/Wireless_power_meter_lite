@@ -13,6 +13,7 @@
 
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
+#include "blackbox_service.h"
 
 namespace WebBackend {
 
@@ -29,6 +30,19 @@ static size_t log_ring_used = 0;
 static uint64_t log_ring_seq = 0;
 static vprintf_like_t original_log_vprintf = nullptr;
 static bool log_capture_installed = false;
+
+static const char* method_to_str(WebServer::Method method) {
+    switch (method) {
+        case WebServer::Method::GET: return "GET";
+        case WebServer::Method::POST: return "POST";
+        case WebServer::Method::PUT: return "PUT";
+        case WebServer::Method::DELETE_: return "DELETE";
+        case WebServer::Method::PATCH: return "PATCH";
+        case WebServer::Method::OPTIONS: return "OPTIONS";
+        case WebServer::Method::HEAD: return "HEAD";
+        default: return "ANY";
+    }
+}
 
 /** @brief 将原始日志字节写入环形缓冲，满后覆盖最旧数据。 */
 static void log_ring_write(const char* text, size_t len) {
@@ -146,7 +160,15 @@ esp_err_t log_middleware(WebServer::Request* request) {
     if (strcmp(request->uri, "/api/logs") == 0 || strcmp(request->uri, "/api/logs/clear") == 0) {
         return ESP_OK;
     }
-    ESP_LOGD("WebBackend", "request uri=%s", request->uri);
+    const char* method = method_to_str(request->method);
+    ESP_LOGI("WebBackend", "request ip=%s method=%s uri=%s",
+             request->peer_ip, method, request->uri);
+    if (request->method != WebServer::Method::GET &&
+        request->method != WebServer::Method::HEAD &&
+        request->method != WebServer::Method::OPTIONS) {
+        BlackboxService::append_event("web: action ip=%s method=%s uri=%s",
+                                      request->peer_ip, method, request->uri);
+    }
     return ESP_OK;
 }
 

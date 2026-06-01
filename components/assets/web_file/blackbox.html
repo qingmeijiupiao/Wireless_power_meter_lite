@@ -29,7 +29,7 @@
           <strong>存储状态</strong>
           <div class="info-list" id="storageInfo"><div class="muted">读取中...</div></div>
           <div class="actions history-actions">
-            <input class="history-limit" id="limitInput" type="number" min="20" max="30000" value="100" title="拉取日志条数">
+            <input class="history-limit" id="limitInput" type="number" min="1" value="100" title="拉取日志条数，超过设备容量时按全量拉取">
             <button class="secondary" id="refreshBtn">拉取日志</button>
             <button class="secondary" id="exportBtn">导出 CSV</button>
             <button class="danger" id="clearBtn">清空历史</button>
@@ -60,6 +60,7 @@
     const API_PAGE_LIMIT = 16;
     let records = [];
     let busy = false;
+    let maxRecords = null;
     async function api(url, options) {
       const res = await fetch(url, Object.assign({ cache: 'no-store' }, options || {}));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -91,6 +92,12 @@
       $('listMeta').textContent = `${records.length} 条逻辑记录`;
     }
     function renderInfo(data) {
+      const capacity = Number(data.capacity_records);
+      if (Number.isInteger(capacity) && capacity > 0) {
+        maxRecords = capacity;
+        $('limitInput').max = String(capacity);
+        $('limitInput').title = `拉取日志条数，范围 1-${capacity}，超过容量时按全量拉取`;
+      }
       $('storageInfo').innerHTML = infoHtml([
         ['记录开关', data.enabled ? '开启' : '关闭'],
         ['原始记录数', `${data.persisted_records} / ${data.capacity_records}`],
@@ -106,8 +113,12 @@
     }
     function selectedLimit() {
       const limit = Number($('limitInput').value);
-      if (!Number.isInteger(limit) || limit < 20 || limit > 30000) {
-        throw new Error('拉取数量必须为 20-30000 条整数');
+      if (!Number.isInteger(limit) || limit < 1) {
+        throw new Error('拉取数量必须为大于等于 1 的整数');
+      }
+      if (maxRecords != null && limit > maxRecords) {
+        $('limitInput').value = String(maxRecords);
+        return maxRecords;
       }
       return limit;
     }
@@ -120,9 +131,10 @@
     }
     async function loadSelected() {
       if (busy) return;
-      const target = selectedLimit();
       setBusy(true);
       try {
+        if (maxRecords == null) await loadInfo();
+        const target = selectedLimit();
         records = [];
         let cursor = 0;
         let meta = null;
@@ -144,9 +156,10 @@
     }
     async function exportSelected() {
       if (busy) return;
-      const target = selectedLimit();
       setBusy(true);
       try {
+        if (maxRecords == null) await loadInfo();
+        const target = selectedLimit();
         let cursor = 0;
         let all = [];
         let meta = null;

@@ -14,6 +14,7 @@
 #include "DENGB16.h"
 #include "DENGB20.h"
 #include "energy_meter.h"
+#include "esp_log.h"
 #include "ErrorRectangle.h"
 #include "WarningRectangle.h"
 #include "blackbox_service.h"
@@ -38,6 +39,8 @@
 
 namespace SCREEN {
 namespace {
+
+constexpr char TAG[] = "ScreenPages";
 
 constexpr uint32_t CAN_BAUDRATES[] = {
     1_Mbps,
@@ -375,7 +378,7 @@ bool WirelessPage::handle_button(ButtonId button, ButtonEvent event) {
         return false;
     }
 
-    last_result_ = WifiService::start_provision_ap();
+    last_result_ = WifiService::start_provision_ap(TAG);
     return true;
 }
 
@@ -636,6 +639,8 @@ void SettingsPage::adjust_selected_item() {
             rotation_180_ = !rotation_180_;
             ui_config_set_rotation_180(rotation_180_);
             ST7735::set_rotation(rotation_180_ ? ST7735::Rotation::HorizontalMirror : ST7735::Rotation::Horizontal);
+            ESP_LOGI(TAG, "setting rotate_180=%u", rotation_180_ ? 1U : 0U);
+            BlackboxService::append_event("ui: config source=%s rotate_180=%u", TAG, rotation_180_ ? 1U : 0U);
             break;
         case Backlight:
             backlight_level_++;
@@ -644,14 +649,17 @@ void SettingsPage::adjust_selected_item() {
             }
             ui_config_set_backlight_level(backlight_level_);
             ST7735::set_backlight(backlight_value_from_level(backlight_level_));
+            ESP_LOGI(TAG, "setting backlight_level=%u", static_cast<unsigned>(backlight_level_));
+            BlackboxService::append_event("ui: config source=%s backlight_level=%u",
+                                          TAG, static_cast<unsigned>(backlight_level_));
             break;
         case WifiBoot: {
             bool enabled = !WifiService::is_web_enabled_on_boot();
-            WifiService::set_web_enabled_on_boot(enabled);
+            WifiService::set_web_enabled_on_boot(enabled, TAG);
             break;
         }
         case ProtectBypass:
-            protect_set_bypassed(!protect_is_bypassed());
+            protect_set_bypassed(!protect_is_bypassed(), TAG);
             break;
         case BlackboxSnapshot: {
             const uint32_t current = BlackboxService::get_snapshot_interval_s();
@@ -662,7 +670,7 @@ void SettingsPage::adjust_selected_item() {
                     break;
                 }
             }
-            BlackboxService::set_snapshot_interval_s(next);
+            BlackboxService::set_snapshot_interval_s(next, TAG);
             break;
         }
         case CanBaudrate: {
@@ -681,6 +689,8 @@ void SettingsPage::adjust_selected_item() {
         }
         case CanTerm: {
             const esp_err_t ret = CanResistor::instance().toggle();
+            ESP_LOGI(TAG, "setting can_resistor=%u result=%s",
+                     CanResistor::instance().get() ? 1U : 0U, esp_err_to_name(ret));
             BlackboxService::append_event("can: set_resistor source=screen state=%u result=%s",
                                           CanResistor::instance().get() ? 1U : 0U,
                                           esp_err_to_name(ret));

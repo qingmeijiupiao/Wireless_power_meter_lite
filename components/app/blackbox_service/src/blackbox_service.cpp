@@ -47,13 +47,28 @@ esp_err_t append_event(const char* fmt, ...) {
     return snapshot_ret != ESP_OK ? snapshot_ret : text_ret;
 }
 
+esp_err_t append_text_event(const char* fmt, ...) {
+    if (fmt == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    char text[Blackbox::TEXT_BUFFER_SIZE];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(text, sizeof(text), fmt, args);
+    va_end(args);
+    return Blackbox::append_text("%s", text);
+}
+
 uint32_t get_snapshot_interval_s() {
     return Internal::read_snapshot_interval_s();
 }
 
-void set_snapshot_interval_s(uint32_t seconds) {
+void set_snapshot_interval_s(uint32_t seconds, const char* source) {
     Internal::write_snapshot_interval_s(seconds);
-    append_event("blackbox: snapshot_interval_s=%lu", static_cast<unsigned long>(seconds));
+    append_event("blackbox: config source=%s snapshot_interval_s=%lu",
+                 source == nullptr ? "unknown" : source,
+                 static_cast<unsigned long>(seconds));
 }
 
 } // namespace BlackboxService

@@ -26,6 +26,7 @@ volatile uint32_t voltage_uv LP_VAR;
 volatile uint16_t voltage_register_raw LP_VAR;
 volatile int32_t  current_uA LP_VAR;
 volatile int16_t  shunt_register_raw LP_VAR;
+volatile uint16_t ina226_manufacturer_id LP_VAR;
 volatile int32_t  Board_temperature LP_VAR; //单位0.01℃
 volatile int32_t  meter_uah LP_VAR; //单位uAh
 volatile int32_t  meter_uwh LP_VAR; //单位uWh
@@ -71,37 +72,41 @@ void ina226_run(){
 }
 
 // INA226初始化
-void ulp_ina226_init(){
-    INA226::reset();
+bool ulp_ina226_init(){
+    if (INA226::reset() != ESP_OK) {
+        ulp_state_p.ulp_state_bits.ulp_i2c_init_err = true;
+        return false;
+    }
 
     ulp_lp_core_delay_us(MS_TO_US(5));
 
-    uint16_t temp_value = 0;
-    INA226::read_register(INA226::Register_enum::INA226_MANUFACTURER,&temp_value);
-    if(temp_value == 0){
-        while(1){
-            lp_log(0x11111111);
-            ulp_lp_core_delay_us(MS_TO_US(3000));
-        };
+    if (INA226::read_register(INA226::Register_enum::INA226_MANUFACTURER,
+                              (uint16_t*)&ina226_manufacturer_id) != ESP_OK) {
+        ulp_state_p.ulp_state_bits.ulp_i2c_init_err = true;
+        return false;
     }
-
-    INA226::set_configuration(
+    if (INA226::set_configuration(
         INA226::Avg_times_enum::INA226_64_samples,
         INA226::Timing_enum::INA226_1100_us,
         INA226::Timing_enum::INA226_1100_us,
         INA226::Mode_enum::INA226_SHUNT_AND_BUS_CONTINUOUS
-    );
+    ) != ESP_OK) {
+        ulp_state_p.ulp_state_bits.ulp_i2c_init_err = true;
+        return false;
+    }
 
     INA226::MaskEnable_reg_t MaskEnable_reg;
     MaskEnable_reg.raw = 0;
     MaskEnable_reg.bits.LEN=1;
     MaskEnable_reg.bits.APOL=0;
     MaskEnable_reg.bits.CNVR=1;
-    INA226::write_register(INA226::Register_enum::INA226_MASK_ENABLE,MaskEnable_reg.raw);
-    while(voltage_uv == 0){
-        ina226_run();
+    if (INA226::write_register(INA226::Register_enum::INA226_MASK_ENABLE,MaskEnable_reg.raw) != ESP_OK) {
+        ulp_state_p.ulp_state_bits.ulp_i2c_init_err = true;
+        return false;
     }
+    ina226_run();
     ulp_state_p.ulp_state_bits.ulp_ina226_init_ok = true;
+    return true;
 };
 
 /**
@@ -211,7 +216,11 @@ uint32_t last_loop_times = 0;
 
 int main(void){
     load_current_calib_params();
-    ulp_ina226_init();
+    if (!ulp_ina226_init()) {
+        while (1) {
+            ulp_lp_core_delay_us(MS_TO_US(3000));
+        }
+    }
     ulp_state_p.ulp_state_bits.ulp_run = true;
     while (1) {
         ina226_run();

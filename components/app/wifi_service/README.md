@@ -52,15 +52,15 @@ WebBackend::start_with_wifi_service();
 
 初始化 NVS、底层 `WiFiManager`，并生成默认配网 AP 名称。
 
-### `esp_err_t start_default()`
+### `esp_err_t start_default(const char* source)`
 
 按 NVS 配置启动默认网络模式。若 `web_boot` 为 0，则保持关闭；若保存了 STA 凭据则尝试连接；连接失败或未配置时进入 AP 配网模式。
 
-### `esp_err_t connect_sta(const char* ssid, const char* password, bool save)`
+### `esp_err_t connect_sta(const char* ssid, const char* password, bool save, const char* source)`
 
-连接指定 WiFi。`save=true` 时，连接成功后将 SSID 和密码写入 NVS。
+连接指定 WiFi。单次连接超时后自动重试一次；`save=true` 时，连接成功后将 SSID 和密码写入 NVS。
 
-### `esp_err_t start_provision_ap()`
+### `esp_err_t start_provision_ap(const char* source)`
 
 启动开放 APSTA 配网模式、DNS 劫持和 WebServer Captive Portal 回落。默认访问地址由 `wifi_service.h` 中的 `AP_IP_OCTET1` ~ `AP_IP_OCTET4` 定义。
 
@@ -68,15 +68,15 @@ WebBackend::start_with_wifi_service();
 
 扫描附近 WiFi AP，并写入调用方提供的固定缓冲区。当前默认最多返回 `WIFI_SCAN_MAX_RESULTS` 个结果，过滤隐藏 SSID 和重复 SSID，结果包含 SSID、RSSI、信道和认证模式。
 
-### `esp_err_t stop()`
+### `esp_err_t stop(const char* source)`
 
 停止 DNS 劫持、关闭 Captive Portal，并停止底层 WiFi。
 
-### `esp_err_t set_web_enabled_on_boot(bool enabled)`
+### `esp_err_t set_web_enabled_on_boot(bool enabled, const char* source)`
 
 设置启动时是否自动启用 WiFi/Web。该配置会写入 NVS。
 
-### `esp_err_t clear_saved_sta()`
+### `esp_err_t clear_saved_sta(const char* source)`
 
 清除已保存的 STA SSID 和密码。
 
@@ -111,6 +111,9 @@ AP 配网模式的 IP 地址集中定义在 `wifi_service.h`：
 具体地址值见 `wifi_service.h` 中的 `AP_IP_OCTET1` ~ `AP_IP_OCTET4`。
 
 后续需要修改配网网段时，修改这组常量即可；`WifiService::start_provision_ap()` 会将底层 AP netif、DNS 劫持地址和 AP 模式返回 IP 同步到这组常量。
+
+控制 API 的 `source` 由调用组件传入自身静态 `TAG`。日志允许保存 SSID、IP 和错误码，
+但任何路径都禁止写入 WiFi 密码。
 
 ## Shell 配合
 

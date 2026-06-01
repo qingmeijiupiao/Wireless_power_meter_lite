@@ -26,7 +26,25 @@ int16_t TMP235_t::getTemperature() {
         return 0;
     }
     int adc_value_mv = 0;
-    adc->read_voltage_mV(adc_value_mv);
+    esp_err_t ret = adc->read_voltage_mV(adc_value_mv);
+    if (ret != ESP_OK) {
+        if (!fault_reported) {
+            ESP_LOGE("TMP235", "ADC read failed: %s", esp_err_to_name(ret));
+            fault_reported = true;
+        }
+        return avg_buf_count == 0 ? 0 : avg_sum / avg_buf_count;
+    }
+    if (adc_value_mv < 50 || adc_value_mv > 2200) {
+        if (!fault_reported) {
+            ESP_LOGE("TMP235", "sensor voltage out of range: %d mV", adc_value_mv);
+            fault_reported = true;
+        }
+        return avg_buf_count == 0 ? 0 : avg_sum / avg_buf_count;
+    }
+    if (fault_reported) {
+        ESP_LOGI("TMP235", "sensor reading recovered: %d mV", adc_value_mv);
+        fault_reported = false;
+    }
     int16_t raw_temp;
     if (adc_value_mv < 1500) {
         raw_temp = (adc_value_mv - 500) * 10;

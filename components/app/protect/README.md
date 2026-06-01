@@ -90,8 +90,8 @@ add_on_protect_change_callback([](ProtectState_t last, ProtectState_t now) {
 保护输出阻断开关：
 
 ```cpp
-protect_set_bypassed(false);  // 默认安全状态：保护生效
-protect_set_bypassed(true);   // 工厂模式：保护旁路，只检测不阻断输出
+protect_set_bypassed(false, "ShellCommand");  // 默认安全状态：保护生效
+protect_set_bypassed(true, "FactoryMode");    // 工厂模式：保护旁路，只检测不阻断输出
 
 bool fault = protect_has_active_fault();
 bool block = protect_should_block_output();
@@ -116,13 +116,16 @@ bool block = protect_should_block_output();
 | `add_on_protect_change_callback(cb)` | 注册状态变化回调 |
 | `have_protect()` | 是否有任一维度处于 PROTECT 状态 |
 | `protect_has_active_fault()` | 是否有任一维度处于 PROTECT 状态，语义同 `have_protect()` |
-| `protect_set_bypassed(bypassed)` | 设置保护旁路，`false`=保护生效，`true`=只检测不阻断输出 |
+| `protect_set_bypassed(bypassed, source)` | 设置保护旁路，调用方传入自身静态 TAG；`false`=保护生效，`true`=只检测不阻断输出 |
 | `protect_is_bypassed()` | 返回当前保护旁路状态 |
 | `protect_should_block_output()` | 是否应该阻止输出开启或强制关断输出 |
 | `protect_get_channel_count()` | 获取保护通道数量 |
 | `protect_get_channel_info(index, info)` | 读取指定保护通道的名称、单位、当前值、状态和阈值 |
 
 ## Shell 命令
+
+每次保护状态切换都会记录通道、前后状态、当前值、阈值、旁路状态、输出状态和
+INA226 原始寄存器，并强制追加一条状态快照。`WARNING`、`PROTECT` 和恢复过程都会保留。
 
 `shell_command` 模块注册了 `protect` 命令用于查询和控制保护阻断：
 

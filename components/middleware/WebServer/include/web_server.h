@@ -29,6 +29,8 @@ constexpr uint16_t WEB_SERVER_QUERY_MAX_LEN = 128;
 constexpr uint16_t WEB_SERVER_BODY_MAX_LEN = 1024;
 /** 预留给业务层读取Header时使用的建议长度 */
 constexpr uint16_t WEB_SERVER_HEADER_VALUE_MAX_LEN = 128;
+/** 客户端 IPv4 文本缓存长度，包含结尾 NUL。 */
+constexpr uint8_t WEB_SERVER_PEER_IP_MAX_LEN = 16;
 
 /** HTTP方法枚举，ANY用于业务路由匹配任意方法 */
 enum class Method : uint8_t {
@@ -54,6 +56,7 @@ struct Request {
     Method method;
     char uri[WEB_SERVER_URI_MAX_LEN];
     char query[WEB_SERVER_QUERY_MAX_LEN];
+    char peer_ip[WEB_SERVER_PEER_IP_MAX_LEN];
     char body[WEB_SERVER_BODY_MAX_LEN + 1];
     size_t body_len;
     bool body_loaded;

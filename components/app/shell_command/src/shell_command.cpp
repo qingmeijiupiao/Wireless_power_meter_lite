@@ -28,7 +28,7 @@
 
 namespace ShellCommand {
 
-static const char* TAG = "ShellCommand";
+static constexpr char TAG[] = "ShellCommand";
 
 static void print_escaped_text(const char* text) {
     putchar('"');
@@ -71,6 +71,7 @@ esp_err_t init() {
      */
     shell.register_command(ShellCommand_t("reboot", "Reboot the device", "",
         [](int argc, char** argv) -> int {
+            BlackboxService::append_event("system: reboot source=%s", TAG);
             printf("Rebooting...\n");
             esp_restart();
             return 0;
@@ -179,6 +180,8 @@ esp_err_t init() {
                 printf("Failed to set backlight\n");
                 return 1;
             }
+            ESP_LOGI(TAG, "backlight=%d", brightness);
+            BlackboxService::append_event("ui: config source=%s backlight=%d", TAG, brightness);
             printf("Backlight set to %d\n", brightness);
             return 0;
         }));
@@ -287,12 +290,12 @@ esp_err_t init() {
 
     /**
      * @brief  blackbox - 黑匣子日志管理
-     * @usage  blackbox [status|dump [count|all]|pull [count|all]|clear]
+     * @usage  blackbox [status|dump [count|all]|pull [count|all]|clear|mark <text>]
      * @param  status - 查看启用状态和已落盘原始记录数
      * @param  dump/pull - 同步在途记录后，按从新到旧顺序拉取日志；默认 100 条
      * @param  clear - 同步清空分区；成功后保留一条 reset 标记
      */
-    shell.register_command(ShellCommand_t("blackbox", "Blackbox log control", "[status|dump [count|all]|pull [count|all]|clear]",
+    shell.register_command(ShellCommand_t("blackbox", "Blackbox log control", "[status|dump [count|all]|pull [count|all]|clear|mark <text>]",
         [](int argc, char** argv) -> int {
             const char* action = argc >= 2 ? argv[1] : "status";
 
@@ -309,6 +312,27 @@ esp_err_t init() {
                        esp_err_to_name(ret),
                        static_cast<unsigned long>(Blackbox::count()));
                 return ret == ESP_OK ? 0 : 1;
+            }
+
+            if (strcmp(action, "mark") == 0) {
+                if (argc < 3) {
+                    printf("Usage: blackbox mark <text>\n");
+                    return 1;
+                }
+                char text[96] = {};
+                size_t pos = 0;
+                for (int i = 2; i < argc && pos < sizeof(text) - 1; ++i) {
+                    if (i > 2 && pos < sizeof(text) - 1) {
+                        text[pos++] = ' ';
+                    }
+                    for (const char* cursor = argv[i]; *cursor != '\0' && pos < sizeof(text) - 1; ++cursor) {
+                        const char ch = *cursor;
+                        text[pos++] = (ch == '\r' || ch == '\n' || ch == '\t') ? ' ' : ch;
+                    }
+                }
+                BlackboxService::append_event("mark: source=%s text=%s", TAG, text);
+                printf("Blackbox mark added: %s\n", text);
+                return 0;
             }
 
             if (strcmp(action, "dump") == 0 || strcmp(action, "pull") == 0) {
@@ -386,7 +410,7 @@ esp_err_t init() {
                 return 0;
             }
 
-            printf("Usage: blackbox [status|dump [count|all]|pull [count|all]|clear]\n");
+            printf("Usage: blackbox [status|dump [count|all]|pull [count|all]|clear|mark <text>]\n");
             return 1;
         }));
         
@@ -408,10 +432,10 @@ esp_err_t init() {
                 return 1;
             }
             if(state == 0){
-                PowerOutput::off();
+                PowerOutput::off(TAG);
                 printf("Output off\n");
             }else{
-                PowerOutput::on();
+                PowerOutput::on(TAG);
                 printf("Output on\n");
             }
             return 0;
@@ -459,10 +483,10 @@ esp_err_t init() {
                 printf("Error: state must be 0-1\n");
                 return 1;
             }
-            protect_set_bypassed(state == 0);
+            protect_set_bypassed(state == 0, TAG);
             printf("Protect %s\n", state ? "on" : "off");
             if (state == 1 && protect_should_block_output()) {
-                PowerOutput::off();
+                PowerOutput::off(TAG);
                 printf("Active protect fault exists, output forced off\n");
             }
             return 0;
@@ -525,14 +549,14 @@ esp_err_t init() {
                     printf("web start failed: %s %s\n", esp_err_to_name(web_init_ret), esp_err_to_name(web_start_ret));
                     return 1;
                 }
-                esp_err_t ret = WifiService::start_default();
+                esp_err_t ret = WifiService::start_default(TAG);
                 printf("wifi on: %s\n", esp_err_to_name(ret));
                 print_status();
                 return ret == ESP_OK ? 0 : 1;
             }
 
             if(strcmp(argv[1], "off") == 0){
-                esp_err_t ret = WifiService::stop();
+                esp_err_t ret = WifiService::stop(TAG);
                 printf("wifi off: %s\n", esp_err_to_name(ret));
                 return ret == ESP_OK ? 0 : 1;
             }
@@ -549,7 +573,7 @@ esp_err_t init() {
                     printf("web start failed: %s %s\n", esp_err_to_name(web_init_ret), esp_err_to_name(web_start_ret));
                     return 1;
                 }
-                esp_err_t ret = WifiService::connect_sta(argv[2], password, true);
+                esp_err_t ret = WifiService::connect_sta(argv[2], password, true, TAG);
                 printf("wifi connect: %s\n", esp_err_to_name(ret));
                 print_status();
                 return ret == ESP_OK ? 0 : 1;
@@ -562,7 +586,7 @@ esp_err_t init() {
                     printf("web start failed: %s %s\n", esp_err_to_name(web_init_ret), esp_err_to_name(web_start_ret));
                     return 1;
                 }
-                esp_err_t ret = WifiService::start_provision_ap();
+                esp_err_t ret = WifiService::start_provision_ap(TAG);
                 printf("wifi ap: %s\n", esp_err_to_name(ret));
                 print_status();
                 return ret == ESP_OK ? 0 : 1;
@@ -578,13 +602,13 @@ esp_err_t init() {
                     printf("Usage: wifi boot <0|1>\n");
                     return 1;
                 }
-                WifiService::set_web_enabled_on_boot(enabled == 1);
+                WifiService::set_web_enabled_on_boot(enabled == 1, TAG);
                 printf("boot_enabled set to %d\n", enabled);
                 return 0;
             }
 
             if(strcmp(argv[1], "clear") == 0){
-                WifiService::clear_saved_sta();
+                WifiService::clear_saved_sta(TAG);
                 printf("saved wifi cleared\n");
                 return 0;
             }
@@ -699,7 +723,7 @@ esp_err_t init() {
     shell.register_command(ShellCommand_t("factory_mode", "Enter factory mode", "",
         [](int argc, char** argv) -> int {
             auto& _shell = Shell::instance();
-            protect_set_bypassed(true);
+            protect_set_bypassed(true, TAG);
             _shell.register_command(calibration_basek);
             _shell.register_command(calibration_current_temperatureK);
             _shell.register_command(calibration_current_points);

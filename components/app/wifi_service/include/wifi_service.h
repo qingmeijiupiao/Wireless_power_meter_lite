@@ -69,7 +69,7 @@ esp_err_t init();
  *
  * @return ESP_OK 成功进入某种可用模式，其他值表示底层 WiFi/AP 启动失败
  */
-esp_err_t start_default();
+esp_err_t start_default(const char* source);
 
 /**
  * @brief 停止 WiFiService 管理的网络功能
@@ -78,7 +78,7 @@ esp_err_t start_default();
  *
  * @return ESP_OK 成功，其他值来自 WiFiManager::stop()
  */
-esp_err_t stop();
+esp_err_t stop(const char* source);
 
 /**
  * @brief 连接到指定 STA WiFi
@@ -88,7 +88,7 @@ esp_err_t stop();
  * @param save true 表示连接成功后写入 NVS，false 表示仅本次连接
  * @return ESP_OK 连接成功，ESP_ERR_INVALID_ARG 参数非法，ESP_ERR_TIMEOUT 等表示连接失败
  */
-esp_err_t connect_sta(const char* ssid, const char* password, bool save);
+esp_err_t connect_sta(const char* ssid, const char* password, bool save, const char* source);
 
 /**
  * @brief 启动 AP 配网模式
@@ -97,7 +97,7 @@ esp_err_t connect_sta(const char* ssid, const char* password, bool save);
  *
  * @return ESP_OK 成功，其他值来自 WiFiManager 或 DNSServer
  */
-esp_err_t start_provision_ap();
+esp_err_t start_provision_ap(const char* source);
 
 /**
  * @brief 扫描附近 WiFi AP
@@ -117,14 +117,14 @@ esp_err_t scan_ap_list(ScanResult* results, size_t max_results, size_t* out_coun
  * @param enabled true 启用，false 禁用
  * @return ESP_OK 当前实现固定返回成功
  */
-esp_err_t set_web_enabled_on_boot(bool enabled);
+esp_err_t set_web_enabled_on_boot(bool enabled, const char* source);
 
 /**
  * @brief 清除已保存的 STA SSID 和密码
  *
  * @return ESP_OK 当前实现固定返回成功
  */
-esp_err_t clear_saved_sta();
+esp_err_t clear_saved_sta(const char* source);
 
 /** @brief 查询 WiFiService 是否已初始化 */
 bool is_initialized();

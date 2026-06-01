@@ -68,7 +68,7 @@ constexpr uint8_t WIFI_PASSWORD_MAX_LEN = 64;
 /** AP模式最大允许连接数 */
 constexpr uint8_t WIFI_AP_MAX_CONN = 4;
 /** STA连接超时时间(ms) */
-constexpr int WIFI_CONNECT_TIMEOUT_MS = 15000;
+constexpr int WIFI_CONNECT_TIMEOUT_MS = 30000;
 
 /**
  * @brief WiFi管理单例类

@@ -109,8 +109,8 @@ esp_err_t set_configuration(Avg_times_enum avg_times,Timing_enum shunt_timing,Ti
     return write_register(INA226_CONFIGURATION, config);
 }
 
-void reset(){
-    write_register(INA226_CONFIGURATION, static_cast<uint16_t>(1<<15));
+esp_err_t reset(){
+    return write_register(INA226_CONFIGURATION, static_cast<uint16_t>(1<<15));
 }
 
 }//namespace INA226

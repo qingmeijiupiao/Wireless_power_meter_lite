@@ -75,19 +75,19 @@ esp_err_t deinit();
  * @brief  开启输出
  * @return OK 成功，FAIL_NOT_INIT 未初始化，FAIL_PROTECT_ACTIVE 保护激活，FAIL_COOLDOWN_ACTIVE 冷却中
  */
-OutputResult on();
+OutputResult on(const char* source);
 
 /**
  * @brief  关闭输出
  * @return OK 成功，FAIL_NOT_INIT 未初始化，FAIL_COOLDOWN_ACTIVE 冷却中
  */
-OutputResult off();
+OutputResult off(const char* source);
 
 /**
  * @brief  切换输出状态（开->关，关->开）
  * @return OK 成功，FAIL_NOT_INIT 未初始化，FAIL_PROTECT_ACTIVE 保护激活（切换到ON时），FAIL_COOLDOWN_ACTIVE 冷却中
  */
-OutputResult toggle();
+OutputResult toggle(const char* source);
 
 /**
  * @brief  获取当前输出状态

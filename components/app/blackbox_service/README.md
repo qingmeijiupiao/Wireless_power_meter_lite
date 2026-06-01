@@ -12,6 +12,7 @@
 - **周期快照**：后台任务按 NVS 配置周期采样，间隔为 `0` 时关闭
 - **结构化快照限流**：默认限制相邻快照至少间隔 `100ms`，关键事件可强制记录
 - **关键事件接口**：`append_event()` 优先保存事件文本，再尝试追加状态快照
+- **多行诊断接口**：`append_text_event()` 仅写文本，不重复追加快照，适合启动参数块
 
 ## 文件职责
 
@@ -65,6 +66,9 @@ flowchart LR
 `WiFiManager` 与 `WifiService` 日志仍会正常记录。当前解析逻辑基于工程启用的 ESP-IDF Log V1；
 切换到 Log V2 时需要同步调整。
 
+Web 请求审计使用 `WebBackend` TAG 的 `ESP_LOGI`，会输出到串口并进入 Web RAM 实时日志。
+该 TAG 不触发自动快照，避免页面轮询持续写 Flash；非只读请求仍由 Web 中间件显式写入黑匣子事件。
+
 ## 集成与使用
 
 ```cpp
@@ -82,8 +86,11 @@ BlackboxService::append_snapshot(true);
 // 写入关键事件文本，并尝试追加当前快照
 BlackboxService::append_event("Output disabled: reason=%d", reason);
 
+// 启动诊断块等多行信息只写文本，避免为每行重复写入相同快照
+BlackboxService::append_text_event("boot: flash_bytes=%lu", flash_size);
+
 // 设置周期快照，单位秒；0 表示关闭
-BlackboxService::set_snapshot_interval_s(10);
+BlackboxService::set_snapshot_interval_s(10, "ShellCommand");
 ```
 
 ## API
@@ -93,8 +100,17 @@ BlackboxService::set_snapshot_interval_s(10);
 | `init()` | 恢复 NVS 配置、创建后台任务并安装 ESP_LOG 捕获钩子 |
 | `append_snapshot(force=false)` | 采样当前 `GlobalState` 并写入 `STRUCTURED` 记录；默认受 `100ms` 最小间隔限制 |
 | `append_event(fmt, ...)` | 保存关键事件文本，再尝试追加全局快照 |
+| `append_text_event(fmt, ...)` | 仅保存文本事件，不追加快照 |
 | `get_snapshot_interval_s()` | 获取周期快照间隔，`0` 表示关闭 |
-| `set_snapshot_interval_s(seconds)` | 设置周期快照间隔并持久化 |
+| `set_snapshot_interval_s(seconds, source)` | 设置周期快照间隔并持久化；调用方传入自身静态 TAG |
+
+## 日志约定
+
+- `SnapshotV1` 二进制布局保持不变，时间使用记录头已有的毫秒时间戳。
+- 普通关键事件使用 `append_event()`，保留事件发生时的状态快照。
+- 启动基础诊断块在其他功能启动前使用 `append_text_event()` 分行记录，并逐行同步落盘；关键初始化步骤前另写入阶段标记。
+- 调用来源由业务组件传入自身编译期 `TAG` 或局部静态字符串，黑匣子组件不维护来源枚举。
+- 允许记录 SSID、IP 和 MAC；禁止记录 WiFi 密码和 HTTP 请求体。
 
 ## NVS Key
 

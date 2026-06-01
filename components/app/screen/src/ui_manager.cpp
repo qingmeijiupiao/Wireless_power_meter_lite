@@ -8,6 +8,7 @@
 #include "ui_manager.h"
 
 #include "esp_log.h"
+#include "blackbox_service.h"
 #include "freertos/task.h"
 #include "power_output.h"
 #include "st7735.h"
@@ -15,7 +16,21 @@
 namespace SCREEN {
 namespace {
 
-static constexpr const char* TAG = "UIManager";
+static constexpr char TAG[] = "UIManager";
+
+const char* button_to_str(ButtonId button) {
+    return button == ButtonId::Main ? "main" : "side";
+}
+
+const char* event_to_str(ButtonEvent event) {
+    switch (event) {
+        case ButtonEvent::SHORT_PRESS: return "short";
+        case ButtonEvent::DOUBLE_CLICK: return "double";
+        case ButtonEvent::LONG_PRESS: return "long";
+        case ButtonEvent::SUPER_LONG_PRESS: return "super_long";
+        default: return "unknown";
+    }
+}
 
 } // namespace
 
@@ -112,6 +127,9 @@ void UIManager::process_button_events() {
 
 void UIManager::handle_button(ButtonId button, ButtonEvent event) {
     Page* page = current_page();
+    ESP_LOGI(TAG, "button page=%s button=%s event=%s", page->title(), button_to_str(button), event_to_str(event));
+    BlackboxService::append_event("ui: button page=%s button=%s event=%s",
+                                  page->title(), button_to_str(button), event_to_str(event));
 
     // 页面优先处理事件。比如无线页长按进入配网，设置页消费菜单内侧键。
     bool handled = page->handle_button(button, event);
@@ -150,7 +168,7 @@ void UIManager::handle_default_side_button(ButtonEvent event) {
 void UIManager::handle_default_main_button(ButtonEvent event) {
     if (event == ButtonEvent::SHORT_PRESS) {
         // 主按钮默认保持产品核心行为：切换输出状态。
-        PowerOutput::toggle();
+        PowerOutput::toggle(TAG);
         full_redraw_ = true;
     }
 }
@@ -160,8 +178,11 @@ void UIManager::next_page() {
     // 切页时统一退出页面编辑态，避免设置页等页面把按键语义泄漏到下一页。
     page->on_edit_exit();
     page->on_exit();
+    const char* previous_title = page->title();
     current_page_ = (current_page_ + 1) % static_cast<uint8_t>(PageId::Count);
     current_page()->on_enter();
+    ESP_LOGI(TAG, "page %s -> %s", previous_title, current_page()->title());
+    BlackboxService::append_event("ui: page from=%s to=%s", previous_title, current_page()->title());
     full_redraw_ = true;
 }
 

@@ -106,8 +106,9 @@ esp_err_t LP_Core_Load(void){
     }
 
     if(ulp_state.ulp_state_bits.ulp_i2c_init_err){
-        ESP_LOGE(LPTAG, "lp core i2c init error");
-        BlackboxService::append_event("lp: i2c_init_error");
+        ESP_LOGE(LPTAG, "INA226 unavailable: communication failed");
+        BlackboxService::append_event("lp: ina226_unavailable reason=communication_failed manufacturer=0x%04x",
+                                      static_cast<unsigned>(ulp_ina226_manufacturer_id));
     }else{
         ESP_LOGI(LPTAG, "lp core i2c init success...");
     }

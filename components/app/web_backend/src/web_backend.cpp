@@ -160,7 +160,7 @@ esp_err_t start_with_wifi_service() {
 
     ESP_ERROR_CHECK(init());
 
-    esp_err_t wifi_ret = WifiService::start_default();
+    esp_err_t wifi_ret = WifiService::start_default(TAG);
     if (wifi_ret != ESP_OK) {
         ESP_LOGE(TAG, "WiFi service start failed: %s", esp_err_to_name(wifi_ret));
     }

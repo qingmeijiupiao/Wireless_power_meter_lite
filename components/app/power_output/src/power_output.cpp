@@ -17,7 +17,7 @@
 
 namespace PowerOutput {
 
-static const char* TAG = "PowerOutput";
+static constexpr char TAG[] = "PowerOutput";
 
 constexpr size_t MAX_POLICIES = 8;
 constexpr size_t MAX_CALLBACKS = 8;
@@ -68,6 +68,20 @@ static OutputResult check_policies(OutputOperation op) {
         }
     }
     return OutputResult::OK;
+}
+
+static const char* source_or_unknown(const char* source) {
+    return source == nullptr ? "unknown" : source;
+}
+
+static const char* result_to_str(OutputResult result) {
+    switch (result) {
+        case OutputResult::OK: return "ok";
+        case OutputResult::FAIL_NOT_INIT: return "not_initialized";
+        case OutputResult::FAIL_PROTECT_ACTIVE: return "protect_active";
+        case OutputResult::FAIL_COOLDOWN_ACTIVE: return "cooldown_active";
+        default: return "unknown";
+    }
 }
 
 // =====================================================================
@@ -135,58 +149,72 @@ esp_err_t deinit() {
 //  流程：初始化检查 -> 策略链检查 -> 执行 -> 通知策略 -> 日志
 // =====================================================================
 
-OutputResult on() {
+OutputResult on(const char* source) {
+    source = source_or_unknown(source);
     if (!_initialized) {
-        ESP_LOGE(TAG, "on: not initialized");
+        ESP_LOGE(TAG, "request source=%s op=on result=not_initialized", source);
+        BlackboxService::append_event("output: request source=%s op=on result=not_initialized", source);
         return OutputResult::FAIL_NOT_INIT;
     }
     OutputResult result = check_policies(OutputOperation::ON);
     if (result != OutputResult::OK) {
-        BlackboxService::append_event("output: on rejected reason=%u", static_cast<unsigned>(result));
+        ESP_LOGW(TAG, "request source=%s op=on result=%s state=%u", source, result_to_str(result), get_state() ? 1U : 0U);
+        BlackboxService::append_event("output: request source=%s op=on result=%s state=%u",
+                                      source, result_to_str(result), get_state() ? 1U : 0U);
         return result;
     }
     apply_state(true);
     notify_policies_applied(OutputOperation::ON, true);
-    ESP_LOGI(TAG, "output on");
-    BlackboxService::append_event("output: state=on");
+    ESP_LOGI(TAG, "request source=%s op=on result=ok state=1", source);
+    BlackboxService::append_event("output: request source=%s op=on result=ok state=1", source);
     return OutputResult::OK;
 }
 
-OutputResult off() {
+OutputResult off(const char* source) {
+    source = source_or_unknown(source);
     if (!_initialized) {
-        ESP_LOGE(TAG, "off: not initialized");
+        ESP_LOGE(TAG, "request source=%s op=off result=not_initialized", source);
+        BlackboxService::append_event("output: request source=%s op=off result=not_initialized", source);
         return OutputResult::FAIL_NOT_INIT;
     }
     OutputResult result = check_policies(OutputOperation::OFF);
     if (result != OutputResult::OK) {
-        BlackboxService::append_event("output: off rejected reason=%u", static_cast<unsigned>(result));
+        ESP_LOGW(TAG, "request source=%s op=off result=%s state=%u", source, result_to_str(result), get_state() ? 1U : 0U);
+        BlackboxService::append_event("output: request source=%s op=off result=%s state=%u",
+                                      source, result_to_str(result), get_state() ? 1U : 0U);
         return result;
     }
     apply_state(false);
     notify_policies_applied(OutputOperation::OFF, false);
-    ESP_LOGI(TAG, "output off");
-    BlackboxService::append_event("output: state=off");
+    ESP_LOGI(TAG, "request source=%s op=off result=ok state=0", source);
+    BlackboxService::append_event("output: request source=%s op=off result=ok state=0", source);
     return OutputResult::OK;
 }
 
-OutputResult toggle() {
+OutputResult toggle(const char* source) {
+    source = source_or_unknown(source);
     if (!_initialized) {
-        ESP_LOGE(TAG, "toggle: not initialized");
+        ESP_LOGE(TAG, "request source=%s op=toggle result=not_initialized", source);
+        BlackboxService::append_event("output: request source=%s op=toggle result=not_initialized", source);
         return OutputResult::FAIL_NOT_INIT;
     }
     OutputOperation op = get_state() ? OutputOperation::OFF : OutputOperation::ON;
     OutputResult result = check_policies(op);
     if (result != OutputResult::OK) {
-        BlackboxService::append_event("output: toggle rejected target=%u reason=%u",
+        ESP_LOGW(TAG, "request source=%s op=toggle target=%u result=%s state=%u",
+                 source, op == OutputOperation::ON ? 1U : 0U, result_to_str(result), get_state() ? 1U : 0U);
+        BlackboxService::append_event("output: request source=%s op=toggle target=%u result=%s state=%u",
+                                      source,
                                       op == OutputOperation::ON ? 1U : 0U,
-                                      static_cast<unsigned>(result));
+                                      result_to_str(result),
+                                      get_state() ? 1U : 0U);
         return result;
     }
     bool new_state = (op == OutputOperation::ON);
     apply_state(new_state);
     notify_policies_applied(op, new_state);
-    ESP_LOGI(TAG, "output toggled to %s", new_state ? "ON" : "OFF");
-    BlackboxService::append_event("output: state=%s via=toggle", new_state ? "on" : "off");
+    ESP_LOGI(TAG, "request source=%s op=toggle result=ok state=%u", source, new_state ? 1U : 0U);
+    BlackboxService::append_event("output: request source=%s op=toggle result=ok state=%u", source, new_state ? 1U : 0U);
     return OutputResult::OK;
 }
 

@@ -41,7 +41,7 @@ void add_on_protect_change_callback(std::function<void(ProtectState_t last_state
 bool have_protect();
 bool protect_has_active_fault();
 bool protect_should_block_output();
-void protect_set_bypassed(bool bypassed);
+void protect_set_bypassed(bool bypassed, const char* source);
 bool protect_is_bypassed();
 uint8_t protect_get_channel_count();
 bool protect_get_channel_info(uint8_t index, protect_channel_info_t* info);

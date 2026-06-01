@@ -91,7 +91,7 @@ bool HXC_TWAI::on_rx_done_callback(twai_node_handle_t handle, const twai_rx_done
                     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
                     if(pdTRUE != xQueueSendFromISR(twai_node_maps[i].twai->rx_queue, &rx_msg, &xHigherPriorityTaskWoken)){
                         // 队列已满，记录丢包计数
-                        twai_node_maps[i].twai->rx_overflow_count++;
+                        __atomic_fetch_add(&twai_node_maps[i].twai->rx_overflow_count, 1U, __ATOMIC_RELAXED);
                     }
                     xTaskWoken |= xHigherPriorityTaskWoken;
                 }
@@ -99,6 +99,30 @@ bool HXC_TWAI::on_rx_done_callback(twai_node_handle_t handle, const twai_rx_done
             // 返回 true 请求立刻进行上下文切换（如果唤醒了高优先级任务）
             return xTaskWoken == pdTRUE;
         }
+    }
+    return false;
+}
+
+bool HXC_TWAI::on_tx_done_callback(twai_node_handle_t, const twai_tx_done_event_data_t *edata, void *user_ctx) {
+    HXC_TWAI* twai = static_cast<HXC_TWAI*>(user_ctx);
+    if (twai != nullptr && !edata->is_tx_success) {
+        __atomic_fetch_add(&twai->tx_failed_count, 1U, __ATOMIC_RELAXED);
+    }
+    return false;
+}
+
+bool HXC_TWAI::on_state_change_callback(twai_node_handle_t, const twai_state_change_event_data_t *edata, void *user_ctx) {
+    HXC_TWAI* twai = static_cast<HXC_TWAI*>(user_ctx);
+    if (twai != nullptr && edata->new_sta == TWAI_ERROR_BUS_OFF) {
+        __atomic_fetch_add(&twai->bus_off_count, 1U, __ATOMIC_RELAXED);
+    }
+    return false;
+}
+
+bool HXC_TWAI::on_error_callback(twai_node_handle_t, const twai_error_event_data_t*, void *user_ctx) {
+    HXC_TWAI* twai = static_cast<HXC_TWAI*>(user_ctx);
+    if (twai != nullptr) {
+        __atomic_fetch_add(&twai->bus_error_count, 1U, __ATOMIC_RELAXED);
     }
     return false;
 }
@@ -141,8 +165,11 @@ esp_err_t HXC_TWAI::setup() {
     
     // 注册中断回调
     twai_event_callbacks_t user_cbs={};
+    user_cbs.on_tx_done = on_tx_done_callback;
     user_cbs.on_rx_done = on_rx_done_callback;
-    ret = twai_node_register_event_callbacks(twai_node_handle, &user_cbs, NULL);
+    user_cbs.on_state_change = on_state_change_callback;
+    user_cbs.on_error = on_error_callback;
+    ret = twai_node_register_event_callbacks(twai_node_handle, &user_cbs, this);
     if(ret != ESP_OK) return ret;
 
     // 硬件过滤器配置
@@ -237,6 +264,13 @@ bool HXC_TWAI::exist_can_receive_callback_func(int addr) {
 
 bool HXC_TWAI::get_setup_flag() {
     return twai_node_handle != nullptr;
+}
+
+esp_err_t HXC_TWAI::get_info(twai_node_status_t* status, twai_node_record_t* statistics) const {
+    if (twai_node_handle == nullptr) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    return twai_node_get_info(twai_node_handle, status, statistics);
 }
 
 // 【线程安全发送】：使用局部栈变量，支持多任务并发调用

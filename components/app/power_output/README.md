@@ -122,13 +122,14 @@ power_output/
 PowerOutput::init(GPIO_NUM_5);
 
 // 控制输出
-auto result = PowerOutput::on();
+static constexpr char TAG[] = "ExampleCaller";
+auto result = PowerOutput::on(TAG);
 if (result != PowerOutput::OutputResult::OK) {
     // 处理拒绝原因
 }
 
-PowerOutput::off();
-PowerOutput::toggle();
+PowerOutput::off(TAG);
+PowerOutput::toggle(TAG);
 
 // 查询状态
 bool state = PowerOutput::get_state();
@@ -174,6 +175,9 @@ PowerOutput::add_policy(&max_on_policy);
 ```
 
 ## API 参考
+
+`on(source)`、`off(source)` 和 `toggle(source)` 要求调用方传入自身编译期 `TAG`
+或局部静态字符串。模块会持久化记录来源、动作、执行结果和最终输出状态。
 
 ### `esp_err_t init(gpio_num_t output_gpio)`
 

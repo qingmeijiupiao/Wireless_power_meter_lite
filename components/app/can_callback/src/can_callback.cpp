@@ -8,12 +8,45 @@
 #include "blackbox_service.h"
 namespace CanCallback {
 
-static const char* TAG = "CanCallback";
+static constexpr char TAG[] = "CanCallback";
 
 static HXC_TWAI* can_bus = nullptr;
 
 HXC::NVS_DATA<uint32_t> CAN_BAUDRATE("CAN_BAUDRATE", DEFAULT_CAN_BAUDRATE);
 HXC::NVS_DATA<uint32_t> CAN_ID("CAN_ID", DEFAULT_DEVICE_CAN_ID);
+
+static void diagnostics_task(void*) {
+    uint32_t last_tx_failed = 0;
+    uint32_t last_bus_off = 0;
+    uint32_t last_bus_error = 0;
+    uint32_t last_rx_overflow = 0;
+    while (true) {
+        const uint32_t tx_failed = can_bus->get_tx_failed_count();
+        const uint32_t bus_off = can_bus->get_bus_off_count();
+        const uint32_t bus_error = can_bus->get_bus_error_count();
+        const uint32_t rx_overflow = can_bus->get_rx_overflow_count();
+        if (tx_failed != last_tx_failed || bus_off != last_bus_off ||
+            bus_error != last_bus_error || rx_overflow != last_rx_overflow) {
+            twai_node_status_t status = {};
+            twai_node_record_t statistics = {};
+            const esp_err_t ret = can_bus->get_info(&status, &statistics);
+            BlackboxService::append_event("can: diagnostics info=%s state=%u tx_err=%u rx_err=%u bus_err=%lu bus_off=%lu tx_failed=%lu rx_overflow=%lu",
+                                          esp_err_to_name(ret),
+                                          static_cast<unsigned>(status.state),
+                                          static_cast<unsigned>(status.tx_error_count),
+                                          static_cast<unsigned>(status.rx_error_count),
+                                          static_cast<unsigned long>(statistics.bus_err_num),
+                                          static_cast<unsigned long>(bus_off),
+                                          static_cast<unsigned long>(tx_failed),
+                                          static_cast<unsigned long>(rx_overflow));
+            last_tx_failed = tx_failed;
+            last_bus_off = bus_off;
+            last_bus_error = bus_error;
+            last_rx_overflow = rx_overflow;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
 
 HXC_TWAI& get_can_bus() {
     return *can_bus;
@@ -81,9 +114,9 @@ esp_err_t init() {
         ESP_LOGI(TAG, "Setting output");
         PowerOutput::OutputResult result;
         if (msg->data[0] == 0x01) {
-            result = PowerOutput::on();
+            result = PowerOutput::on(TAG);
         } else {
-            result = PowerOutput::off();
+            result = PowerOutput::off(TAG);
         }
         BlackboxService::append_event("can: set_output target=%u result=%u",
                                       msg->data[0] == 0x01 ? 1U : 0U,
@@ -133,6 +166,9 @@ esp_err_t init() {
                                   static_cast<unsigned long>(CAN_ID.read()),
                                   static_cast<unsigned long>(CAN_BAUDRATE.read()),
                                   can_resistor.get() ? 1U : 0U);
+    if (xTaskCreate(diagnostics_task, "can_diag", 3072, nullptr, 2, nullptr) != pdPASS) {
+        ESP_LOGE(TAG, "failed to create diagnostics task");
+    }
     return ESP_OK;
 }
 

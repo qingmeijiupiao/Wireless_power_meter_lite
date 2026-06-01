@@ -11,6 +11,7 @@
 - **请求体缓存**：POST/PUT 等请求体按固定上限读取到 `Request::body`，超过上限返回 413。
 - **流式请求体**：大文件上传可使用调用方固定缓冲分块消费，不受 1KB JSON 缓存限制。
 - **Captive Portal 兜底**：可将未匹配路径回落到 `/` 路由，方便 AP 配网弹窗。
+- **客户端地址**：分发前读取连接端 IPv4，middleware 和 handler 可通过 `Request::peer_ip` 记录来源。
 
 ## 架构与请求流程
 
@@ -143,6 +144,7 @@ WebServer::serve_static("/", index_html_file.data, index_html_file.size, "text/h
 | `WEB_SERVER_MAX_MIDDLEWARES` | 8 | 最大中间件数量 |
 | `WEB_SERVER_URI_MAX_LEN` | 96 | URI缓存长度 |
 | `WEB_SERVER_QUERY_MAX_LEN` | 128 | Query缓存长度 |
+| `WEB_SERVER_PEER_IP_MAX_LEN` | 16 | 客户端 IPv4 文本缓存长度 |
 | `WEB_SERVER_BODY_MAX_LEN` | 1024 | 请求体缓存长度 |
 
 ## 注意事项

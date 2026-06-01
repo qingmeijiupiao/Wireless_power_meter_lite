@@ -17,6 +17,7 @@ static const char* TAG = "WiFiManager";
 #define WIFI_CONNECTED_BIT  BIT0   /**< STA已连接并获取IP */
 #define WIFI_FAIL_BIT       BIT1   /**< STA连接失败/断开 */
 #define WIFI_SCAN_DONE_BIT  BIT2   /**< 扫描完成 */
+#define WIFI_ASSOCIATED_BIT BIT3   /**< 本次STA连接尝试已完成802.11关联 */
 
 /* ==================== 构造/析构 ==================== */
 
@@ -167,7 +168,7 @@ esp_err_t WiFiManager::connect_sta(const char* ssid, const char* password, bool 
     }
 
     /* 清除之前的事件标志 */
-    xEventGroupClearBits(event_group_, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+    xEventGroupClearBits(event_group_, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT | WIFI_ASSOCIATED_BIT);
 
     /* 启动WiFi驱动 */
     ret = esp_wifi_start();
@@ -196,10 +197,22 @@ esp_err_t WiFiManager::connect_sta(const char* ssid, const char* password, bool 
         if (bits & WIFI_CONNECTED_BIT) {
             ESP_LOGI(TAG, "Connected to AP SSID:%s", ssid);
             return ESP_OK;
+        } else if (bits & WIFI_FAIL_BIT) {
+            if (bits & WIFI_ASSOCIATED_BIT) {
+                ESP_LOGW(TAG, "Connect to SSID:%s failed after AP association while waiting for DHCP IP", ssid);
+            } else {
+                ESP_LOGW(TAG, "Connect to SSID:%s failed before AP association", ssid);
+            }
         } else {
-            ESP_LOGW(TAG, "Connect to SSID:%s timeout or failed", ssid);
-            return ESP_ERR_TIMEOUT;
+            if (bits & WIFI_ASSOCIATED_BIT) {
+                ESP_LOGW(TAG, "Connect to SSID:%s timed out: associated with AP but DHCP IP was not acquired within %d ms",
+                         ssid, WIFI_CONNECT_TIMEOUT_MS);
+            } else {
+                ESP_LOGW(TAG, "Connect to SSID:%s timed out before AP association within %d ms",
+                         ssid, WIFI_CONNECT_TIMEOUT_MS);
+            }
         }
+        return ESP_ERR_TIMEOUT;
     }
 
     return ESP_OK;
@@ -334,7 +347,7 @@ esp_err_t WiFiManager::stop() {
         wifi_started_ = false;
         state_ = WIFI_STATE_DISCONNECTED;
         memset(&ip_, 0, sizeof(ip_));
-        xEventGroupClearBits(event_group_, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+        xEventGroupClearBits(event_group_, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT | WIFI_ASSOCIATED_BIT);
         ESP_LOGI(TAG, "WiFi stopped");
     }
     return ret;
@@ -592,7 +605,8 @@ void WiFiManager::wifi_event_handler(void* arg, esp_event_base_t event_base, int
 
     /* STA已关联到AP，等待DHCP分配IP */
     case WIFI_EVENT_STA_CONNECTED:
-        ESP_LOGI(TAG, "STA connected, waiting for IP...");
+        xEventGroupSetBits(self->event_group_, WIFI_ASSOCIATED_BIT);
+        ESP_LOGI(TAG, "STA associated with AP, waiting for DHCP IP...");
         break;
 
     /* STA断开连接，更新状态并设置失败标志 */

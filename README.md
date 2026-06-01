@@ -9,7 +9,7 @@
 - 本地显示与控制：ST7735S 160x80 TFT 显示，按键与串口 Shell 调试。
 - 通信与联网：CAN(TWAI) 通信，WiFi STA/AP 配网，Web 页面与 REST API。
 - 数据与配置：NVS 持久化配置，Flash 循环日志，结构化黑匣子记录。
-- 固件布局：已提供 OTA 双 APP 分区与固件切换中间件，下载与 APP 集成流程尚未实现。
+- 固件布局：已提供 OTA 双 APP 分区、Web 流式上传、固件校验、二次确认激活与重启切换流程。
 
 ## 硬件平台
 
@@ -106,11 +106,14 @@ Web 后端由 `components/app/web_backend` 提供，对外入口为 `WebBackend:
 
 主入口位于 `main/app_main.cpp`。当前启动流程只在主 README 保留入口级说明：
 
-1. 初始化硬件配置、黑匣子和 NVS。
-2. 初始化温度采样、状态更新定时器和屏幕任务。
-3. 加载 LP 核采样程序。
-4. 初始化保护、输出控制、按键、CAN、Shell。
-5. 调用 `WebBackend::start_with_wifi_service()` 按配置启动 WiFi/Web。
+1. 初始化黑匣子、NVS 和黑匣子应用服务，再探测硬件配置，使最早期硬件异常也能落盘。
+2. 在其他功能启动前分行同步写入基础诊断块，包括复位原因、固件、Flash、OTA 槽位、MAC、CAN、WiFi、校准参数和保护阈值。
+3. 在温度、状态定时器/屏幕、LP Core、保护、输出、按键、CAN、Shell 和 WiFi/Web 初始化前分别写入同步阶段标记。
+4. 初始化温度采样、状态更新定时器和屏幕任务。
+5. 加载 LP 核采样程序。
+6. 初始化保护、输出控制、按键、CAN、Shell。
+7. 调用 `WebBackend::start_with_wifi_service()` 按配置启动 WiFi/Web。
+8. 写入依赖运行期状态的补充诊断，包括 CAN 电阻、WiFi 模式、IP、INA226 原始值和全局标志。
 
 具体模块行为以对应 README 和源码为准。
 

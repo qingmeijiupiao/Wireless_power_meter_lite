@@ -36,6 +36,7 @@ private:
     size_t avg_buf_idx = 0;
     size_t avg_buf_count = 0;
     int32_t avg_sum = 0;
+    bool fault_reported = false;
 };
 
 #endif

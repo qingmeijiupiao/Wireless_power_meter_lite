@@ -161,7 +161,11 @@ public:
      * @description: 获取接收队列溢出计数
      * @return {uint32_t} 溢出次数
      */
-    uint32_t get_rx_overflow_count() const { return rx_overflow_count; }
+    uint32_t get_rx_overflow_count() const { return __atomic_load_n(&rx_overflow_count, __ATOMIC_RELAXED); }
+    uint32_t get_tx_failed_count() const { return __atomic_load_n(&tx_failed_count, __ATOMIC_RELAXED); }
+    uint32_t get_bus_off_count() const { return __atomic_load_n(&bus_off_count, __ATOMIC_RELAXED); }
+    uint32_t get_bus_error_count() const { return __atomic_load_n(&bus_error_count, __ATOMIC_RELAXED); }
+    esp_err_t get_info(twai_node_status_t* status, twai_node_record_t* statistics) const;
 
 protected:
     twai_node_handle_t twai_node_handle = nullptr;  /**< TWAI节点句柄 */
@@ -175,12 +179,18 @@ protected:
     QueueHandle_t rx_queue = nullptr;               /**< 接收队列句柄，用于解决高并发数据覆盖问题 */
     TaskHandle_t rx_task_handle = nullptr;          /**< 接收任务句柄 */
     uint32_t rx_overflow_count = 0;                /**< 接收队列溢出计数 */
+    uint32_t tx_failed_count = 0;
+    uint32_t bus_off_count = 0;
+    uint32_t bus_error_count = 0;
     HXC_can_feedback_func all_callback_func = nullptr;  /**< 所有地址的回调函数 */
 
     /**
      * @description: TWAI接受数据的硬件中断回调，接收到数据后推入队列
      */
     static bool on_rx_done_callback(twai_node_handle_t handle, const twai_rx_done_event_data_t *edata, void *user_ctx);
+    static bool on_tx_done_callback(twai_node_handle_t handle, const twai_tx_done_event_data_t *edata, void *user_ctx);
+    static bool on_state_change_callback(twai_node_handle_t handle, const twai_state_change_event_data_t *edata, void *user_ctx);
+    static bool on_error_callback(twai_node_handle_t handle, const twai_error_event_data_t *edata, void *user_ctx);
     
     /**
      * @description: TWAI处理数据的独立任务，从队列阻塞读取
