@@ -90,6 +90,7 @@ esp_err_t meter_reset_handler(WebServer::Request* request);
 esp_err_t reboot_handler(WebServer::Request* request);
 esp_err_t system_handler(WebServer::Request* request);
 esp_err_t backlight_handler(WebServer::Request* request);
+esp_err_t start_logo_handler(WebServer::Request* request);
 esp_err_t protect_handler(WebServer::Request* request);
 esp_err_t can_handler(WebServer::Request* request);
 esp_err_t calibration_handler(WebServer::Request* request);

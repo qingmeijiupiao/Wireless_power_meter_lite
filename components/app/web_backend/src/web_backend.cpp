@@ -100,6 +100,8 @@ esp_err_t init() {
     ESP_ERROR_CHECK(WebServer::on("/api/system", WebServer::Method::GET, system_handler));
     ESP_ERROR_CHECK(WebServer::on("/api/backlight", WebServer::Method::GET, backlight_handler));
     ESP_ERROR_CHECK(WebServer::on("/api/backlight", WebServer::Method::POST, backlight_handler));
+    ESP_ERROR_CHECK(WebServer::on("/api/start-logo", WebServer::Method::GET, start_logo_handler));
+    ESP_ERROR_CHECK(WebServer::on("/api/start-logo", WebServer::Method::POST, start_logo_handler));
     ESP_ERROR_CHECK(WebServer::on("/api/protect", WebServer::Method::GET, protect_handler));
     ESP_ERROR_CHECK(WebServer::on("/api/protect", WebServer::Method::POST, protect_handler));
     ESP_ERROR_CHECK(WebServer::on("/api/can", WebServer::Method::GET, can_handler));

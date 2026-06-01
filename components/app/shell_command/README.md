@@ -93,6 +93,7 @@ shell.register_command(ShellCommand_t("echo", "Echo input text", "<text>",
 | `timestamp` | 获取系统时间戳(微秒) | 无 |
 | `version` | 获取固件版本号与编译时间 | 无 |
 | `backlight` | 设置/查询屏幕背光亮度 | `[0-255]` |
+| `start_logo` | 设置/查询开机画面显示时长；`0` 表示关闭，修改后重启生效 | `[duration_ms]` |
 | `can_baudrate` | 设置/查询 CAN 波特率配置值；修改后重启生效 | `[baudrate]` |
 | `can_id` | 设置/查询 CAN ID 配置值，重启或重新初始化后用于回调注册 | `[id]` |
 | `get_data` | 获取当前电压、电流、板温 | 无 |

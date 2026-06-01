@@ -18,6 +18,7 @@
 #include "esp_app_desc.h"
 #include "power_output.h"
 #include "protect.h"
+#include "screen.h"
 #include "wifi_service.h"
 #include "web_backend.h"
 #include "freertos/FreeRTOS.h"
@@ -287,6 +288,34 @@ esp_err_t init() {
             printf("  voltage:      %.3f V\n", voltage_v);
             printf("  current:      %.6f A\n", current_a);
             printf("  power:        %.3f W\n", voltage_v * current_a);
+            return 0;
+        }));
+
+    /**
+     * @brief  start_logo - set startup logo display duration
+     * @usage  start_logo [duration_ms]
+     * @note   Zero disables the startup logo. Changes take effect after reboot.
+     */
+    shell.register_command(ShellCommand_t("start_logo", "Set startup logo duration in milliseconds (0 disables)", "[duration_ms]",
+        [](int argc, char** argv) -> int {
+            if (argc < 2) {
+                printf("Startup logo duration: %lu ms\n",
+                       static_cast<unsigned long>(SCREEN::get_start_logo_duration_ms()));
+                return 0;
+            }
+
+            char* end = nullptr;
+            unsigned long duration_ms = strtoul(argv[1], &end, 10);
+            if (argv[1][0] == '\0' || *end != '\0' || duration_ms > UINT32_MAX) {
+                printf("Usage: start_logo [duration_ms: 0-%lu]\n",
+                       static_cast<unsigned long>(UINT32_MAX));
+                return 1;
+            }
+
+            SCREEN::set_start_logo_duration_ms(static_cast<uint32_t>(duration_ms));
+            BlackboxService::append_event("ui: config source=%s start_logo_ms=%lu reboot_required=1",
+                                          TAG, duration_ms);
+            printf("Startup logo duration set to %lu ms, restart required\n", duration_ms);
             return 0;
         }));
 

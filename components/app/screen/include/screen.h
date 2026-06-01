@@ -15,6 +15,9 @@
 
 namespace SCREEN {
 
+/** Default startup logo display duration in milliseconds. */
+static constexpr uint32_t DEFAULT_START_LOGO_DURATION_MS = 2000;
+
 /**
  * @brief UI 层识别的物理按键
  */
@@ -33,6 +36,18 @@ void screen_task(void* arg);
 
 /** @brief Bind application button routes and initialize their GPIO inputs. */
 esp_err_t init_buttons();
+
+/**
+ * @brief Get the persisted startup logo display duration.
+ * @return Duration in milliseconds. Zero disables the startup logo.
+ */
+uint32_t get_start_logo_duration_ms();
+
+/**
+ * @brief Persist the startup logo display duration.
+ * @param duration_ms Duration in milliseconds. Zero disables the startup logo.
+ */
+void set_start_logo_duration_ms(uint32_t duration_ms);
 
 /**
  * @brief 向屏幕任务投递按键事件

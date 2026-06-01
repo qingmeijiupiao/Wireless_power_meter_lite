@@ -3,19 +3,21 @@
  * @LastEditors: qingmeijiupiao
  * @Description: 屏幕任务入口实现，负责 ST7735 初始化、UIManager 启动和屏幕刷新主循环
  * @Author: qingmeijiupiao
- * @LastEditTime: 2026-05-30
+ * @LastEditTime: 2026-06-01 19:10:43
  */
 #include "screen.h"
 
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "HXC_NVS.h"
 #include "global_state.h"
 #include "hardware.h"
 #include "protect.h"
 #include "power_output.h"
 #include "st7735.h"
 #include "ui_manager.h"
+#include "start_logo.h"
 
 namespace SCREEN {
 namespace {
@@ -23,6 +25,7 @@ namespace {
 static constexpr const char* TAG = "screen_task";
 Button main_button;
 Button side_button;
+HXC::NVS_DATA<uint32_t> start_logo_duration_ms("ui_logo_ms", DEFAULT_START_LOGO_DURATION_MS);
 
 /**
  * @brief 从硬件配置生成 ST7735 初始化参数
@@ -46,6 +49,14 @@ ST7735::Config make_lcd_config() {
 
 bool post_button_event(ButtonId button, ButtonEvent event) {
     return UIManager::instance().post_button_event(button, event);
+}
+
+uint32_t get_start_logo_duration_ms() {
+    return start_logo_duration_ms.read();
+}
+
+void set_start_logo_duration_ms(uint32_t duration_ms) {
+    start_logo_duration_ms = duration_ms;
 }
 
 esp_err_t init_buttons() {
@@ -92,27 +103,30 @@ void screen_task(void* arg) {
         return;
     }
 
+    UIManager::instance().apply_saved_display_config();
+    ST7735::fill_screen(ST7735::BLACK);
+    const uint32_t logo_duration_ms = get_start_logo_duration_ms();
+    if (logo_duration_ms > 0) {
+        constexpr uint16_t START_LOGO_X = (ST7735::WIDTH - START_LOGO_WIDTH) / 2;
+        constexpr uint16_t START_LOGO_Y = (ST7735::HEIGHT - START_LOGO_HEIGHT) / 2;
+        ST7735::draw_image(START_LOGO_X, START_LOGO_Y, START_LOGO_WIDTH, START_LOGO_HEIGHT, start_logo_data);
+    }
+    ST7735::copy_buffers();
+    ST7735::sync_buffers();
+
+    const TickType_t logo_start_ticks = xTaskGetTickCount();
+    while (!protect_init_ok() ||
+           xTaskGetTickCount() - logo_start_ticks < pdMS_TO_TICKS(logo_duration_ms)) {
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+
     if (!UIManager::instance().init()) {
         ESP_LOGE(TAG, "UI manager init failed");
         vTaskDelete(nullptr);
         return;
     }
 
-    UIManager::instance().apply_saved_display_config();
     get_global_state().flags.bits.screen_initialized = true;
-    ST7735::fill_screen(ST7735::BLACK);
-    ST7735::copy_buffers();
-    ST7735::sync_buffers();
-
-    constexpr uint32_t PROTECT_INIT_WAIT_MS = 1000;
-    uint32_t protect_wait_ms = 0;
-    while (!protect_init_ok() && protect_wait_ms < PROTECT_INIT_WAIT_MS) {
-        vTaskDelay(pdMS_TO_TICKS(5));
-        protect_wait_ms += 5;
-    }
-    if (!protect_init_ok()) {
-        ESP_LOGW(TAG, "protect init timeout, starting display in degraded mode");
-    }
 
     ESP_LOGI(TAG, "Screen task started");
     while (true) {

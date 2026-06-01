@@ -24,6 +24,7 @@
 #include "ota_manager.h"
 #include "power_output.h"
 #include "protect.h"
+#include "screen.h"
 #include "st7735.h"
 #include "wifi_service.h"
 #include "blackbox_service.h"
@@ -263,6 +264,33 @@ esp_err_t backlight_handler(WebServer::Request* request) {
 
     snprintf(response_buffer, sizeof(response_buffer),
         "{\"brightness\":%u}\n", static_cast<unsigned>(ST7735::get_backlight()));
+    return WebServer::send_json(request, response_buffer);
+}
+
+/** @brief GET/POST /api/start-logo, query or persist the startup logo duration. */
+esp_err_t start_logo_handler(WebServer::Request* request) {
+    if (request->method == WebServer::Method::POST) {
+        esp_err_t ret = WebServer::load_body(request);
+        if (ret != ESP_OK) {
+            return ret;
+        }
+
+        uint32_t duration_ms = 0;
+        if (!json_get_uint32(request->body, "duration_ms", &duration_ms)) {
+            return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"invalid_duration_ms\"}\n", strlen("{\"ok\":false,\"reason\":\"invalid_duration_ms\"}\n"));
+        }
+
+        SCREEN::set_start_logo_duration_ms(duration_ms);
+        ESP_LOGI(TAG, "startup logo config updated: duration_ms=%lu", static_cast<unsigned long>(duration_ms));
+        BlackboxService::append_event("ui: config source=%s start_logo_ms=%lu reboot_required=1 ip=%s",
+                                      TAG, static_cast<unsigned long>(duration_ms), request->peer_ip);
+    }
+
+    const uint32_t duration_ms = SCREEN::get_start_logo_duration_ms();
+    snprintf(response_buffer, sizeof(response_buffer),
+        "{\"ok\":true,\"duration_ms\":%lu,\"enabled\":%s,\"note\":\"changed value takes effect after reboot\"}\n",
+        static_cast<unsigned long>(duration_ms),
+        duration_ms > 0 ? "true" : "false");
     return WebServer::send_json(request, response_buffer);
 }
 

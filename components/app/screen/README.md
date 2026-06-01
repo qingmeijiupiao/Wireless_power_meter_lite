@@ -12,6 +12,7 @@
 - **统一编辑提示**：页面进入编辑/菜单状态时，由 `UIManager` 在页面渲染后绘制顶部 1px 黄色提示线。
 - **设置持久化**：屏幕旋转和背光档位通过 `HXC_NVS` 保存；设置页选中项仅在本次运行期间保留。
 - **资源复用**：静态图标、开关图标、警告/错误标签来自 `ui_resources`，字体来自 `Fonts`。
+- **开机画面**：页面初始化前居中显示 `start_logo_data`；显示时长通过 NVS key `ui_logo_ms` 保存，默认 `2000ms`，设为 `0` 时跳过。
 
 ## 架构与时序
 
@@ -19,11 +20,12 @@
 flowchart TD
     App["app_main"] --> Task["xTaskCreate(screen_task)"]
     Task --> LCD["ST7735::init()"]
-    Task --> UI["UIManager::init()"]
+    Task --> Logo["应用显示配置并显示开机画面"]
+    Logo --> Ready["等待开机画面时长到达且 protect_init_ok()"]
+    Ready --> UI["UIManager::init()"]
     UI --> Pages["注册页面指针表"]
     Task --> Config["应用 NVS 屏幕配置"]
-    Task --> Protect["等待 protect_init_ok()"]
-    Protect --> Loop["screen_task 循环"]
+    UI --> Loop["screen_task 循环"]
     Loop --> Events["消费按键事件队列"]
     Events --> Dispatch["页面优先处理 / 默认行为"]
     Dispatch --> Render["按页面刷新周期 render()"]
@@ -110,6 +112,7 @@ sequenceDiagram
 |------|------|------|------|
 | `ui_rot` | blob(uint8_t) | `0` | 屏幕是否 180 度旋转，`1` 表示启用 |
 | `ui_bl` | blob(uint8_t) | `3` | 背光档位，范围 1-5 |
+| `ui_logo_ms` | blob(uint32_t) | `2000` | 开机画面显示时长，单位毫秒；`0` 表示跳过 |
 
 ## 文件结构
 
