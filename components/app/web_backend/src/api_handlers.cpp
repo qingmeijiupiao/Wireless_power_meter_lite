@@ -307,7 +307,7 @@ static const char* protect_state_to_str(ProtectState_t state) {
 /**
  * @brief GET/POST /api/protect
  *
- * GET 返回保护通道详情；POST 通过 `{"enabled":true}` 开关保护阻断。
+ * GET 返回保护通道详情；POST 可开关保护阻断或更新指定通道阈值。
  * 即使旁路保护，protect 模块仍会持续检测和上报故障状态。
  */
 esp_err_t protect_handler(WebServer::Request* request) {
@@ -316,15 +316,56 @@ esp_err_t protect_handler(WebServer::Request* request) {
         if (ret != ESP_OK) {
             return ret;
         }
-        bool enabled = true;
-        if (!json_get_bool(request->body, "enabled", &enabled)) {
-            return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"missing_enabled\"}\n", strlen("{\"ok\":false,\"reason\":\"missing_enabled\"}\n"));
+        const bool has_enabled = json_has_key(request->body, "enabled");
+        const bool has_channel = json_has_key(request->body, "channel");
+        if (has_enabled && has_channel) {
+            return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"combined_update_not_allowed\"}\n", strlen("{\"ok\":false,\"reason\":\"combined_update_not_allowed\"}\n"));
         }
-        protect_set_bypassed(!enabled, TAG);
-        ESP_LOGI(TAG, "protection updated: enabled=%s", enabled ? "true" : "false");
-        if (enabled && protect_should_block_output()) {
-            ESP_LOGW(TAG, "protection enabled with active fault, forcing output off");
-            PowerOutput::off(TAG);
+        bool updated = false;
+        if (has_enabled) {
+            bool enabled = true;
+            if (!json_get_bool(request->body, "enabled", &enabled)) {
+                return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"invalid_enabled\"}\n", strlen("{\"ok\":false,\"reason\":\"invalid_enabled\"}\n"));
+            }
+            protect_set_bypassed(!enabled, TAG);
+            ESP_LOGI(TAG, "protection updated: enabled=%s", enabled ? "true" : "false");
+            if (enabled && protect_should_block_output()) {
+                ESP_LOGW(TAG, "protection enabled with active fault, forcing output off");
+                PowerOutput::off(TAG);
+            }
+            updated = true;
+        }
+
+        if (has_channel) {
+            uint32_t channel = 0;
+            uint32_t warning_milli = 0;
+            uint32_t warning_recovery_milli = 0;
+            uint32_t protect_milli = 0;
+            uint32_t protect_recovery_milli = 0;
+            protect_channel_info_t info = {};
+            if (!json_get_uint32(request->body, "channel", &channel) ||
+                channel >= protect_get_channel_count() ||
+                !json_get_uint32(request->body, "warning_milli", &warning_milli) ||
+                !json_get_uint32(request->body, "warning_recovery_milli", &warning_recovery_milli) ||
+                !json_get_uint32(request->body, "protect_milli", &protect_milli) ||
+                !json_get_uint32(request->body, "protect_recovery_milli", &protect_recovery_milli) ||
+                !protect_get_channel_info(static_cast<uint8_t>(channel), &info)) {
+                return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"invalid_threshold_fields\"}\n", strlen("{\"ok\":false,\"reason\":\"invalid_threshold_fields\"}\n"));
+            }
+
+            protect_threshold_t threshold = info.threshold;
+            threshold.warning_threshold = warning_milli / 1000.0f;
+            threshold.warning_recovery_threshold = warning_recovery_milli / 1000.0f;
+            threshold.protect_threshold = protect_milli / 1000.0f;
+            threshold.protect_recovery_threshold = protect_recovery_milli / 1000.0f;
+            if (protect_set_channel_threshold(static_cast<uint8_t>(channel), threshold, TAG) != ESP_OK) {
+                return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"invalid_threshold_order\"}\n", strlen("{\"ok\":false,\"reason\":\"invalid_threshold_order\"}\n"));
+            }
+            updated = true;
+        }
+
+        if (!updated) {
+            return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"missing_update\"}\n", strlen("{\"ok\":false,\"reason\":\"missing_update\"}\n"));
         }
     }
 

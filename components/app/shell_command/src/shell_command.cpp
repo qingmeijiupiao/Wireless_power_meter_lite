@@ -25,6 +25,7 @@
 #include "freertos/task.h"
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <vector>
 
 namespace ShellCommand {
@@ -56,6 +57,19 @@ static void print_hex(const uint8_t* data, size_t len) {
     for (size_t i = 0; i < len; ++i) {
         printf("%02X", data[i]);
     }
+}
+
+static bool parse_float_arg(const char* text, float* out) {
+    if (text == nullptr || out == nullptr || text[0] == '\0') {
+        return false;
+    }
+    char* end = nullptr;
+    const float value = strtof(text, &end);
+    if (end == text || *end != '\0' || !std::isfinite(value)) {
+        return false;
+    }
+    *out = value;
+    return true;
 }
 
 // ====== 命令列表 ======
@@ -520,6 +534,76 @@ esp_err_t init() {
                 PowerOutput::off(TAG);
                 printf("Active protect fault exists, output forced off\n");
             }
+            return 0;
+        }));
+
+    /**
+     * @brief  protect_threshold - 查询或设置保护阈值
+     * @usage  protect_threshold [channel warning warning_recovery protect protect_recovery]
+     * @param  channel - 通道编号：0=OTP，1=OVP，2=UVP，3=OCP
+     * @note   参数单位与通道一致。修改立即生效并保存到 NVS。
+     */
+    shell.register_command(ShellCommand_t("protect_threshold",
+        "Get or set thresholds. channel: 0=OTP(C), 1=OVP(V), 2=UVP(V), 3=OCP(A). "
+        "Order: OTP/OVP/OCP warning_recovery<=warning<=protect_recovery<=protect; "
+        "UVP protect<=protect_recovery<=warning<=warning_recovery.",
+        "[channel warning warning_recovery protect protect_recovery]",
+        [](int argc, char** argv) -> int {
+            if (argc == 1) {
+                printf("Channel Unit Warning WarningRecovery Protect ProtectRecovery Trigger\n");
+                for (uint8_t i = 0; i < protect_get_channel_count(); ++i) {
+                    protect_channel_info_t info = {};
+                    if (protect_get_channel_info(i, &info)) {
+                        printf("%u:%-4s %-4s %7.3f %15.3f %7.3f %15.3f %s\n",
+                               static_cast<unsigned>(i),
+                               info.name,
+                               info.unit,
+                               info.threshold.warning_threshold,
+                               info.threshold.warning_recovery_threshold,
+                               info.threshold.protect_threshold,
+                               info.threshold.protect_recovery_threshold,
+                               info.threshold.is_asc ? ">=" : "<=");
+                    }
+                }
+                return 0;
+            }
+            if (argc != 6) {
+                printf("Usage: protect_threshold <channel> <warning> <warning_recovery> <protect> <protect_recovery>\n");
+                return 1;
+            }
+
+            char* channel_end = nullptr;
+            const long channel = strtol(argv[1], &channel_end, 10);
+            protect_channel_info_t info = {};
+            if (channel_end == argv[1] || *channel_end != '\0' ||
+                channel < 0 || channel >= protect_get_channel_count() ||
+                !protect_get_channel_info(static_cast<uint8_t>(channel), &info)) {
+                printf("Error: channel must be 0-3\n");
+                return 1;
+            }
+
+            protect_threshold_t threshold = info.threshold;
+            float warning = 0.0f;
+            float warning_recovery = 0.0f;
+            float protect = 0.0f;
+            float protect_recovery = 0.0f;
+            if (!parse_float_arg(argv[2], &warning) ||
+                !parse_float_arg(argv[3], &warning_recovery) ||
+                !parse_float_arg(argv[4], &protect) ||
+                !parse_float_arg(argv[5], &protect_recovery)) {
+                printf("Error: thresholds must be finite numbers\n");
+                return 1;
+            }
+            threshold.warning_threshold = warning;
+            threshold.warning_recovery_threshold = warning_recovery;
+            threshold.protect_threshold = protect;
+            threshold.protect_recovery_threshold = protect_recovery;
+
+            if (protect_set_channel_threshold(static_cast<uint8_t>(channel), threshold, TAG) != ESP_OK) {
+                printf("Error: invalid thresholds; check non-negative values and recovery ordering\n");
+                return 1;
+            }
+            printf("Protect threshold %s updated\n", info.name);
             return 0;
         }));
 

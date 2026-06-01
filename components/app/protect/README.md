@@ -7,9 +7,11 @@
 - **四级保护维度**：温度、高压、低压、电流，各维度独立判定
 - **三态状态机**：`NORMAL → WARNING → PROTECT`，保护解除后经 WARNING 二次确认才回 NORMAL
 - **滞回恢复**：告警恢复阈值与触发阈值分离，避免边界抖动
+- **时间迟滞**：任意状态切换都要求候选状态连续保持 `200 ms`，该值为编译期常量
 - **双向阈值**：`is_asc` 标志支持越限触发（过流/过压）和越下限触发（欠压）
 - **回调机制**：状态变化时触发注册的回调函数
 - **保护旁路**：保护检测始终运行，工厂模式可旁路输出阻断与强制关断
+- **阈值持久化**：四组阈值整体保存到 NVS，首次无配置时使用默认值，修改后立即生效
 
 ## 架构与原理
 
@@ -30,10 +32,11 @@ flowchart TD
     Read --> OVP["check_now_state(OVP)"]
     Read --> UVP["check_now_state(UVP)"]
     Read --> OCP["check_now_state(OCP)"]
-    OTP --> Store["写回 protect_states_t 位域"]
-    OVP --> Store
-    UVP --> Store
-    OCP --> Store
+    OTP --> Debounce["候选状态持续 200ms?"]
+    OVP --> Debounce
+    UVP --> Debounce
+    OCP --> Debounce
+    Debounce --> Store["写回 protect_states_t 位域"]
     Store --> Changed{"状态变化?"}
     Changed -->|是| Callback["遍历 protect_change_callbacks"]
     Changed -->|否| Delay["等待下一周期"]
@@ -73,6 +76,11 @@ classDiagram
 
 当 `protect_bypassed = 1` 时，保护任务仍会继续检测、更新状态、触发状态变化回调，屏幕/CAN/Shell 仍能看到真实保护状态；但 `PowerOutput` 的保护策略不会阻止输出开启，保护触发回调也不会强制关断输出。
 
+状态切换还会经过固定 `200 ms` 时间迟滞。候选状态必须连续保持满 `200 ms`
+才会写回 `protect_states_t` 并触发回调；等待期间若恢复为当前状态或变化为另一
+候选状态，则重新计时。该时间由编译期常量 `protect_state_change_delay_ms` 定义，
+不写入 NVS，也不提供 Shell 或 Web 修改入口。
+
 ## 集成与使用
 
 ```cpp
@@ -106,6 +114,16 @@ bool block = protect_should_block_output();
 | 低压 | 6.6V | 7.2V | 4.7V | 5.0V | 降序 |
 | 电流 | 15A | 15A | 25A | 25A | 升序 |
 
+四组阈值以结构体 blob 保存到 NVS 的 `PROTECT_CFG` 键。保护模块启动时会通过
+`ESP_LOGI` 和黑匣子日志打印实际生效的四组阈值。若 NVS 数据非法，则恢复并保存
+默认值。
+
+修改阈值时统一执行以下校验：
+
+- 所有值必须是有限且非负数。
+- 升序通道要求：告警恢复 `<=` 告警 `<=` 保护恢复 `<=` 保护。
+- 欠压通道要求：保护 `<=` 保护恢复 `<=` 告警 `<=` 告警恢复。
+
 ## API 参考
 
 | API | 说明 |
@@ -121,6 +139,7 @@ bool block = protect_should_block_output();
 | `protect_should_block_output()` | 是否应该阻止输出开启或强制关断输出 |
 | `protect_get_channel_count()` | 获取保护通道数量 |
 | `protect_get_channel_info(index, info)` | 读取指定保护通道的名称、单位、当前值、状态和阈值 |
+| `protect_set_channel_threshold(index, threshold, source)` | 校验、保存并立即应用指定通道阈值 |
 
 ## Shell 命令
 
@@ -135,6 +154,8 @@ INA226 原始寄存器，并强制追加一条状态快照。`WARNING`、`PROTEC
 | `protect 1` | 开启保护阻断；如果当前已有 PROTECT 故障，会立即关闭输出 |
 | `protect 0` | 关闭保护阻断，保护检测仍继续运行 |
 | `factory_mode` | 进入工厂模式并自动执行保护旁路 |
+| `protect_threshold` | 查询四组保护阈值 |
+| `protect_threshold <channel> <warning> <warning_recovery> <protect> <protect_recovery>` | 设置阈值，`channel` 为 `0=OTP`、`1=OVP`、`2=UVP`、`3=OCP` |
 
 ## MOS 损坏诊断
 
@@ -147,4 +168,4 @@ INA226 原始寄存器，并强制追加一条状态快照。`WARNING`、`PROTEC
 ## 环境与依赖
 
 - **软件**：ESP-IDF v6.0+、FreeRTOS、C++11
-- **组件依赖**：`global_state`
+- **组件依赖**：`global_state`、`HXC_NVS`

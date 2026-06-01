@@ -101,6 +101,7 @@ shell.register_command(ShellCommand_t("echo", "Echo input text", "<text>",
 | `blackbox` | 查询黑匣子状态、拉取日志、同步清空日志分区或写入测试标记 | `[status|dump [count\|all]|pull [count\|all]|clear|mark <text>]` |
 | `output` | 设置/查询输出状态 | `[0/1]` |
 | `protect` | 设置/查询保护阻断状态和各保护通道 | `[0/1]` |
+| `protect_threshold` | 查询或设置保护阈值，修改后立即生效并保存到 NVS | `[channel warning warning_recovery protect protect_recovery]` |
 | `wifi` | 管理 WiFi/Web，支持查询、启动、停止、连接 STA、进入 AP 配网、设置启动开关、清除保存凭据 | `status|ip|on|off|connect <ssid> [password]|ap|boot [0/1]|clear` |
 | `ina226_register` | 查看 INA226 原始寄存器指针值 | 无 |
 | `calibration_params` | 查看电流校准参数 | 无 |

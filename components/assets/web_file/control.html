@@ -40,6 +40,12 @@
           <button id="saveCan">保存 CAN 设置</button>
           <div class="muted">CAN 参数可能需要重启或重新初始化后完全生效。</div>
         </div>
+        <div class="card stack">
+          <strong>保护阈值</strong>
+          <div class="muted">修改后立即生效并保存。阈值最多保留三位小数，恢复阈值必须满足迟滞顺序。</div>
+          <div style="overflow:auto"><table id="protectThresholdTable"></table></div>
+          <div class="muted" id="protectThresholdMsg"></div>
+        </div>
       </div>
       <div class="card stack">
         <strong>WiFi / Web</strong>
@@ -62,6 +68,7 @@
   <script>
     const $ = id => document.getElementById(id);
     let state = null, protect = null, wifi = null;
+    const protectName = { OTP: '过温保护', OVP: '过压保护', UVP: '欠压保护', OCP: '过流保护' };
     function infoHtml(items) {
       return items.map(([label, value]) => `<div class="info-line"><span>${label}</span><span>${value}</span></div>`).join('');
     }
@@ -93,6 +100,8 @@
       $('protectToggle').textContent = prot.enabled ? '关闭保护功能' : '开启保护功能';
       $('protectToggle').className = prot.enabled ? 'danger' : '';
       $('protectNotice').hidden = prot.enabled;
+      $('protectThresholdTable').innerHTML = '<tr><th>通道</th><th>告警</th><th>告警恢复</th><th>保护</th><th>保护恢复</th><th></th></tr>' +
+        prot.channels.map((c, index) => `<tr><td>${protectName[c.name] || c.name} (${c.unit})</td><td><input id="protect-${index}-warning" type="number" min="0" step="0.001" value="${c.warning}"></td><td><input id="protect-${index}-warning-recovery" type="number" min="0" step="0.001" value="${c.warning_recovery}"></td><td><input id="protect-${index}-protect" type="number" min="0" step="0.001" value="${c.protect}"></td><td><input id="protect-${index}-protect-recovery" type="number" min="0" step="0.001" value="${c.protect_recovery}"></td><td><button class="secondary" onclick="saveProtectThreshold(${index})">保存</button></td></tr>`).join('');
       $('wifiText').className = 'info-list';
       $('wifiText').innerHTML = infoHtml([
         ['模式', w.mode],
@@ -123,6 +132,25 @@
       if (enabled && !confirm('关闭保护功能后，设备不会因为过压、欠压、过流或过温自动切断输出。确定要关闭吗？')) return;
       await postJson('/api/protect', { enabled: !enabled }); await load();
     };
+    async function saveProtectThreshold(channel) {
+      const values = ['warning', 'warning-recovery', 'protect', 'protect-recovery'].map(name => Number($(`protect-${channel}-${name}`).value));
+      const milli = values.map(value => Math.round(value * 1000));
+      if (values.some((value, index) => !Number.isFinite(value) || value < 0 || milli[index] > 4294967295 || Math.abs(value * 1000 - milli[index]) > 0.000001)) {
+        alert('保护阈值必须是非负数，且最多保留三位小数。');
+        return;
+      }
+      const asc = protect.channels[channel].trigger === '>=';
+      const ordered = asc
+        ? milli[1] <= milli[0] && milli[0] <= milli[3] && milli[3] <= milli[2]
+        : milli[2] <= milli[3] && milli[3] <= milli[0] && milli[0] <= milli[1];
+      if (!ordered) {
+        alert(asc ? '升序保护要求：告警恢复 <= 告警 <= 保护恢复 <= 保护。' : '欠压保护要求：保护 <= 保护恢复 <= 告警 <= 告警恢复。');
+        return;
+      }
+      await postJson('/api/protect', { channel, warning_milli: milli[0], warning_recovery_milli: milli[1], protect_milli: milli[2], protect_recovery_milli: milli[3] });
+      $('protectThresholdMsg').textContent = `${protectName[protect.channels[channel].name] || protect.channels[channel].name}阈值已保存`;
+      await load();
+    }
     $('saveCan').onclick = async () => {
       const baudrate = Number($('canBaud').value);
       const id = Number($('canId').value);
