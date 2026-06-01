@@ -28,6 +28,43 @@ static int32_t to_milli(float value) {
     return static_cast<int32_t>(value * 1000.0f);
 }
 
+/**
+ * @brief 检测输出 MOS 是否损坏。
+ *
+ * 当输出关闭但仍持续检测到不小于阈值的电流时，判定 MOS 可能损坏并打印一次错误日志。
+ * 输出重新开启或电流恢复到阈值以下后，重新允许下一次故障上报。
+ */
+static void check_mos_fault() {
+    constexpr int32_t mos_fault_current_threshold_uA = 10 * 1000;
+    constexpr TickType_t mos_fault_detection_ticks = pdMS_TO_TICKS(200);
+    static TickType_t detection_start_ticks = 0;
+    static bool detection_active = false;
+    static bool fault_reported = false;
+
+    const int32_t current_uA = std::abs(glb_states.current_uA);
+    // 输出开启或电流低于阈值时清除本轮检测状态，允许后续异常重新上报。
+    if (glb_states.flags.bits.output_enabled || current_uA < mos_fault_current_threshold_uA) {
+        detection_active = false;
+        fault_reported = false;
+        return;
+    }
+
+    const TickType_t now_ticks = xTaskGetTickCount();
+    // 首次检测到异常电流时开始计时，过滤关断瞬态和采样波动。
+    if (!detection_active) {
+        detection_start_ticks = now_ticks;
+        detection_active = true;
+        return;
+    }
+
+    // 异常电流持续达到指定时间后仅上报一次，避免保护轮询持续刷屏。
+    if (!fault_reported && now_ticks - detection_start_ticks >= mos_fault_detection_ticks) {
+        PROTECT_LOGE("MOS fault detected: output is off but current remains, current_ma=%ld",
+                     static_cast<long>(current_uA / 1000));
+        fault_reported = true;
+    }
+}
+
 static void append_state_change_event(const char* channel, ProtectState_t last_state, ProtectState_t new_state,
                                       float value, const protect_threshold_t& threshold) {
     const int current_raw = current_register_raw == nullptr ? 0 : *current_register_raw;
@@ -280,6 +317,8 @@ void protect_task(void* pvParameters){
                 cb(last_state, temp_state);
             }
         }
+
+        check_mos_fault();
 
         if(first_check){
             first_check = false;
