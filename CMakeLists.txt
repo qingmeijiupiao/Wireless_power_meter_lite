@@ -20,6 +20,13 @@ set(VERSION_PATCH 99 CACHE STRING "Patch version (99=local, 0=CD)")
 
 set(PROJECT_VER "v${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}")
 
+# Run generated-asset preprocessing before dependent component targets.
+add_custom_target(run_pre_build ALL
+    COMMAND python "${CMAKE_SOURCE_DIR}/scripts/pre_build.py"
+    COMMENT "Running pre-build Python script..."
+    VERBATIM
+)
+
 project(Wireless_power_meter_lite)
 
 # 将版本号注入所有目标的编译定义

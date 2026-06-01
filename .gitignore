@@ -29,6 +29,7 @@ build_*
 *.bin
 *.elf
 *.map
+components/assets/web_file/*.gz
 flasher_args.json # Generated in build directory
 sdkconfig.old
 sdkconfig.ci

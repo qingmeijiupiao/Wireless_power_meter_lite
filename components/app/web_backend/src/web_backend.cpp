@@ -137,7 +137,7 @@ esp_err_t init() {
          * Captive Portal 的常见做法是把未匹配路径回落到配网页，方便用户完成配网。
          */
         if (WifiService::is_provisioning()) {
-            return WebServer::send_html(request, provision_html_file.data, provision_html_file.size);
+            return WebServer::send_html_gzip(request, provision_html_file.data, provision_html_file.size);
         }
         return WebServer::send(request, 404, "application/json", "{\"error\":\"not found\"}\n", strlen("{\"error\":\"not found\"}\n"));
     });

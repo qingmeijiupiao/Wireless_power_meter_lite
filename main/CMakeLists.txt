@@ -43,11 +43,6 @@ ulp_embed_binary(${ulp_app_name} "${ulp_sources}" "${ulp_exp_dep_srcs}")
 set(SCRIPT_DIR "${CMAKE_SOURCE_DIR}/scripts")
 
 # 构建前处理
-add_custom_target(run_pre_build ALL
-    COMMAND python ${SCRIPT_DIR}/pre_build.py
-    COMMENT "Running pre-build Python script..."
-    VERBATIM
-)
 add_dependencies(${COMPONENT_LIB} run_pre_build)
 
 # 构建后处理

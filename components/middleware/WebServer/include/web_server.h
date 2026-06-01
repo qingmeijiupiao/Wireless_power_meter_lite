@@ -180,6 +180,9 @@ esp_err_t serve_static(const char* uri, const char* data, size_t size, const cha
  */
 esp_err_t send(Request* request, int status_code, const char* content_type, const char* data, size_t size);
 
+/** Send a gzip-compressed HTTP response. */
+esp_err_t send_gzip(Request* request, int status_code, const char* content_type, const char* data, size_t size);
+
 /**
  * @brief 发送text/plain响应
  *
@@ -198,6 +201,9 @@ esp_err_t send_text(Request* request, const char* text);
  * @return ESP_OK成功，其他值表示失败。
  */
 esp_err_t send_html(Request* request, const char* html, size_t size);
+
+/** Send gzip-compressed HTML. */
+esp_err_t send_html_gzip(Request* request, const char* html, size_t size);
 
 /**
  * @brief 发送application/json响应

@@ -468,6 +468,14 @@ esp_err_t send(Request* request, int status_code, const char* content_type, cons
     return httpd_resp_send(request->raw, data == nullptr ? "" : data, size);
 }
 
+esp_err_t send_gzip(Request* request, int status_code, const char* content_type, const char* data, size_t size) {
+    if (request == nullptr || request->raw == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    httpd_resp_set_hdr(request->raw, "Content-Encoding", "gzip");
+    return send(request, status_code, content_type, data, size);
+}
+
 esp_err_t send_text(Request* request, const char* text) {
     if (text == nullptr) {
         return ESP_ERR_INVALID_ARG;
@@ -480,6 +488,13 @@ esp_err_t send_html(Request* request, const char* html, size_t size) {
         return ESP_ERR_INVALID_ARG;
     }
     return send(request, 200, "text/html", html, size);
+}
+
+esp_err_t send_html_gzip(Request* request, const char* html, size_t size) {
+    if (html == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    return send_gzip(request, 200, "text/html", html, size);
 }
 
 esp_err_t send_json(Request* request, const char* json) {
