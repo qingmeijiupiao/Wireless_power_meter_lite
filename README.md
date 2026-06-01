@@ -89,7 +89,6 @@
 | CAN 终端电阻控制 | [components/middleware/can_resistor/README.md](components/middleware/can_resistor/README.md) |
 | OTA 固件切换 | [components/middleware/ota_manager/README.md](components/middleware/ota_manager/README.md) |
 | 插值工具 | [components/common/Interp/README.md](components/common/Interp/README.md) |
-| JSON 头文件库 | [components/common/json/README.md](components/common/json/README.md) |
 | 字体资源 | [components/assets/Fonts/README.md](components/assets/Fonts/README.md) |
 | UI 资源 | [components/assets/ui_resources/README.md](components/assets/ui_resources/README.md) |
 | Web 页面资源 | [components/assets/web_file/README.md](components/assets/web_file/README.md) |

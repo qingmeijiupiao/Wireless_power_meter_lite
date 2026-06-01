@@ -2535,6 +2535,17 @@ CONFIG_VFS_SEMIHOSTFS_MAX_MOUNT_POINTS=1
 
 CONFIG_VFS_INITIALIZE_DEV_NULL=y
 # end of Virtual file system
+
+#
+# jsmn
+#
+# default:
+# CONFIG_JSMN_PARENT_LINKS is not set
+# default:
+CONFIG_JSMN_STRICT=y
+# default:
+# CONFIG_JSMN_STATIC is not set
+# end of jsmn
 # end of Component config
 
 # CONFIG_IDF_EXPERIMENTAL_FEATURES is not set
