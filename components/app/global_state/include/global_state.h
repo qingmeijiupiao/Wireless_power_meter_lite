@@ -1,3 +1,10 @@
+/*
+ * @version: no version
+ * @LastEditors: qingmeijiupiao
+ * @Description: 该组件用于同步各种全局变量，包括保护状态、电压、电流、电能、温度等
+ * @author: qingmeijiupiao
+ * @LastEditTime: 2026-06-01 18:39:18
+ */
 #ifndef GLOBAL_STATE_H
 #define GLOBAL_STATE_H
 #include "protect.h"

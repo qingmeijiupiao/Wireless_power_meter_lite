@@ -1,3 +1,10 @@
+/*
+ * @version: no version
+ * @LastEditors: qingmeijiupiao
+ * @Description: 电量积分管理
+ * @author: qingmeijiupiao
+ * @LastEditTime: 2026-06-01 18:37:26
+ */
 #ifndef ENERGY_METER_H
 #define ENERGY_METER_H
 

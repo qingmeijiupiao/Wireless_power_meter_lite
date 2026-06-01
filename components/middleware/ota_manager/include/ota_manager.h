@@ -1,3 +1,10 @@
+/*
+ * @version: no version
+ * @LastEditors: qingmeijiupiao
+ * @Description: OTA功能以及分区启动相关
+ * @author: qingmeijiupiao
+ * @LastEditTime: 2026-06-01 18:37:37
+ */
 #ifndef OTA_MANAGER_H
 #define OTA_MANAGER_H
 

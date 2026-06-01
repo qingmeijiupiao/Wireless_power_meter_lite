@@ -1,3 +1,10 @@
+/*
+ * @version: no version
+ * @LastEditors: qingmeijiupiao
+ * @Description: GPIO驱动类，用于操作GPIO引脚
+ * @author: qingmeijiupiao
+ * @LastEditTime: 2026-06-01 18:35:53
+ */
 #ifndef CPP_GPIO_DRIVER_HPP
 #define CPP_GPIO_DRIVER_HPP
 #include <driver/gpio.h>

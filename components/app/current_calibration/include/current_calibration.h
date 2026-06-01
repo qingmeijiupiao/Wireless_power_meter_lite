@@ -1,3 +1,10 @@
+/*
+ * @version: no version
+ * @LastEditors: qingmeijiupiao
+ * @Description: 电流校准管理
+ * @author: qingmeijiupiao
+ * @LastEditTime: 2026-06-01 18:38:51
+ */
 #ifndef CURRENT_CALIBRATION_H
 #define CURRENT_CALIBRATION_H
 #include "HXC_NVS.h"

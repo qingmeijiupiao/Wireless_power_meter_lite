@@ -1,6 +1,6 @@
 /**
  * @file st7735.cpp
- * @brief ST7735S显示屏驱动 (Adafruit Mini TFT 0.96" 160x80)
+ * @brief ST7735S显示屏驱动 (160x80)
  */
 
 #include <string.h>

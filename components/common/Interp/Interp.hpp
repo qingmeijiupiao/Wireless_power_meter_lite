@@ -1,3 +1,10 @@
+/*
+ * @version: no version
+ * @LastEditors: qingmeijiupiao
+ * @Description: 插值模块, 提供等间隔插值和单调插值两种插值方式
+ * @author: qingmeijiupiao
+ * @LastEditTime: 2026-06-01 18:36:30
+ */
 #include <vector>
 #include <cmath>
 #include <algorithm>

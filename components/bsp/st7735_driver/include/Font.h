@@ -1,3 +1,10 @@
+/*
+ * @version: no version
+ * @LastEditors: qingmeijiupiao
+ * @Description: 字体结构体，用于表示字体数据
+ * @author: qingmeijiupiao
+ * @LastEditTime: 2026-06-01 18:34:46
+ */
 #ifndef FONT_H
 #define FONT_H
 #include <stdint.h>

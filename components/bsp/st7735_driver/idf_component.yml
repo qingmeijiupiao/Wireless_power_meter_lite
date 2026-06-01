@@ -1,4 +1,0 @@
-description: Driver ST7735S 
-  no ESP32-C6
-targets:
-- esp32c6

@@ -1,10 +1,11 @@
 /*
- * @Description:  硬件配置和不同硬件版本适配模块头文件
- * @Author: qingmeijiupiao
- * @version: 1.0.0
- * @Date: 2026-04-25 00:49:51
- * @LastEditTime: 2026-04-25 02:23:01
+ * @version: no version
+ * @LastEditors: qingmeijiupiao
+ * @Description: ADC驱动类，用于读取ADC通道的电压值
+ * @author: qingmeijiupiao
+ * @LastEditTime: 2026-06-01 18:36:16
  */
+
 #ifndef ADC_H
 #define ADC_H
 #include "esp_err.h"

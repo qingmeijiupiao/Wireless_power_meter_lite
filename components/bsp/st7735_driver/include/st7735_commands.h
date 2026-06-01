@@ -1,3 +1,10 @@
+/*
+ * @version: no version
+ * @LastEditors: qingmeijiupiao
+ * @Description: ST7735命令定义
+ * @author: qingmeijiupiao
+ * @LastEditTime: 2026-06-01 18:34:59
+ */
 #ifndef __ST7735_COMMANDS_H__
 #define __ST7735_COMMANDS_H__
 

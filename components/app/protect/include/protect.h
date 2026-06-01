@@ -1,3 +1,10 @@
+/*
+ * @version: no version
+ * @LastEditors: qingmeijiupiao
+ * @Description: 保护功能相关数据结构
+ * @author: qingmeijiupiao
+ * @LastEditTime: 2026-06-01 18:39:46
+ */
 #ifndef PROTECT_H
 #define PROTECT_H
 #include <stdint.h>

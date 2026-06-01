@@ -1,3 +1,10 @@
+/*
+ * @version: no version
+ * @LastEditors: qingmeijiupiao
+ * @Description: CAN 终端电阻控制
+ * @author: qingmeijiupiao
+ * @LastEditTime: 2026-06-01 18:37:11
+ */
 #ifndef CAN_RESISTOR_H
 #define CAN_RESISTOR_H
 

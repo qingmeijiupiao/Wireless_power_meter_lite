@@ -1,3 +1,10 @@
+/*
+ * @version: no version
+ * @LastEditors: qingmeijiupiao
+ * @Description: 命令行界面类，用于处理用户输入和执行命令
+ * @author: qingmeijiupiao
+ * @LastEditTime: 2026-06-01 18:35:19
+ */
 #ifndef SHELL_H
 #define SHELL_H
 

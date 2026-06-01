@@ -1,3 +1,10 @@
+/*
+ * @version: no version
+ * @LastEditors: qingmeijiupiao
+ * @Description: 颜色类，用于表示和操作颜色值
+ * @author: qingmeijiupiao
+ * @LastEditTime: 2026-06-01 18:34:35
+ */
 #ifndef __COLOR_H__
 #define __COLOR_H__
 

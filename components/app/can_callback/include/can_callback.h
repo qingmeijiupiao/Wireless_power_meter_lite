@@ -1,9 +1,9 @@
 /*
  * @version: no version
  * @LastEditors: qingmeijiupiao
- * @Description: 
+ * @Description: CAN回调函数管理
  * @author: qingmeijiupiao
- * @LastEditTime: 2026-05-01 01:43:34
+ * @LastEditTime: 2026-06-01 18:38:43
  */
 #ifndef CAN_CALLBACK_H
 #define CAN_CALLBACK_H

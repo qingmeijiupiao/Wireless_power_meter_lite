@@ -1,3 +1,10 @@
+/*
+ * @version: no version
+ * @LastEditors: qingmeijiupiao
+ * @Description: 启动时的日志打印
+ * @author: qingmeijiupiao
+ * @LastEditTime: 2026-06-01 18:38:23
+ */
 #ifndef BOOT_DIAGNOSTICS_H
 #define BOOT_DIAGNOSTICS_H
 
