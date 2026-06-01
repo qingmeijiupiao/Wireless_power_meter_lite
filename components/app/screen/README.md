@@ -144,15 +144,7 @@ xTaskCreate(SCREEN::screen_task, "screen_task", 4096, NULL, 4, NULL);
 按键回调不应直接修改 UI 状态，应通过队列投递到屏幕任务：
 
 ```cpp
-Main_Button.bind_event(ButtonEvent::SHORT_PRESS, []() {
-    if (!SCREEN::post_button_event(SCREEN::ButtonId::Main, ButtonEvent::SHORT_PRESS)) {
-        PowerOutput::toggle();
-    }
-});
-
-Side_Button.bind_event(ButtonEvent::SHORT_PRESS, []() {
-    SCREEN::post_button_event(SCREEN::ButtonId::Side, ButtonEvent::SHORT_PRESS);
-});
+ESP_ERROR_CHECK(SCREEN::init_buttons());
 ```
 
 主按钮保留投递失败回退逻辑，避免屏幕任务未初始化或异常时影响输出控制。
@@ -162,6 +154,10 @@ Side_Button.bind_event(ButtonEvent::SHORT_PRESS, []() {
 ### `void SCREEN::screen_task(void* arg)`
 
 屏幕任务入口。执行 ST7735 初始化、UIManager 初始化、应用 NVS 显示配置、等待保护模块完成首次检查，并持续刷新当前页面。
+
+### `esp_err_t SCREEN::init_buttons()`
+
+绑定主按键和侧按键事件，并根据硬件配置初始化 GPIO 输入。
 
 ### `bool SCREEN::post_button_event(ButtonId button, ButtonEvent event)`
 

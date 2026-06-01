@@ -63,9 +63,21 @@ esp_err_t init() {
 
     install_log_capture();
 
-    ESP_ERROR_CHECK(WebServer::init(80));
-    ESP_ERROR_CHECK(WebServer::use(cors_middleware));
-    ESP_ERROR_CHECK(WebServer::use(log_middleware));
+    esp_err_t ret = WebServer::init(80);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "HTTP server init failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    ret = WebServer::use(cors_middleware);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "CORS middleware registration failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    ret = WebServer::use(log_middleware);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "log middleware registration failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
 
     /* 页面路由：直接返回固件内嵌 HTML/CSS 资源。 */
     ESP_ERROR_CHECK(WebServer::on("/", WebServer::Method::GET, index_handler));
@@ -136,7 +148,11 @@ esp_err_t init() {
 /** @brief 启动底层 HTTP 服务。 */
 esp_err_t start() {
     if (!initialized) {
-        ESP_ERROR_CHECK(init());
+        esp_err_t ret = init();
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "init before start failed: %s", esp_err_to_name(ret));
+            return ret;
+        }
     }
     esp_err_t ret = WebServer::begin();
     if (ret == ESP_OK) {
@@ -158,7 +174,11 @@ esp_err_t start_with_wifi_service() {
         return ESP_OK;
     }
 
-    ESP_ERROR_CHECK(init());
+    esp_err_t init_ret = init();
+    if (init_ret != ESP_OK) {
+        ESP_LOGE(TAG, "Web backend init failed: %s", esp_err_to_name(init_ret));
+        return init_ret;
+    }
 
     esp_err_t wifi_ret = WifiService::start_default(TAG);
     if (wifi_ret != ESP_OK) {

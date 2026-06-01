@@ -31,12 +31,14 @@ esp_err_t CanResistor::init(gpio_num_t gpio_num) {
 
     esp_err_t err = resistor_gpio.init(gpio_num);
     if (err != ESP_OK) {
+        ESP_LOGE(TAG, "GPIO init failed on pin %d: %s", gpio_num, esp_err_to_name(err));
         return err;
     }
 
     resistor_gpio.set_on_change_callback(update_global_state);
     err = resistor_gpio.set(saved_state.read() != 0);
     if (err != ESP_OK) {
+        ESP_LOGE(TAG, "failed to restore saved state: %s", esp_err_to_name(err));
         return err;
     }
 
@@ -47,11 +49,13 @@ esp_err_t CanResistor::init(gpio_num_t gpio_num) {
 
 esp_err_t CanResistor::set(bool enabled) {
     if (!initialized_) {
+        ESP_LOGW(TAG, "set ignored before initialization");
         return ESP_ERR_INVALID_STATE;
     }
 
     esp_err_t err = resistor_gpio.set(enabled);
     if (err != ESP_OK) {
+        ESP_LOGE(TAG, "GPIO write failed: %s", esp_err_to_name(err));
         return err;
     }
 

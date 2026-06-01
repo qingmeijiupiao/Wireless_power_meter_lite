@@ -13,6 +13,7 @@
 #include "global_state.h"
 #include "hardware.h"
 #include "protect.h"
+#include "power_output.h"
 #include "st7735.h"
 #include "ui_manager.h"
 
@@ -20,6 +21,8 @@ namespace SCREEN {
 namespace {
 
 static constexpr const char* TAG = "screen_task";
+Button main_button;
+Button side_button;
 
 /**
  * @brief 从硬件配置生成 ST7735 初始化参数
@@ -45,6 +48,39 @@ bool post_button_event(ButtonId button, ButtonEvent event) {
     return UIManager::instance().post_button_event(button, event);
 }
 
+esp_err_t init_buttons() {
+    main_button.bind_event(ButtonEvent::SHORT_PRESS, []() {
+        if (!post_button_event(ButtonId::Main, ButtonEvent::SHORT_PRESS)) {
+            PowerOutput::toggle(TAG);
+        }
+    });
+    side_button.bind_event(ButtonEvent::SHORT_PRESS, []() {
+        post_button_event(ButtonId::Side, ButtonEvent::SHORT_PRESS);
+    });
+    side_button.bind_event(ButtonEvent::DOUBLE_CLICK, []() {
+        post_button_event(ButtonId::Side, ButtonEvent::DOUBLE_CLICK);
+    });
+    side_button.bind_event(ButtonEvent::LONG_PRESS, []() {
+        post_button_event(ButtonId::Side, ButtonEvent::LONG_PRESS);
+    });
+    side_button.bind_event(ButtonEvent::SUPER_LONG_PRESS, []() {
+        post_button_event(ButtonId::Side, ButtonEvent::SUPER_LONG_PRESS);
+    });
+
+    esp_err_t ret = main_button.setup(get_hardware_config().MAIN_BUTTON, true);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "main button init failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    ret = side_button.setup(get_hardware_config().SIDE_BUTTON, true);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "side button init failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    ESP_LOGI(TAG, "buttons initialized");
+    return ESP_OK;
+}
+
 void screen_task(void* arg) {
     (void)arg;
 
@@ -57,6 +93,7 @@ void screen_task(void* arg) {
     }
 
     if (!UIManager::instance().init()) {
+        ESP_LOGE(TAG, "UI manager init failed");
         vTaskDelete(nullptr);
         return;
     }
@@ -67,8 +104,14 @@ void screen_task(void* arg) {
     ST7735::copy_buffers();
     ST7735::sync_buffers();
 
-    while (!protect_init_ok()) {
+    constexpr uint32_t PROTECT_INIT_WAIT_MS = 1000;
+    uint32_t protect_wait_ms = 0;
+    while (!protect_init_ok() && protect_wait_ms < PROTECT_INIT_WAIT_MS) {
         vTaskDelay(pdMS_TO_TICKS(5));
+        protect_wait_ms += 5;
+    }
+    if (!protect_init_ok()) {
+        ESP_LOGW(TAG, "protect init timeout, starting display in degraded mode");
     }
 
     ESP_LOGI(TAG, "Screen task started");

@@ -31,7 +31,7 @@ public:
 private:
     ESPChipTemperatureSensor_t() = default;
 
-    void switchRange(uint8_t range_index);
+    esp_err_t switchRange(uint8_t range_index);
     int8_t checkswitchRange();
 
     temperature_sensor_handle_t tsens = nullptr;
@@ -42,6 +42,7 @@ private:
     int16_t absolute_min_temperature = 0;
     float temp_data = 0.0f;
     temperature_sensor_config_t tsens_config = {};
+    bool fault_reported = false;
 };
 
 #endif

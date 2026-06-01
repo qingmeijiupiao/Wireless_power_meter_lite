@@ -6,6 +6,7 @@ idf_component_register(
     REQUIRES
         blackbox
         blackbox_service
+        boot_diagnostics
         Temperature
         HXC_TWAI
         global_state

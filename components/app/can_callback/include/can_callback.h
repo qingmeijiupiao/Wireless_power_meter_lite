@@ -63,6 +63,9 @@ extern HXC::NVS_DATA<uint32_t> CAN_ID;
  */
 esp_err_t init();
 
+/** @brief Return whether the CAN controller completed initialization. */
+bool is_available();
+
 /**
  * @brief : 获取CAN对象实例
  * @return  {*}

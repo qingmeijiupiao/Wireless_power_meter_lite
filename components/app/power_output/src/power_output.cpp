@@ -95,7 +95,11 @@ esp_err_t init(gpio_num_t output_gpio_num) {
     }
 
     // 初始化 GPIO，默认关闭输出
-    ESP_ERROR_CHECK(_output_gpio.init(output_gpio_num));
+    esp_err_t ret = _output_gpio.init(output_gpio_num);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "GPIO init failed on pin %d: %s", output_gpio_num, esp_err_to_name(ret));
+        return ret;
+    }
     _output_gpio.set_on_change_callback([](bool value){
         auto& state = get_global_state();
         state.flags.bits.output_enabled = value;

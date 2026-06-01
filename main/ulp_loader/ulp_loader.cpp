@@ -87,15 +87,27 @@ esp_err_t LP_Core_Load(void){
     LP_CLKRST.lp_clk_conf.fast_clk_sel = 1; //IDF 6.0版本默认是内部RC时钟(17.5MHz)，且没有API可以切换到外部时钟源，需要手动操作寄存器切换到外部时钟源(20MHz)
 
     ESP_LOGI(LPTAG, "main core start init i2c...");
-    ESP_ERROR_CHECK(lp_core_i2c_master_init(LP_I2C_NUM_0, &i2c_cfg));
+    esp_err_t ret = lp_core_i2c_master_init(LP_I2C_NUM_0, &i2c_cfg);
+    if (ret != ESP_OK) {
+        ESP_LOGE(LPTAG, "LP I2C controller init failed: %s", esp_err_to_name(ret));
+        ESP_ERROR_CHECK(ret);
+    }
     ESP_LOGI(LPTAG, "main core init i2c success...");
 
     // 加载 LP 核二进制文件
-    ESP_ERROR_CHECK(ulp_lp_core_load_binary(bin_start, bin_end - bin_start));
+    ret = ulp_lp_core_load_binary(bin_start, bin_end - bin_start);
+    if (ret != ESP_OK) {
+        ESP_LOGE(LPTAG, "LP binary load failed: %s", esp_err_to_name(ret));
+        ESP_ERROR_CHECK(ret);
+    }
     ESP_LOGI(LPTAG, "lp core load binary success...");
 
 
-    ESP_ERROR_CHECK(ulp_lp_core_run(&lp_core_init_cfg)); 
+    ret = ulp_lp_core_run(&lp_core_init_cfg);
+    if (ret != ESP_OK) {
+        ESP_LOGE(LPTAG, "LP core start failed: %s", esp_err_to_name(ret));
+        ESP_ERROR_CHECK(ret);
+    }
     load_current_calib_params(false);
     int32_t timeout = 600;
     while (timeout-=10){

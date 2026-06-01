@@ -35,6 +35,7 @@ esp_err_t hardware_config_init(){
     esp_err_t ret = ESP_OK;
     ret = hardware_adc.init();
     if(ret != ESP_OK){
+        ESP_LOGE(TAG, "hardware version ADC init failed: %s", esp_err_to_name(ret));
         return ret;
     }
 
@@ -44,7 +45,7 @@ esp_err_t hardware_config_init(){
     for (int i = 0; i < 10; i++) {
         ret = hardware_adc.read_raw(adc_value);
         if(ret != ESP_OK){
-            ESP_LOGE(TAG, "ADC read failed, err: %d", esp_err_to_name(ret));
+            ESP_LOGE(TAG, "ADC read failed: %s", esp_err_to_name(ret));
             return ret;
         }
         if((abs(adc_value -(sum/i)) > 165) && (i > 0)){ // 与前一次的平均值差大于300mv，认为是异常值

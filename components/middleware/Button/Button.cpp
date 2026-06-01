@@ -32,7 +32,11 @@ esp_err_t Button::setup(gpio_num_t gpio_num, bool active_low) {
     io_conf.pin_bit_mask = (1ULL << _pin);
     io_conf.pull_down_en = active_low ? GPIO_PULLDOWN_DISABLE : GPIO_PULLDOWN_ENABLE;
     io_conf.pull_up_en = active_low ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE;
-    gpio_config(&io_conf);
+    esp_err_t ret = gpio_config(&io_conf);
+    if (ret != ESP_OK) {
+        ESP_LOGE("Button", "GPIO %d config failed: %s", gpio_num, esp_err_to_name(ret));
+        return ret;
+    }
 
     _evt_queue = xQueueCreate(5, sizeof(ButtonEvent));
     if (_evt_queue == nullptr) {
@@ -41,8 +45,7 @@ esp_err_t Button::setup(gpio_num_t gpio_num, bool active_low) {
     }
     
     // 2. 创建独立任务处理耗时回调，优先级为3
-    xTaskCreate(_event_task, "btn_task", 4096, this, 3, &_task_handle);
-    if (_task_handle == nullptr) {
+    if (xTaskCreate(_event_task, "btn_task", 4096, this, 3, &_task_handle) != pdPASS) {
         ESP_LOGE("Button", "Failed to create event task");
         return ESP_ERR_NO_MEM;
     }
@@ -53,7 +56,10 @@ esp_err_t Button::setup(gpio_num_t gpio_num, bool active_low) {
         ESP_LOGE("Button", "Failed to create scan timer");
         return ESP_ERR_NO_MEM;
     }
-    xTimerStart(_timer, 0);
+    if (xTimerStart(_timer, 0) != pdPASS) {
+        ESP_LOGE("Button", "Failed to start scan timer");
+        return ESP_ERR_INVALID_STATE;
+    }
     ESP_LOGI("Button", "Scan timer start");
     
     return ESP_OK;

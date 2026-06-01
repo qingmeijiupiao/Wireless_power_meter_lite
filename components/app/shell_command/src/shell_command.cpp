@@ -61,8 +61,10 @@ static void print_hex(const uint8_t* data, size_t len) {
 
 esp_err_t init() {
     auto& shell = Shell::instance();
-    if(shell.init() != ESP_OK){
-        return ESP_ERR_INVALID_STATE;
+    esp_err_t ret = shell.init();
+    if(ret != ESP_OK){
+        ESP_LOGE(TAG, "shell init failed: %s", esp_err_to_name(ret));
+        return ret;
     }
     /**
      * @brief  reboot - 重启设备

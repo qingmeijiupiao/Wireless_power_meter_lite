@@ -146,6 +146,7 @@ esp_err_t HXC_TWAI::setup() {
 
     esp_err_t ret = twai_new_node_onchip(&node_config, &twai_node_handle);
     if(ret != ESP_OK){
+        ESP_LOGE("TWAI", "node creation failed: %s", esp_err_to_name(ret));
         return ret;
     }
 
@@ -170,7 +171,10 @@ esp_err_t HXC_TWAI::setup() {
     user_cbs.on_state_change = on_state_change_callback;
     user_cbs.on_error = on_error_callback;
     ret = twai_node_register_event_callbacks(twai_node_handle, &user_cbs, this);
-    if(ret != ESP_OK) return ret;
+    if(ret != ESP_OK) {
+        ESP_LOGE("TWAI", "callback registration failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
 
     // 硬件过滤器配置
     if(user_set_filter){
@@ -183,14 +187,24 @@ esp_err_t HXC_TWAI::setup() {
 
     // 启动TWAI节点
     ret = twai_node_enable(twai_node_handle);
-    if (ret != ESP_OK) return ret;
+    if (ret != ESP_OK) {
+        ESP_LOGE("TWAI", "node enable failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
 
     // 创建软件接收队列
     rx_queue = xQueueCreate(TWAI_RX_QUEUE_LEN, sizeof(HXC_CAN_message_t));
-    if (rx_queue == nullptr) return ESP_FAIL;
+    if (rx_queue == nullptr) {
+        ESP_LOGE("TWAI", "RX queue creation failed");
+        return ESP_ERR_NO_MEM;
+    }
 
     // 创建异步处理任务
-    xTaskCreate(receive_task, "twai_rx_task", TWAI_RECEIVE_TASK_STACK, this, TWAI_RECEIVE_TASK_PRIO, &rx_task_handle);
+    if (xTaskCreate(receive_task, "twai_rx_task", TWAI_RECEIVE_TASK_STACK, this,
+                    TWAI_RECEIVE_TASK_PRIO, &rx_task_handle) != pdPASS) {
+        ESP_LOGE("TWAI", "RX task creation failed");
+        return ESP_ERR_NO_MEM;
+    }
     
     return ESP_OK;
 }

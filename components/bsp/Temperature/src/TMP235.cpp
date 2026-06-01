@@ -15,14 +15,24 @@ TMP235_t& TMP235_t::instance() {
 esp_err_t TMP235_t::init(adc_channel_t channel) {
     adc = new adc_t(channel);
     if (adc == nullptr) {
+        ESP_LOGE("TMP235", "ADC allocation failed");
         return ESP_ERR_NO_MEM;
     }
-    return adc->init();
+    esp_err_t ret = adc->init();
+    if (ret != ESP_OK) {
+        ESP_LOGE("TMP235", "ADC init failed: %s", esp_err_to_name(ret));
+        delete adc;
+        adc = nullptr;
+    }
+    return ret;
 }
 
 int16_t TMP235_t::getTemperature() {
     if (adc == nullptr) {
-        ESP_LOGE("TMP235", "adc not initialized");
+        if (!fault_reported) {
+            ESP_LOGE("TMP235", "adc not initialized");
+            fault_reported = true;
+        }
         return 0;
     }
     int adc_value_mv = 0;

@@ -52,15 +52,30 @@ HXC_TWAI& get_can_bus() {
     return *can_bus;
 }
 
+bool is_available() {
+    return can_bus != nullptr;
+}
+
 esp_err_t init() {
     auto& hw = get_hardware_config();
     auto& can_resistor = CanResistor::instance();
 
-    ESP_ERROR_CHECK(can_resistor.init(hw.CAN_RESISTOR_ENABLE));
+    esp_err_t ret = can_resistor.init(hw.CAN_RESISTOR_ENABLE);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "CAN resistor init failed on GPIO %d: %s",
+                 hw.CAN_RESISTOR_ENABLE, esp_err_to_name(ret));
+        return ret;
+    }
 
     
     can_bus = new HXC_TWAI(hw.CAN_TX, hw.CAN_RX, CAN_BAUDRATE.read());
-    ESP_ERROR_CHECK(can_bus->setup());
+    ret = can_bus->setup();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "CAN controller setup failed: %s", esp_err_to_name(ret));
+        delete can_bus;
+        can_bus = nullptr;
+        return ret;
+    }
 
     // ====== 回调列表 ======
 

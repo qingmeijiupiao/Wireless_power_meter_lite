@@ -413,8 +413,8 @@ esp_err_t diagnostics_handler(WebServer::Request* request) {
     }
     twai_node_status_t can_status = {};
     twai_node_record_t can_statistics = {};
-    HXC_TWAI& can = CanCallback::get_can_bus();
-    const bool can_info_available = can.get_info(&can_status, &can_statistics) == ESP_OK;
+    HXC_TWAI* can = CanCallback::is_available() ? &CanCallback::get_can_bus() : nullptr;
+    const bool can_info_available = can != nullptr && can->get_info(&can_status, &can_statistics) == ESP_OK;
     snprintf(response_buffer, sizeof(response_buffer),
         "{\"ina226\":{\"current_register_raw\":%d,\"voltage_register_raw\":%u,\"available\":%s},\"can\":{\"info_available\":%s,\"state\":%u,\"tx_error_count\":%u,\"rx_error_count\":%u,\"bus_error_count\":%lu,\"bus_off_count\":%lu,\"tx_failed_count\":%lu,\"rx_overflow_count\":%lu}}\n",
         current_register_raw == nullptr ? 0 : *current_register_raw,
@@ -425,9 +425,9 @@ esp_err_t diagnostics_handler(WebServer::Request* request) {
         static_cast<unsigned>(can_status.tx_error_count),
         static_cast<unsigned>(can_status.rx_error_count),
         static_cast<unsigned long>(can_statistics.bus_err_num),
-        static_cast<unsigned long>(can.get_bus_off_count()),
-        static_cast<unsigned long>(can.get_tx_failed_count()),
-        static_cast<unsigned long>(can.get_rx_overflow_count()));
+        can == nullptr ? 0UL : static_cast<unsigned long>(can->get_bus_off_count()),
+        can == nullptr ? 0UL : static_cast<unsigned long>(can->get_tx_failed_count()),
+        can == nullptr ? 0UL : static_cast<unsigned long>(can->get_rx_overflow_count()));
     return WebServer::send_json(request, response_buffer);
 }
 

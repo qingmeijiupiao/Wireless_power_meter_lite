@@ -104,7 +104,10 @@ bool ulp_ina226_init(){
         ulp_state_p.ulp_state_bits.ulp_i2c_init_err = true;
         return false;
     }
-    ina226_run();
+    while(voltage_uv == 0){
+        ina226_run();
+        ulp_lp_core_delay_us(100);
+    }
     ulp_state_p.ulp_state_bits.ulp_ina226_init_ok = true;
     return true;
 };

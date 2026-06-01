@@ -41,7 +41,15 @@ esp_err_t adc_t::init(){
         ESP_LOGD("ADC", "adc_oneshot_new_unit success");
     }
     ret = adc_oneshot_config_channel(adc1_unit_handle, adc_channel, &config);
+    if (ret != ESP_OK) {
+        ESP_LOGE("ADC", "adc_oneshot_config_channel failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    cali_config.chan = adc_channel;
     ret = adc_cali_create_scheme_curve_fitting(&cali_config, &cali_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE("ADC", "adc calibration init failed: %s", esp_err_to_name(ret));
+    }
     return ret;
 }
 
@@ -62,6 +70,10 @@ esp_err_t adc_t::read_raw(int& raw){
 }
 
 esp_err_t adc_t::read_voltage_mV(int& voltage){
+    if (cali_handle == nullptr) {
+        ESP_LOGE("ADC", "calibration handle unavailable");
+        return ESP_ERR_INVALID_STATE;
+    }
     esp_err_t ret = ESP_OK;
 
     int adc_value = 0;

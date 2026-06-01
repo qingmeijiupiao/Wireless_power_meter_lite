@@ -11,6 +11,7 @@
 #include <stdint.h>
 
 #include "Button.h"
+#include "esp_err.h"
 
 namespace SCREEN {
 
@@ -29,6 +30,9 @@ enum class ButtonId : uint8_t {
  * @param arg FreeRTOS 任务参数，当前未使用
  */
 void screen_task(void* arg);
+
+/** @brief Bind application button routes and initialize their GPIO inputs. */
+esp_err_t init_buttons();
 
 /**
  * @brief 向屏幕任务投递按键事件

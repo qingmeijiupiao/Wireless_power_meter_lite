@@ -41,7 +41,10 @@ esp_err_t Shell::init() {
     console_config.hint_bold = 0;
     
     esp_err_t ret = esp_console_init(&console_config);
-    if (ret != ESP_OK) return ret;
+    if (ret != ESP_OK) {
+        ESP_LOGE("Shell", "console init failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
 
     // === 配置 linenoise 核心交互引擎 ===
     linenoiseSetMultiLine(1);
@@ -75,9 +78,15 @@ esp_err_t Shell::init() {
             esp_vfs_dev_usb_serial_jtag_set_rx_line_endings(ESP_LINE_ENDINGS_CR);
             esp_vfs_dev_usb_serial_jtag_set_tx_line_endings(ESP_LINE_ENDINGS_CRLF);
         #endif
+    } else {
+        ESP_LOGW("Shell", "USB serial JTAG driver unavailable: %s", esp_err_to_name(err));
     }
 
-    xTaskCreate(listener_task, "listener_task", SHELL_TASK_STACK_SIZE, this, SHELL_TASK_PRIORITY, &listener_task_handle_);
+    if (xTaskCreate(listener_task, "listener_task", SHELL_TASK_STACK_SIZE, this,
+                    SHELL_TASK_PRIORITY, &listener_task_handle_) != pdPASS) {
+        ESP_LOGE("Shell", "listener task creation failed");
+        return ESP_ERR_NO_MEM;
+    }
     ESP_LOGI("Shell", "Shell initialized successfully");
     return ESP_OK;
 }
