@@ -47,7 +47,7 @@ flowchart LR
 | `flags` | `GlobalStateFlags` | 诊断状态位 |
 | `protect_states` | `protect_states_t` | 四路保护状态 |
 | `voltage_mV` / `current_uA` | 整数 | 电压与电流 |
-| `meter_mwh` | `int32_t` | LP Core 开机以来累计能量 |
+| `meter_mwh` | `float` | LP Core 开机以来累计能量，单位 mWh |
 | `board_temperature` / `chip_temperature` | `int16_t` | 温度，单位 0.01°C |
 
 不要直接持久化 `GlobalState`。字段语义变化时新增快照版本，并在读取端分版本解析。

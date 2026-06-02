@@ -113,14 +113,14 @@ bool append_snapshot(size_t* pos, const Blackbox::Record& record) {
     memcpy(&snapshot, record.payload.bytes, sizeof(snapshot));
     return append_checked(pos,
         ",\"snapshot\":{\"version\":%u,\"flags\":%lu,\"protect\":%u,"
-        "\"voltage_mv\":%u,\"current_ua\":%ld,\"meter_mwh\":%ld,"
+        "\"voltage_mv\":%u,\"current_ua\":%ld,\"meter_mwh\":%.3f,"
         "\"board_temp_c\":%.2f,\"chip_temp_c\":%.2f}",
         static_cast<unsigned>(snapshot.version),
         static_cast<unsigned long>(snapshot.flags.raw),
         static_cast<unsigned>(snapshot.protect_states.protect_states_raw),
         static_cast<unsigned>(snapshot.voltage_mV),
         static_cast<long>(snapshot.current_uA),
-        static_cast<long>(snapshot.meter_mwh),
+        snapshot.meter_mwh,
         snapshot.board_temperature / 100.0,
         snapshot.chip_temperature / 100.0);
 }

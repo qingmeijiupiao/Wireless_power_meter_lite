@@ -114,8 +114,8 @@ void append_runtime() {
                      ip.octet3,
                      ip.octet4);
     append_boot_line("boot: runtime ina226_raw_i=%d ina226_raw_v=%u flags=0x%lx",
-                     current_register_raw == nullptr ? 0 : *current_register_raw,
-                     voltage_register_raw == nullptr ? 0U : *voltage_register_raw,
+                     global_state.current_register_raw,
+                     global_state.voltage_register_raw,
                      static_cast<unsigned long>(global_state.flags.raw));
 }
 

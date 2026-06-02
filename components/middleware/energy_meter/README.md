@@ -21,8 +21,8 @@
 
 ```mermaid
 flowchart LR
-    LP["LP Core lifetime counters"] --> GS["GlobalState meter_uah / meter_uwh"]
-    GS --> Meter["EnergyMeter baseline"]
+    LP["LP Core int64 lifetime counters"] --> Cache["HP int64 meter cache"]
+    Cache --> Meter["EnergyMeter baseline"]
     Meter --> Screen["screen"]
     Meter --> Web["web_backend"]
     Meter --> Shell["shell_command"]

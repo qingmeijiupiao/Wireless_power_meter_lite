@@ -291,8 +291,9 @@ esp_err_t init() {
                    static_cast<unsigned long long>((meter_seconds / 60) % 60),
                    static_cast<unsigned long long>(meter_seconds % 60));
             printf("LP Core lifetime counters:\n");
-            printf("  energy:       %ld uWh\n", static_cast<long>(state.meter_uwh));
-            printf("  charge:       %ld uAh\n", static_cast<long>(state.meter_uah));
+            const EnergyMeter::Snapshot lifetime = EnergyMeter::lifetime_snapshot();
+            printf("  energy:       %lld uWh\n", static_cast<long long>(lifetime.energy_uwh));
+            printf("  charge:       %lld uAh\n", static_cast<long long>(lifetime.charge_uah));
             printf("System:\n");
             printf("  uptime:       %llu ms (%02llu:%02llu:%02llu)\n",
                    static_cast<unsigned long long>(system_time_ms),
@@ -740,7 +741,11 @@ esp_err_t init() {
      */
     shell.register_command(ShellCommand_t("ina226_register", "Get ina226 register value", "",
         [](int argc, char** argv) -> int {
-            printf("ina226_register_raw current: %d, voltage: %d\n", *current_register_raw, *voltage_register_raw);
+            const auto& state = get_global_state();
+            printf("ina226_register_raw current: %d, voltage: %u, available: %u\n",
+                   state.current_register_raw,
+                   state.voltage_register_raw,
+                   state.flags.bits.lp_ina226_initialized);
             return 0;
         }));
 

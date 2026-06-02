@@ -106,6 +106,7 @@ flowchart TD
 | 变量 | 类型 | 单位 | 方向 | 说明 |
 |------|------|------|------|------|
 | `ulp_state` | `uint32_t` | - | LP -> HP，HP 可清零/置重载位 | 状态位集合 |
+| `shared_lock` | `ulp_lp_core_spinlock_t` | - | HP <-> LP | 保护 RTC 共享变量快照 |
 | `log_data` | `uint32_t` | - | LP -> HP | 预留 LP 日志数据 |
 | `core_run_freq_hz` | `uint32_t` | Hz | LP -> HP | LP 主循环频率统计 |
 | `voltage_uv` | `uint32_t` | uV | LP -> HP | 总线电压 |
@@ -114,8 +115,8 @@ flowchart TD
 | `shunt_register_raw` | `int16_t` | raw | LP -> HP | INA226 分流电压原始值 |
 | `ina226_manufacturer_id` | `uint16_t` | raw | LP -> HP | INA226 厂商 ID |
 | `Board_temperature` | `int32_t` | 0.01 摄氏度 | HP -> LP | 板温，用于温漂补偿 |
-| `meter_uah` | `int32_t` | uAh | LP -> HP | 累计电量 |
-| `meter_uwh` | `int32_t` | uWh | LP -> HP | 累计能量 |
+| `meter_uah` | `int64_t` | uAh | LP -> HP | 累计电量 |
+| `meter_uwh` | `int64_t` | uWh | LP -> HP | 累计能量 |
 | `current_calib_params` | `CurrentCalib::params_t` | - | HP -> LP | 校准参数 |
 
 ## 状态位
@@ -141,6 +142,7 @@ flowchart TD
 ## 注意事项
 
 - LP 核侧尽量使用整数运算，新增逻辑前要评估代码体积和执行开销。
+- HP 与 LP 之间通过 `shared_lock` 复制或提交 RTC 共享变量，持锁范围不包含 I2C 操作和插值计算。
 - `voltage_uv` 是 uV，HP 核写入 `global_state` 时除以 `1000` 转换为 mV。
 - `current_uA` 已包含死区、插值和温漂补偿，不是 INA226 原始寄存器值。
 - INA226 连续 1 秒没有完整采样时会设置 `ulp_ina226_read_timeout`，同时将电压、电流清零，触发现有 UVP 保守关断链路。

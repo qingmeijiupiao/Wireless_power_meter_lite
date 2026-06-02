@@ -77,8 +77,8 @@ static void check_mos_fault() {
  */
 static void append_state_change_event(const char* channel, ProtectState_t last_state, ProtectState_t new_state,
                                       float value, const protect_threshold_t& threshold) {
-    const int current_raw = current_register_raw == nullptr ? 0 : *current_register_raw;
-    const unsigned voltage_raw = voltage_register_raw == nullptr ? 0U : *voltage_register_raw;
+    const int current_raw = glb_states.current_register_raw;
+    const unsigned voltage_raw = glb_states.voltage_register_raw;
     BlackboxService::append_event("protect: channel=%s state=%u->%u value_milli=%ld warn=%ld protect=%ld bypass=%u output=%u raw_i=%d raw_v=%u",
                                   channel,
                                   static_cast<unsigned>(last_state),

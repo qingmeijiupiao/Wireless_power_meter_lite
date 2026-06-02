@@ -32,7 +32,7 @@ esp_err_t append_snapshot(bool force) {
         .protect_states = global_state_ref.protect_states,
         .voltage_mV = global_state_ref.voltage_mV,
         .current_uA = global_state_ref.current_uA,
-        .meter_mwh = global_state_ref.meter_uwh / 1000,
+        .meter_mwh = global_state_ref.meter_mwh,
         .board_temperature = global_state_ref.board_temperature,
         .chip_temperature = global_state_ref.chip_temperature,
     };

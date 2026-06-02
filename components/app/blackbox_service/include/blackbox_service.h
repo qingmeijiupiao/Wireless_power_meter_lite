@@ -24,7 +24,7 @@ struct SnapshotV1 {
     protect_states_t protect_states;
     uint16_t voltage_mV;
     int32_t current_uA;
-    int32_t meter_mwh;
+    float meter_mwh;
     int16_t board_temperature;
     int16_t chip_temperature;
 } __attribute__((packed));

@@ -27,6 +27,12 @@ struct Snapshot {
  */
 Snapshot snapshot();
 
+/** @brief 获取 LP Core 自启动以来的精确累计值。 */
+Snapshot lifetime_snapshot();
+
+/** @brief 更新来自 LP Core 的精确累计值。 */
+void update_lifetime(int64_t charge_uah, int64_t energy_uwh);
+
 /**
  * @brief 将当前 LP Core 累计值设置为新的共享计量基线。
  *

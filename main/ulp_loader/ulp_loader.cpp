@@ -7,6 +7,7 @@
  */
 #include "ulp_loader.h"
 #include "ulp_lp_core.h"
+#include "ulp_lp_core_critical_section_shared.h"
 #include "ulp_main.h"
 #include "esp_log.h"
 #include "esp_task.h"
@@ -17,6 +18,7 @@
 #include "current_calibration.h"
 #include "global_state.h"
 #include "blackbox_service.h"
+#include <stddef.h>
 const char *LPTAG = "LP_CORE";
 
 ulp_lp_core_cfg_t lp_core_init_cfg={
@@ -39,13 +41,55 @@ const lp_core_i2c_cfg_t i2c_cfg={
 
 HXC::NVS_DATA<CurrentCalib::params_t> CurrentCalib::params_data("CUR_CAL", CurrentCalib::DEFAULT);
 CurrentCalib::params_t* ulp_calib_params = reinterpret_cast<CurrentCalib::params_t*>(ulp_current_calib_params);
+ulp_lp_core_spinlock_t* rtc_shared_lock =
+    reinterpret_cast<ulp_lp_core_spinlock_t*>(static_cast<void*>(&ulp_shared_lock));
 
 extern "C" {
     extern const uint8_t bin_start[] asm("_binary_ulp_main_bin_start");
     extern const uint8_t bin_end[]   asm("_binary_ulp_main_bin_end");
 }
 
-ULP_CORE_STATE& ulp_state = *(ULP_CORE_STATE*)&(ulp_ulp_state);
+static bool shared_lock_ready = false;
+
+static int64_t read_shared_int64(volatile uint32_t* symbol) {
+    // mapgen 将 LP 的 int64_t 导出为两个 uint32_t。按字节读取可避免 strict-aliasing 问题。
+    int64_t value = 0;
+    volatile uint8_t* source = reinterpret_cast<volatile uint8_t*>(symbol);
+    uint8_t* destination = reinterpret_cast<uint8_t*>(&value);
+    for (size_t i = 0; i < sizeof(value); ++i) {
+        destination[i] = source[i];
+    }
+    return value;
+}
+
+bool LP_Core_GetSnapshot(LP_Core_Snapshot* snapshot) {
+    if (!shared_lock_ready || snapshot == nullptr) {
+        return false;
+    }
+    // 在同一个跨核临界区复制全部 RTC 字段，避免读到撕裂的 64 位值或混合批次样本。
+    ulp_lp_core_enter_critical(rtc_shared_lock);
+    snapshot->state.ulp_state_raw = ulp_ulp_state;
+    snapshot->log_data = ulp_log_data;
+    snapshot->voltage_uv = ulp_voltage_uv;
+    snapshot->current_uA = static_cast<int32_t>(ulp_current_uA);
+    snapshot->shunt_register_raw = static_cast<int16_t>(ulp_shunt_register_raw);
+    snapshot->voltage_register_raw = static_cast<uint16_t>(ulp_voltage_register_raw);
+    snapshot->ina226_manufacturer_id = static_cast<uint16_t>(ulp_ina226_manufacturer_id);
+    snapshot->meter_uah = read_shared_int64(ulp_meter_uah);
+    snapshot->meter_uwh = read_shared_int64(ulp_meter_uwh);
+    ulp_lp_core_exit_critical(rtc_shared_lock);
+    return true;
+}
+
+void LP_Core_SetBoardTemperature(int32_t temperature) {
+    if (!shared_lock_ready) {
+        return;
+    }
+    // 板温由 HP 核采集，LP 核在下次电流补偿时读取。
+    ulp_lp_core_enter_critical(rtc_shared_lock);
+    ulp_Board_temperature = static_cast<uint32_t>(temperature);
+    ulp_lp_core_exit_critical(rtc_shared_lock);
+}
 
 /**
  * @brief : 打印 LP 核日志
@@ -54,9 +98,12 @@ ULP_CORE_STATE& ulp_state = *(ULP_CORE_STATE*)&(ulp_ulp_state);
  */
 void print_lp_core_log_task(void* arg){
     while (1){
-        if (ulp_state.ulp_state_bits.ulp_have_log){
-            ESP_LOGI(LPTAG, "lp core log: %ld", ulp_log_data);
-            ulp_state.ulp_state_bits.ulp_have_log = false;
+        LP_Core_Snapshot snapshot = {};
+        if (LP_Core_GetSnapshot(&snapshot) && snapshot.state.ulp_state_bits.ulp_have_log){
+            ESP_LOGI(LPTAG, "lp core log: %ld", snapshot.log_data);
+            ulp_lp_core_enter_critical(rtc_shared_lock);
+            reinterpret_cast<ULP_CORE_STATE*>(&ulp_ulp_state)->ulp_state_bits.ulp_have_log = false;
+            ulp_lp_core_exit_critical(rtc_shared_lock);
         }
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
@@ -68,14 +115,17 @@ void print_lp_core_log_task(void* arg){
  * @param {bool} need_flag 是否需要设置校准参数标志位
  */
 void load_current_calib_params(bool need_flag = true){
-    *ulp_calib_params = CurrentCalib::params_data.read();
-    BlackboxService::append_event("lp: calib_loaded base_k=%u temperature_k=%d reload=%u",
-                                  static_cast<unsigned>(ulp_calib_params->current_base_K),
-                                  ulp_calib_params->temperature_K,
-                                  need_flag ? 1U : 0U);
+    const CurrentCalib::params_t params = CurrentCalib::params_data.read();
+    ulp_lp_core_enter_critical(rtc_shared_lock);
+    *ulp_calib_params = params;
     if(need_flag){
-        ulp_state.ulp_state_bits.ulp_reload_calib_params = true;
+        reinterpret_cast<ULP_CORE_STATE*>(&ulp_ulp_state)->ulp_state_bits.ulp_reload_calib_params = true;
     }
+    ulp_lp_core_exit_critical(rtc_shared_lock);
+    BlackboxService::append_event("lp: calib_loaded base_k=%u temperature_k=%d reload=%u",
+                                  static_cast<unsigned>(params.current_base_K),
+                                  params.temperature_K,
+                                  need_flag ? 1U : 0U);
 }
 
 
@@ -83,7 +133,6 @@ esp_err_t LP_Core_Load(void){
     ESP_LOGI(LPTAG, "main core start init lp core...");
     BlackboxService::append_event("lp: init_start i2c_hz=%lu",
                                   static_cast<unsigned long>(i2c_cfg.i2c_timing_cfg.clk_speed_hz));
-    ulp_state.ulp_state_raw = 0; // 初始化 LP 核状态
     LP_CLKRST.lp_clk_conf.fast_clk_sel = 1; //IDF 6.0版本默认是内部RC时钟(17.5MHz)，且没有API可以切换到外部时钟源，需要手动操作寄存器切换到外部时钟源(20MHz)
 
     ESP_LOGI(LPTAG, "main core start init i2c...");
@@ -102,25 +151,33 @@ esp_err_t LP_Core_Load(void){
     }
     ESP_LOGI(LPTAG, "lp core load binary success...");
 
+    ulp_lp_core_spinlock_init(rtc_shared_lock);
+    shared_lock_ready = true;
+    ulp_ulp_state = 0;
+    load_current_calib_params(false);
 
     ret = ulp_lp_core_run(&lp_core_init_cfg);
     if (ret != ESP_OK) {
         ESP_LOGE(LPTAG, "LP core start failed: %s", esp_err_to_name(ret));
         ESP_ERROR_CHECK(ret);
     }
-    load_current_calib_params(false);
     int32_t timeout = 600;
     while (timeout-=10){
-        if(ulp_state.ulp_state_bits.ulp_run && ulp_state.ulp_state_bits.ulp_ina226_init_ok){
+        LP_Core_Snapshot snapshot = {};
+        if(LP_Core_GetSnapshot(&snapshot) &&
+           snapshot.state.ulp_state_bits.ulp_run &&
+           snapshot.state.ulp_state_bits.ulp_ina226_init_ok){
             break;
         }
         vTaskDelay(10/ portTICK_PERIOD_MS);
     }
 
-    if(ulp_state.ulp_state_bits.ulp_i2c_init_err){
+    LP_Core_Snapshot snapshot = {};
+    LP_Core_GetSnapshot(&snapshot);
+    if(snapshot.state.ulp_state_bits.ulp_i2c_init_err){
         ESP_LOGE(LPTAG, "INA226 unavailable: communication failed");
         BlackboxService::append_event("lp: ina226_unavailable reason=communication_failed manufacturer=0x%04x",
-                                      static_cast<unsigned>(ulp_ina226_manufacturer_id));
+                                      static_cast<unsigned>(snapshot.ina226_manufacturer_id));
     }else{
         ESP_LOGI(LPTAG, "lp core i2c init success...");
     }
@@ -130,13 +187,12 @@ esp_err_t LP_Core_Load(void){
         BlackboxService::append_event("lp: run_timeout");
         return ESP_ERR_TIMEOUT;
     }else{
-        current_register_raw = (int16_t*)&ulp_shunt_register_raw;
-        voltage_register_raw = (uint16_t*)&ulp_voltage_register_raw;
         ESP_LOGI(LPTAG, "lp core run success...");
-        ESP_LOGI(LPTAG, "first read value: voltageuV=%d currentuA=%d", ulp_voltage_uv, ulp_current_uA);
+        LP_Core_GetSnapshot(&snapshot);
+        ESP_LOGI(LPTAG, "first read value: voltageuV=%d currentuA=%d", snapshot.voltage_uv, snapshot.current_uA);
         BlackboxService::append_event("lp: run_ok voltage_uv=%ld current_ua=%ld",
-                                      static_cast<long>(ulp_voltage_uv),
-                                      static_cast<long>(ulp_current_uA));
+                                      static_cast<long>(snapshot.voltage_uv),
+                                      static_cast<long>(snapshot.current_uA));
     }
 
     xTaskCreate(print_lp_core_log_task, "print_lp_core_log", 2048, NULL, 4, NULL);

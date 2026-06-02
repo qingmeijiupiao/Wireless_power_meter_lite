@@ -12,8 +12,23 @@
 #include "esp_err.h"
 #include "ulp_main.h"
 #include "ulp_app/ulp_state.h"
+#include <stdint.h>
 
 esp_err_t LP_Core_Load(void);
-extern ULP_CORE_STATE& ulp_state;
+
+struct LP_Core_Snapshot {
+    ULP_CORE_STATE state;
+    uint32_t log_data;
+    uint32_t voltage_uv;
+    int32_t current_uA;
+    int16_t shunt_register_raw;
+    uint16_t voltage_register_raw;
+    uint16_t ina226_manufacturer_id;
+    int64_t meter_uah;
+    int64_t meter_uwh;
+};
+
+bool LP_Core_GetSnapshot(LP_Core_Snapshot* snapshot);
+void LP_Core_SetBoardTemperature(int32_t temperature);
 
 #endif // ULP_LOADER_HPP

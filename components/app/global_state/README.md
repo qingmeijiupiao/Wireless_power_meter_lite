@@ -40,8 +40,8 @@ classDiagram
         +protect_states_t protect_states
         +uint16_t voltage_mV
         +int32_t current_uA
-        +int32_t meter_uah
-        +int32_t meter_uwh
+        +float meter_mah
+        +float meter_mwh
         +int16_t board_temperature
         +int16_t chip_temperature
     }
@@ -62,8 +62,8 @@ classDiagram
 | `protect_states` | `protect_states_t` | - | `protect` 写入的保护状态 |
 | `voltage_mV` | `uint16_t` | mV | LP 核测量值转换后写入 |
 | `current_uA` | `int32_t` | uA | LP 核测量值，正负号表示方向 |
-| `meter_uah` | `int32_t` | uAh | LP 核累计电量 |
-| `meter_uwh` | `int32_t` | uWh | LP 核累计能量 |
+| `meter_mah` | `float` | mAh | LP 核累计电量的展示值 |
+| `meter_mwh` | `float` | mWh | LP 核累计能量的展示值 |
 | `board_temperature` | `int16_t` | 0.01 摄氏度 | TMP235 板载传感器 |
 | `chip_temperature` | `int16_t` | 0.01 摄氏度 | ESP 芯片内部传感器 |
 
@@ -115,7 +115,8 @@ state.flags.bits.screen_initialized = true;
 - `get_global_state()` 返回引用，不会复制结构体。
 - 当前组件没有互斥锁。已有调用以简单整数读写为主；新增复杂的跨字段一致性要求时，需要评估并发保护。
 - 单位不要混用：温度是 `0.01 摄氏度`，电流是 `uA`，电压是 `mV`。
-- `current_register_raw` 和 `voltage_register_raw` 是 LP 核启动成功后绑定的调试指针，不属于 `GlobalState` 的实时字段。
+- `energy_meter` 保留精确的 `int64_t uAh/uWh` HP 缓存，供可重置计量会话使用。
+- INA226 原始寄存器随主状态一起同步，业务模块不会绕过跨核锁直接读取 RTC 内存。
 
 ## 环境与依赖
 

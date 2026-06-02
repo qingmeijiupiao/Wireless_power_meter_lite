@@ -39,16 +39,15 @@ struct GlobalState{
     protect_states_t protect_states;
     uint16_t voltage_mV; 
     int32_t current_uA;
-    int32_t meter_uah;
-    int32_t meter_uwh;
+    float meter_mah;
+    float meter_mwh;
     int16_t board_temperature;  //单位为0.01摄氏度
     int16_t chip_temperature;   //单位为0.01摄氏度
+    int16_t current_register_raw;
+    uint16_t voltage_register_raw;
 };
-static_assert(sizeof(GlobalState) == 24, "GlobalState size mismatch");
+static_assert(sizeof(GlobalState) == 28, "GlobalState size mismatch");
 
 GlobalState& get_global_state();
-
-extern int16_t* current_register_raw;
-extern uint16_t* voltage_register_raw;
 
 #endif

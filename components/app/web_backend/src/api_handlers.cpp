@@ -476,10 +476,9 @@ esp_err_t calibration_handler(WebServer::Request* request) {
 
 /** @brief GET /api/diagnostics，返回底层采样寄存器等诊断数据。 */
 esp_err_t diagnostics_handler(WebServer::Request* request) {
-    if (current_register_raw == nullptr || voltage_register_raw == nullptr) {
-        ESP_LOGW(TAG, "INA226 diagnostics unavailable: current_raw=%p voltage_raw=%p",
-            static_cast<void*>(current_register_raw),
-            static_cast<void*>(voltage_register_raw));
+    const auto& state = get_global_state();
+    if (!state.flags.bits.lp_ina226_initialized) {
+        ESP_LOGW(TAG, "INA226 diagnostics unavailable");
     }
     twai_node_status_t can_status = {};
     twai_node_record_t can_statistics = {};
@@ -487,9 +486,9 @@ esp_err_t diagnostics_handler(WebServer::Request* request) {
     const bool can_info_available = can != nullptr && can->get_info(&can_status, &can_statistics) == ESP_OK;
     snprintf(response_buffer, sizeof(response_buffer),
         "{\"ina226\":{\"current_register_raw\":%d,\"voltage_register_raw\":%u,\"available\":%s},\"can\":{\"info_available\":%s,\"state\":%u,\"tx_error_count\":%u,\"rx_error_count\":%u,\"bus_error_count\":%lu,\"bus_off_count\":%lu,\"tx_failed_count\":%lu,\"rx_overflow_count\":%lu}}\n",
-        current_register_raw == nullptr ? 0 : *current_register_raw,
-        voltage_register_raw == nullptr ? 0 : *voltage_register_raw,
-        (current_register_raw != nullptr && voltage_register_raw != nullptr) ? "true" : "false",
+        state.current_register_raw,
+        state.voltage_register_raw,
+        state.flags.bits.lp_ina226_initialized ? "true" : "false",
         can_info_available ? "true" : "false",
         static_cast<unsigned>(can_status.state),
         static_cast<unsigned>(can_status.tx_error_count),
