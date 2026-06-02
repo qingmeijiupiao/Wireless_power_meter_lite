@@ -276,7 +276,8 @@ esp_err_t start_logo_handler(WebServer::Request* request) {
         }
 
         uint32_t duration_ms = 0;
-        if (!json_get_uint32(request->body, "duration_ms", &duration_ms)) {
+        if (!json_get_uint32(request->body, "duration_ms", &duration_ms) ||
+            duration_ms > SCREEN::MAX_START_LOGO_DURATION_MS) {
             return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"invalid_duration_ms\"}\n", strlen("{\"ok\":false,\"reason\":\"invalid_duration_ms\"}\n"));
         }
 

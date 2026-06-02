@@ -52,11 +52,12 @@ bool post_button_event(ButtonId button, ButtonEvent event) {
 }
 
 uint32_t get_start_logo_duration_ms() {
-    return start_logo_duration_ms.read();
+    const uint32_t duration_ms = start_logo_duration_ms.read();
+    return duration_ms > MAX_START_LOGO_DURATION_MS ? MAX_START_LOGO_DURATION_MS : duration_ms;
 }
 
 void set_start_logo_duration_ms(uint32_t duration_ms) {
-    start_logo_duration_ms = duration_ms;
+    start_logo_duration_ms = duration_ms > MAX_START_LOGO_DURATION_MS ? MAX_START_LOGO_DURATION_MS : duration_ms;
 }
 
 esp_err_t init_buttons() {

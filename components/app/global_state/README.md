@@ -82,7 +82,7 @@ classDiagram
 | `lp_core_running` | `app_main` | LP 核是否已运行 |
 | `lp_ina226_initialized` | `app_main` | LP 核侧 INA226 是否初始化成功 |
 | `lp_i2c_error` | `app_main` | LP 核 I2C 初始化或访问是否出现错误 |
-| `lp_ina226_read_timeout` | `app_main` | 预留的 INA226 读取超时状态 |
+| `lp_ina226_read_timeout` | `app_main` | INA226 连续 1 秒没有完整采样 |
 | `wifi_service_initialized` | `wifi_service` | WiFi 服务是否初始化 |
 | `wifi_enabled` | `wifi_service` | WiFi 是否启用 |
 | `wifi_sta_connected` | `wifi_service` | STA 是否连接路由器 |
@@ -93,7 +93,7 @@ classDiagram
 | `screen_initialized` | `screen` | 屏幕是否初始化完成 |
 | `blackbox_enabled` | `app_main` | 黑匣子是否可用 |
 
-> 注意：`lp_ina226_read_timeout` 已在结构中保留，但当前 LP 核代码没有置位它。不要把它当成已经实现的超时告警。
+> `lp_ina226_read_timeout` 置位时 LP 核会清零电压、电流，复用 UVP 链路执行保守关断；完整采样恢复后自动清零。
 
 ## 使用方式
 

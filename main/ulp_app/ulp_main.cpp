@@ -43,17 +43,47 @@ static void lp_log(uint32_t log){
 
 uint32_t last_ina226_run_ms = 0;
 uint16_t mask_enable = 0;
-void ina226_run(){
-    INA226::read_register(INA226::Register_enum::INA226_MASK_ENABLE,&mask_enable);
-    if(!(mask_enable & (1 << 3))){ //CNVR位为0，说明没有转换完成
+constexpr uint32_t INA226_READ_TIMEOUT_MS = 1000;
+
+void check_ina226_timeout(){
+    if ((now_time_ms - last_ina226_run_ms) <= INA226_READ_TIMEOUT_MS) {
         return;
     }
+
+    // 采样失效后不再暴露陈旧值。电压清零会让 HP 核的 UVP 链路关闭输出。
+    voltage_uv = 0;
+    current_uA = 0;
+    ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout = true;
+}
+
+void ina226_run(){
+    if (INA226::read_register(INA226::Register_enum::INA226_MASK_ENABLE, &mask_enable) != ESP_OK) {
+        check_ina226_timeout();
+        return;
+    }
+    if(!(mask_enable & (1 << 3))){ //CNVR位为0，说明没有转换完成
+        check_ina226_timeout();
+        return;
+    }
+
+    uint16_t new_voltage_register_raw = 0;
+    int16_t new_shunt_register_raw = 0;
     /* 读取电压寄存器 */
-    INA226::read_register(INA226::Register_enum::INA226_BUS_VOLTAGE, (uint16_t*)&voltage_register_raw);
-    voltage_uv = voltage_register_raw*voltage_scale;
+    if (INA226::read_register(INA226::Register_enum::INA226_BUS_VOLTAGE, &new_voltage_register_raw) != ESP_OK) {
+        check_ina226_timeout();
+        return;
+    }
 
     /* 读取电流寄存器 */
-    INA226::read_register(INA226::Register_enum::INA226_SHUNT_VOLTAGE, (uint16_t*)&shunt_register_raw);
+    if (INA226::read_register(INA226::Register_enum::INA226_SHUNT_VOLTAGE,
+                              (uint16_t*)&new_shunt_register_raw) != ESP_OK) {
+        check_ina226_timeout();
+        return;
+    }
+
+    voltage_register_raw = new_voltage_register_raw;
+    shunt_register_raw = new_shunt_register_raw;
+    voltage_uv = voltage_register_raw*voltage_scale;
     if(std::abs((int32_t)shunt_register_raw * current_calib_params.current_base_K) < current_dead_zone_uv){ 
         current_uA = 0;
     } else {
@@ -69,6 +99,7 @@ void ina226_run(){
     }
 
     last_ina226_run_ms = now_time_ms;
+    ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout = false;
 }
 
 // INA226初始化

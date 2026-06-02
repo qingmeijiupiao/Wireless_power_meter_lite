@@ -125,7 +125,7 @@ flowchart TD
 | `ulp_have_log` | `lp_log()` 写入日志时置位；当前主循环没有启用日志调用 |
 | `ulp_i2c_init_err` | INA226 初始化中的 I2C 操作失败时置位 |
 | `ulp_ina226_init_ok` | INA226 初始化和首个电压样本成功后置位 |
-| `ulp_ina226_read_timeout` | 已预留，当前代码没有置位 |
+| `ulp_ina226_read_timeout` | INA226 连续 1 秒没有完整采样时置位；恢复采样后清零 |
 | `ulp_run` | INA226 初始化成功后、进入主循环前置位 |
 | `ulp_reload_calib_params` | HP 核请求重新加载校准参数时置位，LP 核处理后清除 |
 
@@ -143,5 +143,5 @@ flowchart TD
 - LP 核侧尽量使用整数运算，新增逻辑前要评估代码体积和执行开销。
 - `voltage_uv` 是 uV，HP 核写入 `global_state` 时除以 `1000` 转换为 mV。
 - `current_uA` 已包含死区、插值和温漂补偿，不是 INA226 原始寄存器值。
-- 当前普通采样读取失败不会设置 `ulp_ina226_read_timeout`；该状态位只是预留接口。
+- INA226 连续 1 秒没有完整采样时会设置 `ulp_ina226_read_timeout`，同时将电压、电流清零，触发现有 UVP 保守关断链路。
 - `app_loop_every_ms()` 使用 `>` 判断间隔，因此文档使用“约 10ms / 20ms / 1000ms”描述。

@@ -17,6 +17,8 @@ namespace SCREEN {
 
 /** Default startup logo display duration in milliseconds. */
 static constexpr uint32_t DEFAULT_START_LOGO_DURATION_MS = 2000;
+/** Maximum startup logo display duration in milliseconds. */
+static constexpr uint32_t MAX_START_LOGO_DURATION_MS = 10000;
 
 /**
  * @brief UI 层识别的物理按键
