@@ -66,9 +66,9 @@ uint32_t get_snapshot_interval_s() {
 
 void set_snapshot_interval_s(uint32_t seconds, const char* source) {
     Internal::write_snapshot_interval_s(seconds);
-    append_event("blackbox: config source=%s snapshot_interval_s=%lu",
-                 source == nullptr ? "unknown" : source,
-                 static_cast<unsigned long>(seconds));
+    append_text_event("blackbox: config source=%s snapshot_interval_s=%lu",
+                      source == nullptr ? "unknown" : source,
+                      static_cast<unsigned long>(seconds));
 }
 
 } // namespace BlackboxService

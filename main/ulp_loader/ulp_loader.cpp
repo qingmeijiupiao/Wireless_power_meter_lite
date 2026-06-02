@@ -122,17 +122,17 @@ void load_current_calib_params(bool need_flag = true){
         reinterpret_cast<ULP_CORE_STATE*>(&ulp_ulp_state)->ulp_state_bits.ulp_reload_calib_params = true;
     }
     ulp_lp_core_exit_critical(rtc_shared_lock);
-    BlackboxService::append_event("lp: calib_loaded base_k=%u temperature_k=%d reload=%u",
-                                  static_cast<unsigned>(params.current_base_K),
-                                  params.temperature_K,
-                                  need_flag ? 1U : 0U);
+    BlackboxService::append_text_event("lp: calib_loaded base_k=%u temperature_k=%d reload=%u",
+                                       static_cast<unsigned>(params.current_base_K),
+                                       params.temperature_K,
+                                       need_flag ? 1U : 0U);
 }
 
 
 esp_err_t LP_Core_Load(void){
     ESP_LOGI(LPTAG, "main core start init lp core...");
-    BlackboxService::append_event("lp: init_start i2c_hz=%lu",
-                                  static_cast<unsigned long>(i2c_cfg.i2c_timing_cfg.clk_speed_hz));
+    BlackboxService::append_text_event("lp: init_start i2c_hz=%lu",
+                                       static_cast<unsigned long>(i2c_cfg.i2c_timing_cfg.clk_speed_hz));
     LP_CLKRST.lp_clk_conf.fast_clk_sel = 1; //IDF 6.0版本默认是内部RC时钟(17.5MHz)，且没有API可以切换到外部时钟源，需要手动操作寄存器切换到外部时钟源(20MHz)
 
     ESP_LOGI(LPTAG, "main core start init i2c...");
@@ -190,9 +190,9 @@ esp_err_t LP_Core_Load(void){
         ESP_LOGI(LPTAG, "lp core run success...");
         LP_Core_GetSnapshot(&snapshot);
         ESP_LOGI(LPTAG, "first read value: voltageuV=%d currentuA=%d", snapshot.voltage_uv, snapshot.current_uA);
-        BlackboxService::append_event("lp: run_ok voltage_uv=%ld current_ua=%ld",
-                                      static_cast<long>(snapshot.voltage_uv),
-                                      static_cast<long>(snapshot.current_uA));
+        BlackboxService::append_text_event("lp: run_ok voltage_uv=%ld current_ua=%ld",
+                                           static_cast<long>(snapshot.voltage_uv),
+                                           static_cast<long>(snapshot.current_uA));
     }
 
     xTaskCreate(print_lp_core_log_task, "print_lp_core_log", 2048, NULL, 4, NULL);

@@ -45,7 +45,7 @@ esp_err_t init();
 esp_err_t append_snapshot(bool force = false);
 
 /**
- * @brief 写入关键事件文本，并尝试追加一条全局状态快照。
+ * @brief 写入关键状态变化或故障文本，并尝试追加一条全局状态快照。
  *
  * 文本优先写入。即使文本写入失败，也会继续尝试写入快照。
  */
@@ -54,7 +54,7 @@ esp_err_t append_event(const char* fmt, ...);
 /**
  * @brief 仅写入文本事件，不追加状态快照。
  *
- * 用于启动诊断块等多行低频信息，避免为每一行重复写入相同快照。
+ * 用于配置、审计、操作记录和启动诊断块等低频信息，避免写入无必要快照。
  */
 esp_err_t append_text_event(const char* fmt, ...);
 

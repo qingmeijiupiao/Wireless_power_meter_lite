@@ -285,9 +285,9 @@ esp_err_t init() {
     }
     initialized = true;
     update_global_state_flags();
-    BlackboxService::append_event("wifi: init web_boot=%u saved_sta=%u",
-                                  is_web_enabled_on_boot() ? 1U : 0U,
-                                  has_saved_sta() ? 1U : 0U);
+    BlackboxService::append_text_event("wifi: init web_boot=%u saved_sta=%u",
+                                       is_web_enabled_on_boot() ? 1U : 0U,
+                                       has_saved_sta() ? 1U : 0U);
     return ESP_OK;
 }
 
@@ -311,7 +311,7 @@ bool is_web_enabled_on_boot() {
 esp_err_t set_web_enabled_on_boot(bool enabled, const char* source) {
     web_boot = enabled ? 1 : 0;
     update_global_state_flags();
-    BlackboxService::append_event("wifi: config source=%s web_boot=%u", source_or_unknown(source), enabled ? 1U : 0U);
+    BlackboxService::append_text_event("wifi: config source=%s web_boot=%u", source_or_unknown(source), enabled ? 1U : 0U);
     return ESP_OK;
 }
 
@@ -322,7 +322,7 @@ esp_err_t clear_saved_sta(const char* source) {
     sta_ssid = "";
     sta_pass = "";
     update_global_state_flags();
-    BlackboxService::append_event("wifi: config source=%s saved_sta_cleared", source_or_unknown(source));
+    BlackboxService::append_text_event("wifi: config source=%s saved_sta_cleared", source_or_unknown(source));
     return ESP_OK;
 }
 

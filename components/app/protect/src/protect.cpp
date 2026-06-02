@@ -512,7 +512,7 @@ esp_err_t protect_set_channel_threshold(uint8_t index, const protect_threshold_t
     apply_protect_config(config);
     source = source == nullptr ? "unknown" : source;
     PROTECT_LOGI("threshold updated source=%s channel=%s", source, info.name);
-    BlackboxService::append_event("protect: threshold_updated source=%s channel=%s", source, info.name);
+    BlackboxService::append_text_event("protect: threshold_updated source=%s channel=%s", source, info.name);
     log_threshold_values(info.name, threshold);
     return ESP_OK;
 }

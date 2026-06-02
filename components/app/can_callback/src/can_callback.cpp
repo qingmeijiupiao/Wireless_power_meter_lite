@@ -30,15 +30,15 @@ static void diagnostics_task(void*) {
             twai_node_status_t status = {};
             twai_node_record_t statistics = {};
             const esp_err_t ret = can_bus->get_info(&status, &statistics);
-            BlackboxService::append_event("can: diagnostics info=%s state=%u tx_err=%u rx_err=%u bus_err=%lu bus_off=%lu tx_failed=%lu rx_overflow=%lu",
-                                          esp_err_to_name(ret),
-                                          static_cast<unsigned>(status.state),
-                                          static_cast<unsigned>(status.tx_error_count),
-                                          static_cast<unsigned>(status.rx_error_count),
-                                          static_cast<unsigned long>(statistics.bus_err_num),
-                                          static_cast<unsigned long>(bus_off),
-                                          static_cast<unsigned long>(tx_failed),
-                                          static_cast<unsigned long>(rx_overflow));
+            BlackboxService::append_text_event("can: diagnostics info=%s state=%u tx_err=%u rx_err=%u bus_err=%lu bus_off=%lu tx_failed=%lu rx_overflow=%lu",
+                                               esp_err_to_name(ret),
+                                               static_cast<unsigned>(status.state),
+                                               static_cast<unsigned>(status.tx_error_count),
+                                               static_cast<unsigned>(status.rx_error_count),
+                                               static_cast<unsigned long>(statistics.bus_err_num),
+                                               static_cast<unsigned long>(bus_off),
+                                               static_cast<unsigned long>(tx_failed),
+                                               static_cast<unsigned long>(rx_overflow));
             last_tx_failed = tx_failed;
             last_bus_off = bus_off;
             last_bus_error = bus_error;
@@ -133,9 +133,9 @@ esp_err_t init() {
         } else {
             result = PowerOutput::off(TAG);
         }
-        BlackboxService::append_event("can: set_output target=%u result=%u",
-                                      msg->data[0] == 0x01 ? 1U : 0U,
-                                      static_cast<unsigned>(result));
+        BlackboxService::append_text_event("can: set_output target=%u result=%u",
+                                           msg->data[0] == 0x01 ? 1U : 0U,
+                                           static_cast<unsigned>(result));
     });
     /**
      * @brief  设置终端电阻 回调
@@ -145,9 +145,9 @@ esp_err_t init() {
         ESP_LOGI(TAG, "Setting CAN resistor");
         const bool enabled = msg->data[0] == 0x01;
         const esp_err_t ret = CanResistor::instance().set(enabled);
-        BlackboxService::append_event("can: set_resistor target=%u result=%s",
-                                      enabled ? 1U : 0U,
-                                      esp_err_to_name(ret));
+        BlackboxService::append_text_event("can: set_resistor target=%u result=%s",
+                                           enabled ? 1U : 0U,
+                                           esp_err_to_name(ret));
     });
 
     /**
@@ -177,10 +177,10 @@ esp_err_t init() {
     //     });
 
     ESP_LOGI(TAG, "CAN initialized and callbacks registered");
-    BlackboxService::append_event("can: init id=0x%lx baud=%lu resistor=%u",
-                                  static_cast<unsigned long>(CAN_ID.read()),
-                                  static_cast<unsigned long>(CAN_BAUDRATE.read()),
-                                  can_resistor.get() ? 1U : 0U);
+    BlackboxService::append_text_event("can: init id=0x%lx baud=%lu resistor=%u",
+                                       static_cast<unsigned long>(CAN_ID.read()),
+                                       static_cast<unsigned long>(CAN_BAUDRATE.read()),
+                                       can_resistor.get() ? 1U : 0U);
     if (xTaskCreate(diagnostics_task, "can_diag", 3072, nullptr, 2, nullptr) != pdPASS) {
         ESP_LOGE(TAG, "failed to create diagnostics task");
     }

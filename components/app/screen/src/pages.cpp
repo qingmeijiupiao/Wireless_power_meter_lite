@@ -259,7 +259,7 @@ bool BatteryPage::handle_button(ButtonId button, ButtonEvent event) {
     }
 
     EnergyMeter::reset();
-    BlackboxService::append_event("meter: reset source=screen");
+    BlackboxService::append_text_event("meter: reset source=screen");
     return true;
 }
 
@@ -640,7 +640,7 @@ void SettingsPage::adjust_selected_item() {
             ui_config_set_rotation_180(rotation_180_);
             ST7735::set_rotation(rotation_180_ ? ST7735::Rotation::HorizontalMirror : ST7735::Rotation::Horizontal);
             ESP_LOGI(TAG, "setting rotate_180=%u", rotation_180_ ? 1U : 0U);
-            BlackboxService::append_event("ui: config source=%s rotate_180=%u", TAG, rotation_180_ ? 1U : 0U);
+            BlackboxService::append_text_event("ui: config source=%s rotate_180=%u", TAG, rotation_180_ ? 1U : 0U);
             break;
         case Backlight:
             backlight_level_++;
@@ -650,8 +650,8 @@ void SettingsPage::adjust_selected_item() {
             ui_config_set_backlight_level(backlight_level_);
             ST7735::set_backlight(backlight_value_from_level(backlight_level_));
             ESP_LOGI(TAG, "setting backlight_level=%u", static_cast<unsigned>(backlight_level_));
-            BlackboxService::append_event("ui: config source=%s backlight_level=%u",
-                                          TAG, static_cast<unsigned>(backlight_level_));
+            BlackboxService::append_text_event("ui: config source=%s backlight_level=%u",
+                                               TAG, static_cast<unsigned>(backlight_level_));
             break;
         case WifiBoot: {
             bool enabled = !WifiService::is_web_enabled_on_boot();
@@ -683,17 +683,17 @@ void SettingsPage::adjust_selected_item() {
                 }
             }
             CanCallback::CAN_BAUDRATE = next;
-            BlackboxService::append_event("can: config baud=%lu source=screen reboot_required=1",
-                                          static_cast<unsigned long>(next));
+            BlackboxService::append_text_event("can: config baud=%lu source=screen reboot_required=1",
+                                               static_cast<unsigned long>(next));
             break;
         }
         case CanTerm: {
             const esp_err_t ret = CanResistor::instance().toggle();
             ESP_LOGI(TAG, "setting can_resistor=%u result=%s",
                      CanResistor::instance().get() ? 1U : 0U, esp_err_to_name(ret));
-            BlackboxService::append_event("can: set_resistor source=screen state=%u result=%s",
-                                          CanResistor::instance().get() ? 1U : 0U,
-                                          esp_err_to_name(ret));
+            BlackboxService::append_text_event("can: set_resistor source=screen state=%u result=%s",
+                                               CanResistor::instance().get() ? 1U : 0U,
+                                               esp_err_to_name(ret));
             break;
         }
         default:

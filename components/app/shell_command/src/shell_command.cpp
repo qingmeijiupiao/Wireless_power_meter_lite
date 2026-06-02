@@ -88,7 +88,7 @@ esp_err_t init() {
      */
     shell.register_command(ShellCommand_t("reboot", "Reboot the device", "",
         [](int argc, char** argv) -> int {
-            BlackboxService::append_event("system: reboot source=%s", TAG);
+            BlackboxService::append_text_event("system: reboot source=%s", TAG);
             printf("Rebooting...\n");
             esp_restart();
             return 0;
@@ -198,7 +198,7 @@ esp_err_t init() {
                 return 1;
             }
             ESP_LOGI(TAG, "backlight=%d", brightness);
-            BlackboxService::append_event("ui: config source=%s backlight=%d", TAG, brightness);
+            BlackboxService::append_text_event("ui: config source=%s backlight=%d", TAG, brightness);
             printf("Backlight set to %d\n", brightness);
             return 0;
         }));
@@ -221,8 +221,8 @@ esp_err_t init() {
                 return 1;
             }
             CanCallback::CAN_BAUDRATE = baudrate;
-            BlackboxService::append_event("can: config baud=%lu source=shell reboot_required=1",
-                                          static_cast<unsigned long>(baudrate));
+            BlackboxService::append_text_event("can: config baud=%lu source=shell reboot_required=1",
+                                               static_cast<unsigned long>(baudrate));
             printf("CAN baudrate set to %lu\n", baudrate);
             return 0;
         }));
@@ -242,8 +242,8 @@ esp_err_t init() {
             }
             uint32_t id = (uint32_t)strtoul(argv[1], nullptr, 0);
             CanCallback::CAN_ID = id;
-            BlackboxService::append_event("can: config id=0x%lx source=shell reboot_required=1",
-                                          static_cast<unsigned long>(id));
+            BlackboxService::append_text_event("can: config id=0x%lx source=shell reboot_required=1",
+                                               static_cast<unsigned long>(id));
             printf("CAN ID set to %lu (0x%lX)\n", id, id);
             return 0;
         }));
@@ -267,7 +267,7 @@ esp_err_t init() {
         [](int argc, char** argv) -> int {
             if (argc >= 2 && strcmp(argv[1], "reset") == 0) {
                 EnergyMeter::reset();
-                BlackboxService::append_event("meter: reset source=shell");
+                BlackboxService::append_text_event("meter: reset source=shell");
                 printf("Shared meter session reset\n");
             } else if (argc >= 2 && strcmp(argv[1], "status") != 0) {
                 printf("Usage: meter [status|reset]\n");
@@ -328,8 +328,8 @@ esp_err_t init() {
             }
 
             SCREEN::set_start_logo_duration_ms(static_cast<uint32_t>(duration_ms));
-            BlackboxService::append_event("ui: config source=%s start_logo_ms=%lu reboot_required=1",
-                                          TAG, duration_ms);
+            BlackboxService::append_text_event("ui: config source=%s start_logo_ms=%lu reboot_required=1",
+                                               TAG, duration_ms);
             printf("Startup logo duration set to %lu ms, restart required\n", duration_ms);
             return 0;
         }));
@@ -376,7 +376,7 @@ esp_err_t init() {
                         text[pos++] = (ch == '\r' || ch == '\n' || ch == '\t') ? ' ' : ch;
                     }
                 }
-                BlackboxService::append_event("mark: source=%s text=%s", TAG, text);
+                BlackboxService::append_text_event("mark: source=%s text=%s", TAG, text);
                 printf("Blackbox mark added: %s\n", text);
                 return 0;
             }
@@ -779,7 +779,7 @@ esp_err_t init() {
             int basek = atoi(argv[1]);
             params.current_base_K = basek;
             CurrentCalib::params_data = params;
-            BlackboxService::append_event("calib: base_k=%d reboot_required=1", basek);
+            BlackboxService::append_text_event("calib: base_k=%d reboot_required=1", basek);
             printf("Calibration basek set to %d restart required\n", basek);
             return 0;
         });
@@ -795,7 +795,7 @@ esp_err_t init() {
             int temperatureK = atoi(argv[1]);
             params.temperature_K = temperatureK;
             CurrentCalib::params_data = params;
-            BlackboxService::append_event("calib: temperature_k=%d reboot_required=1", temperatureK);
+            BlackboxService::append_text_event("calib: temperature_k=%d reboot_required=1", temperatureK);
             printf("Calibration temperatureK set to %d restart required\n", temperatureK);
             return 0;
         });
@@ -818,10 +818,10 @@ esp_err_t init() {
             params.points[point_index].register_value = register_value;
             params.points[point_index].offset_current_100uA = new_offset_current_100uA;
             CurrentCalib::params_data = params;
-            BlackboxService::append_event("calib: point=%d reg=%d offset_100ua=%d reboot_required=1",
-                                          point_index,
-                                          register_value,
-                                          new_offset_current_100uA);
+            BlackboxService::append_text_event("calib: point=%d reg=%d offset_100ua=%d reboot_required=1",
+                                               point_index,
+                                               register_value,
+                                               new_offset_current_100uA);
             printf("Calibration current points set to %d, %d(uA) restart required\n", register_value, atoi(argv[3]));
             return 0;
         });
@@ -834,8 +834,8 @@ esp_err_t init() {
             params.temperature_K = 0;
             params.current_base_K = base_k;
             CurrentCalib::params_data = params;
-            BlackboxService::append_event("calib: cleared base_k=%u reboot_required=1",
-                                          static_cast<unsigned>(base_k));
+            BlackboxService::append_text_event("calib: cleared base_k=%u reboot_required=1",
+                                               static_cast<unsigned>(base_k));
             printf("Calibration params cleared (base_K=%d preserved)\n", base_k);
             return 0;
         });

@@ -128,10 +128,10 @@ esp_err_t init(gpio_num_t output_gpio_num) {
 
     _initialized = true;
     ESP_LOGI(TAG, "initialized on GPIO %d, on_cooldown %lu ms, off_cooldown %lu ms", output_gpio_num, (unsigned long)OUTPUT_ON_COOLDOWN_MS, (unsigned long)OUTPUT_OFF_COOLDOWN_MS);
-    BlackboxService::append_event("output: init gpio=%d on_cd_ms=%lu off_cd_ms=%lu",
-                                  output_gpio_num,
-                                  static_cast<unsigned long>(OUTPUT_ON_COOLDOWN_MS),
-                                  static_cast<unsigned long>(OUTPUT_OFF_COOLDOWN_MS));
+    BlackboxService::append_text_event("output: init gpio=%d on_cd_ms=%lu off_cd_ms=%lu",
+                                       output_gpio_num,
+                                       static_cast<unsigned long>(OUTPUT_ON_COOLDOWN_MS),
+                                       static_cast<unsigned long>(OUTPUT_OFF_COOLDOWN_MS));
     return ESP_OK;
 }
 
@@ -144,7 +144,7 @@ esp_err_t deinit() {
     _initialized = false;
     _callback_count = 0;
     _policy_count = 0;
-    BlackboxService::append_event("output: deinit");
+    BlackboxService::append_text_event("output: deinit");
     return ESP_OK;
 }
 
