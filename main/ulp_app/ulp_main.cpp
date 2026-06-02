@@ -13,7 +13,7 @@ constexpr int current_scale = 1114;
 constexpr int voltage_scale = 1250;
 
 constexpr uint32_t LP_CPU_FREQ_HZ = 20000000;
-constexpr uint32_t current_dead_zone_uv = 3000;
+constexpr uint32_t current_dead_zone_uv = 5000;
 
 #define MS_TO_US(ms) ((ms) * 1000)
 
@@ -43,6 +43,8 @@ static void lp_log(uint32_t log){
 
 uint32_t last_ina226_run_ms = 0;
 uint16_t mask_enable = 0;
+
+// INA226读取数据
 void ina226_run(){
     INA226::read_register(INA226::Register_enum::INA226_MASK_ENABLE,&mask_enable);
     if(!(mask_enable & (1 << 3))){ //CNVR位为0，说明没有转换完成
