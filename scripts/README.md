@@ -13,6 +13,7 @@ flowchart TD
     Font["generate_font.py"] --> FontAssets["字体 C++ 文件<br/>和预览 BMP"]
     Image["image_converter.py"] --> ImageAsset["RGB565 图片头文件"]
     LUT["generate_backlight_lut.py"] --> LUTHeader["背光 LUT 头文件"]
+    CSV["parse_blackbox_csv.py<br/>解析网页导出的 CSV"] --> Report["Excel / 浏览器 HTML 报告"]
     Shell["shell_web.html"] --> Browser["浏览器 Web Serial 调试页"]
 ```
 
@@ -87,6 +88,34 @@ python3 scripts/generate_backlight_lut.py
 ```bash
 pip install numpy
 ```
+
+### `parse_blackbox_csv.py`
+
+将历史日志页面导出的黑匣子 CSV 转换为浏览器和 Excel 均可打开的单文件 HTML 报告：
+
+```bash
+python scripts/parse_blackbox_csv.py wireless-power-meter-history.csv
+```
+
+默认生成同名 `.html` 文件。脚本按启动后毫秒时间减少的位置划分每次运行，并结合
+`TimeService sync raw` 日志为该次运行估算网络时间。报告会将 `ERROR` 标红、
+`WARN` 标黄，提供运行摘要、浏览器筛选控件和可拖拽调整宽度的日志表格列。结构化
+快照中的全局标志位默认显示紧凑摘要，可以单条展开或使用按钮批量展开、收起。
+运行摘要会显示每段日志推算出的网络时间段；没有 `TimeService sync raw` 锚点时
+显示“无时间锚点”。网络时间使用 `YYYY-MM-DD HH:MM:SS.mmm` 格式，报告顶部统一
+注明时区。标题下方还会显示各次运行日志覆盖时长之和，并根据最早一条日志是否为
+`[Blackbox]: reset` 显示黑匣子是否执行过重置。
+
+脚本默认从工程源码读取 `GlobalStateFlags` 和 `protect_states_t` 位域定义，以解析
+结构化快照中的 `flags` 和 `protect`。全局标志位按行显示全部已定义字段，包括值为
+`0` 的字段和多 bit 字段。源码目录不在默认位置时可指定：
+
+```bash
+python scripts/parse_blackbox_csv.py history.csv --project-root <工程根目录>
+```
+
+脚本仅使用 Python 标准库，不需要安装额外 pip 包。使用 `--no-source-flags` 可以在
+没有工程源码时跳过标志位解析，仍然生成包含原始数值的报告。
 
 ## 调试页面
 
