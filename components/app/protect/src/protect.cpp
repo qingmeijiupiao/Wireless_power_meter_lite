@@ -40,20 +40,39 @@ static int32_t to_milli(float value) {
  */
 static void check_mos_fault() {
     constexpr int32_t mos_fault_current_threshold_uA = 10 * 1000;
+    constexpr TickType_t mos_fault_output_settle_ticks = pdMS_TO_TICKS(500);
     constexpr TickType_t mos_fault_detection_ticks = pdMS_TO_TICKS(200);
+    static TickType_t output_off_start_ticks = 0;
     static TickType_t detection_start_ticks = 0;
+    static bool output_was_enabled = true;
     static bool detection_active = false;
     static bool fault_reported = false;
 
+    const TickType_t now_ticks = xTaskGetTickCount();
     const int32_t current_uA = std::abs(glb_states.current_uA);
-    // 输出开启或电流低于阈值时清除本轮检测状态，允许后续异常重新上报。
-    if (glb_states.flags.bits.output_enabled || current_uA < mos_fault_current_threshold_uA) {
+    // 输出开启时重置诊断；下一次关闭后先等待 INA226 平均采样窗口稳定。
+    if (glb_states.flags.bits.output_enabled) {
+        output_was_enabled = true;
         detection_active = false;
         fault_reported = false;
         return;
     }
 
-    const TickType_t now_ticks = xTaskGetTickCount();
+    if (output_was_enabled) {
+        output_was_enabled = false;
+        output_off_start_ticks = now_ticks;
+        detection_active = false;
+        fault_reported = false;
+        return;
+    }
+
+    if (now_ticks - output_off_start_ticks < mos_fault_output_settle_ticks ||
+        current_uA < mos_fault_current_threshold_uA) {
+        detection_active = false;
+        fault_reported = false;
+        return;
+    }
+
     // 首次检测到异常电流时开始计时，过滤关断瞬态和采样波动。
     if (!detection_active) {
         detection_start_ticks = now_ticks;
