@@ -6,6 +6,8 @@
 
 - **NVS 持久化配置**：保存 STA SSID、密码和启动时是否启用 WiFi/Web 的开关。
 - **自动启动策略**：启动时优先尝试连接已保存 STA，失败或未配置时自动进入 AP 配网模式。
+- **断线自动恢复**：STA 运行期意外断线后按 `1s`、`2s`、`4s`、`8s`、`16s`、`30s`
+  指数退避自动重连，恢复 IP 后重置退避状态。
 - **AP 配网兜底**：配网热点使用 `WPM-Lite-XXXXXX` 命名，后缀来自设备 MAC，默认开放无密码。
 - **APSTA 扫描配网**：AP 配网模式下保持热点在线，同时使用 STA 接口扫描附近 WiFi，供 Web 配网页选择 SSID。
 - **DNS 劫持**：AP 配网模式下启动 `DNSServer`，将域名请求解析到组件配置的 AP IP，用于 Captive Portal。
@@ -59,6 +61,8 @@ WebBackend::start_with_wifi_service();
 ### `esp_err_t connect_sta(const char* ssid, const char* password, bool save, const char* source)`
 
 连接指定 WiFi。单次连接超时后自动重试一次；`save=true` 时，连接成功后将 SSID 和密码写入 NVS。
+进入 STA 模式后，运行期意外断线会由后台任务自动重连。显式切换 AP、停止服务或重新配置 STA
+会取消旧的重连计划。
 
 ### `esp_err_t start_provision_ap(const char* source)`
 

@@ -13,16 +13,32 @@
 #include "HXC_NVS.h"
 #include "dns_server.h"
 #include "esp_check.h"
+#include "esp_event.h"
 #include "esp_log.h"
+#include "esp_wifi.h"
 #include "web_server.h"
+#include "freertos/queue.h"
 #include "freertos/semphr.h"
+#include "freertos/task.h"
+#include "freertos/timers.h"
 #include "global_state.h"
 #include "blackbox_service.h"
+#include "time_service.h"
 
 namespace WifiService {
 
 static constexpr char TAG[] = "WifiService";
 static constexpr uint8_t STA_CONNECT_MAX_ATTEMPTS = 2;
+static constexpr size_t RECONNECT_QUEUE_LENGTH = 8;
+static constexpr uint32_t RECONNECT_TASK_STACK_SIZE = 3072;
+static constexpr uint32_t RECONNECT_MAX_DELAY_MS = 30000;
+static constexpr uint32_t RECONNECT_INITIAL_DELAY_MS = 1000;
+
+enum class ReconnectEvent : uint8_t {
+    STA_DISCONNECTED,
+    STA_GOT_IP,
+    RETRY_TIMER,
+};
 
 static const char* source_or_unknown(const char* source) {
     return source == nullptr ? "unknown" : source;
@@ -39,6 +55,11 @@ static Mode mode = Mode::OFF;
 static char ap_ssid[WIFI_SSID_MAX_LEN + 1] = {};
 static char last_error[64] = "none";
 static SemaphoreHandle_t scan_mutex = nullptr;
+static QueueHandle_t reconnect_queue = nullptr;
+static TimerHandle_t reconnect_timer = nullptr;
+static TaskHandle_t reconnect_task_handle = nullptr;
+static bool reconnect_enabled = false;
+static uint8_t reconnect_attempt = 0;
 
 static void update_global_state_flags() {
     auto& state = get_global_state();
@@ -48,6 +69,119 @@ static void update_global_state_flags() {
     state.flags.bits.wifi_ap_mode = mode == Mode::AP_PROVISION;
     state.flags.bits.wifi_has_saved_sta = has_saved_sta();
     state.flags.bits.wifi_web_enabled_on_boot = is_web_enabled_on_boot();
+}
+
+static void enqueue_reconnect_event(ReconnectEvent event) {
+    if (reconnect_queue == nullptr || xQueueSend(reconnect_queue, &event, 0) != pdTRUE) {
+        ESP_LOGW(TAG, "reconnect queue full, dropping event=%u",
+                 static_cast<unsigned>(event));
+    }
+}
+
+/**
+ * @brief 将底层断线和获取 IP 事件转发给重连任务
+ *
+ * 系统事件循环中只执行非阻塞入队，退避计算、定时器操作和日志记录均由后台任务处理。
+ */
+static void network_event_handler(void*, esp_event_base_t event_base, int32_t event_id, void*) {
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        enqueue_reconnect_event(ReconnectEvent::STA_DISCONNECTED);
+    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        enqueue_reconnect_event(ReconnectEvent::STA_GOT_IP);
+    }
+}
+
+static uint32_t reconnect_delay_ms(uint8_t attempt) {
+    uint32_t delay_ms = RECONNECT_INITIAL_DELAY_MS;
+    while (attempt > 0 && delay_ms < RECONNECT_MAX_DELAY_MS) {
+        delay_ms *= 2;
+        attempt--;
+    }
+    return delay_ms > RECONNECT_MAX_DELAY_MS ? RECONNECT_MAX_DELAY_MS : delay_ms;
+}
+
+/** @brief 取消旧的退避计划，用于显式停止、切换 AP 或重新配置 STA。 */
+static void cancel_reconnect() {
+    reconnect_enabled = false;
+    reconnect_attempt = 0;
+    if (reconnect_timer != nullptr) {
+        xTimerStop(reconnect_timer, 0);
+    }
+}
+
+/**
+ * @brief 按 1s、2s、4s、8s、16s、30s 封顶的指数退避计划下一次重连
+ */
+static void schedule_reconnect() {
+    if (!reconnect_enabled || mode != Mode::STA || WiFiManager::instance().is_connected()) {
+        return;
+    }
+    if (xTimerIsTimerActive(reconnect_timer) == pdTRUE) {
+        return;
+    }
+
+    const uint32_t delay_ms = reconnect_delay_ms(reconnect_attempt);
+    if (reconnect_attempt < UINT8_MAX) {
+        reconnect_attempt++;
+    }
+    if (xTimerChangePeriod(reconnect_timer, pdMS_TO_TICKS(delay_ms), 0) != pdPASS) {
+        ESP_LOGW(TAG, "failed to schedule STA reconnect attempt=%u",
+                 static_cast<unsigned>(reconnect_attempt));
+        return;
+    }
+    ESP_LOGW(TAG, "STA disconnected, reconnect attempt=%u scheduled in %lu ms",
+             static_cast<unsigned>(reconnect_attempt),
+             static_cast<unsigned long>(delay_ms));
+}
+
+static void reconnect_timer_callback(TimerHandle_t) {
+    enqueue_reconnect_event(ReconnectEvent::RETRY_TIMER);
+}
+
+/**
+ * @brief 消费网络事件并发起运行期 STA 自动重连
+ *
+ * 首次启动连接仍由 connect_sta() 同步处理；本任务只处理已经进入 STA 模式后的
+ * 意外断线，避免与 AP 配网和手动操作互相竞争。
+ */
+static void reconnect_task(void*) {
+    ReconnectEvent event = ReconnectEvent::STA_DISCONNECTED;
+    while (true) {
+        if (xQueueReceive(reconnect_queue, &event, portMAX_DELAY) != pdTRUE) {
+            continue;
+        }
+
+        if (event == ReconnectEvent::STA_GOT_IP) {
+            const bool restored = reconnect_attempt > 0;
+            reconnect_attempt = 0;
+            xTimerStop(reconnect_timer, 0);
+            update_global_state_flags();
+            if (restored) {
+                IP_t ip = WiFiManager::instance().get_ip();
+                BlackboxService::append_event("wifi: sta_reconnected ip=%u.%u.%u.%u",
+                                              ip.octet1, ip.octet2, ip.octet3, ip.octet4);
+            }
+            continue;
+        }
+
+        if (event == ReconnectEvent::STA_DISCONNECTED) {
+            update_global_state_flags();
+            schedule_reconnect();
+            continue;
+        }
+
+        if (!reconnect_enabled || mode != Mode::STA || WiFiManager::instance().is_connected()) {
+            continue;
+        }
+
+        ESP_LOGI(TAG, "starting STA reconnect attempt=%u",
+                 static_cast<unsigned>(reconnect_attempt));
+        const esp_err_t ret = esp_wifi_connect();
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "STA reconnect request failed: %s", esp_err_to_name(ret));
+            schedule_reconnect();
+        }
+    }
 }
 
 /**
@@ -98,10 +232,56 @@ esp_err_t init() {
     }
     HXC::NVS_Base::setup();
     ESP_RETURN_ON_ERROR(WiFiManager::instance().init(), TAG, "wifi manager init failed");
+    ESP_RETURN_ON_ERROR(TimeService::init(), TAG, "time service init failed");
     make_ap_ssid();
     scan_mutex = xSemaphoreCreateMutex();
     if (scan_mutex == nullptr) {
         return ESP_ERR_NO_MEM;
+    }
+    reconnect_queue = xQueueCreate(RECONNECT_QUEUE_LENGTH, sizeof(ReconnectEvent));
+    reconnect_timer = xTimerCreate("wifi_reconnect", pdMS_TO_TICKS(RECONNECT_INITIAL_DELAY_MS),
+                                   pdFALSE, nullptr, reconnect_timer_callback);
+    if (reconnect_queue == nullptr || reconnect_timer == nullptr) {
+        if (reconnect_timer != nullptr) {
+            xTimerDelete(reconnect_timer, 0);
+            reconnect_timer = nullptr;
+        }
+        if (reconnect_queue != nullptr) {
+            vQueueDelete(reconnect_queue);
+            reconnect_queue = nullptr;
+        }
+        vSemaphoreDelete(scan_mutex);
+        scan_mutex = nullptr;
+        return ESP_ERR_NO_MEM;
+    }
+    if (xTaskCreate(reconnect_task, "wifi_reconnect", RECONNECT_TASK_STACK_SIZE,
+                    nullptr, 3, &reconnect_task_handle) != pdPASS) {
+        xTimerDelete(reconnect_timer, 0);
+        vQueueDelete(reconnect_queue);
+        vSemaphoreDelete(scan_mutex);
+        reconnect_timer = nullptr;
+        reconnect_queue = nullptr;
+        scan_mutex = nullptr;
+        return ESP_ERR_NO_MEM;
+    }
+    esp_err_t ret = esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED,
+                                               network_event_handler, nullptr);
+    if (ret == ESP_OK) {
+        ret = esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
+                                         network_event_handler, nullptr);
+    }
+    if (ret != ESP_OK) {
+        esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED,
+                                     network_event_handler);
+        vTaskDelete(reconnect_task_handle);
+        xTimerDelete(reconnect_timer, 0);
+        vQueueDelete(reconnect_queue);
+        vSemaphoreDelete(scan_mutex);
+        reconnect_task_handle = nullptr;
+        reconnect_timer = nullptr;
+        reconnect_queue = nullptr;
+        scan_mutex = nullptr;
+        return ret;
     }
     initialized = true;
     update_global_state_flags();
@@ -180,6 +360,7 @@ esp_err_t connect_sta(const char* ssid, const char* password, bool save, const c
         return ESP_ERR_INVALID_ARG;
     }
     ESP_RETURN_ON_ERROR(init(), TAG, "init failed");
+    cancel_reconnect();
 
     // 从配网 AP 切换到 STA 前必须关闭 DNS 劫持和 Captive Portal 回落。
     DNSServer::stop();
@@ -201,6 +382,7 @@ esp_err_t connect_sta(const char* ssid, const char* password, bool save, const c
     }
     if (ret == ESP_OK) {
         mode = Mode::STA;
+        reconnect_enabled = true;
         update_global_state_flags();
         set_last_error("none");
 
@@ -237,6 +419,7 @@ esp_err_t connect_sta(const char* ssid, const char* password, bool save, const c
  */
 esp_err_t start_provision_ap(const char* source) {
     ESP_RETURN_ON_ERROR(init(), TAG, "init failed");
+    cancel_reconnect();
     if (ap_ssid[0] == '\0') {
         make_ap_ssid();
     }
@@ -335,6 +518,7 @@ esp_err_t start_default(const char* source) {
     ESP_RETURN_ON_ERROR(init(), TAG, "init failed");
 
     if (!is_web_enabled_on_boot()) {
+        cancel_reconnect();
         ESP_LOGI(TAG, "web/wifi startup disabled by NVS");
         mode = Mode::OFF;
         update_global_state_flags();
@@ -358,6 +542,7 @@ esp_err_t start_default(const char* source) {
  * @brief 停止 WiFiService 管理的网络功能
  */
 esp_err_t stop(const char* source) {
+    cancel_reconnect();
     DNSServer::stop();
     WebServer::enable_captive_portal(false);
     esp_err_t ret = WiFiManager::instance().stop();

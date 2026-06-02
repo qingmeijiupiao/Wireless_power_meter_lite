@@ -70,6 +70,7 @@
 | 电流校准 | [components/app/current_calibration/README.md](components/app/current_calibration/README.md) |
 | Web 后端 | [components/app/web_backend/README.md](components/app/web_backend/README.md) |
 | WiFi 服务 | [components/app/wifi_service/README.md](components/app/wifi_service/README.md) |
+| 时间同步服务 | [components/middleware/time_service/README.md](components/middleware/time_service/README.md) |
 | 黑匣子服务 | [components/app/blackbox_service/README.md](components/app/blackbox_service/README.md) |
 | 硬件配置 | [components/bsp/hardware/README.md](components/bsp/hardware/README.md) |
 | ST7735 驱动 | [components/bsp/st7735_driver/README.md](components/bsp/st7735_driver/README.md) |
