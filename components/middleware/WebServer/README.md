@@ -8,6 +8,7 @@
 - **统一分发入口**：底层仅向 `esp_http_server` 注册各 HTTP Method 的通配符入口，再由内部路由表分发。
 - **中间件链**：支持全局中间件，适合添加日志、CORS、鉴权、公共 Header 等处理。
 - **Flash 静态资源**：支持直接返回随固件烧录的内嵌 HTML/CSS/JS 等资源。
+- **gzip 响应**：支持返回构建期已压缩的数据，并设置 `Content-Encoding: gzip`。
 - **请求体缓存**：POST/PUT 等请求体按固定上限读取到 `Request::body`，超过上限返回 413。
 - **流式请求体**：大文件上传可使用调用方固定缓冲分块消费，不受 1KB JSON 缓存限制。
 - **Captive Portal 兜底**：可将未匹配路径回落到 `/` 路由，方便 AP 配网弹窗。
@@ -62,7 +63,7 @@ WebServer::use([](WebServer::Request* request) -> esp_err_t {
 });
 
 WebServer::on("/", WebServer::Method::GET, [](WebServer::Request* request) -> esp_err_t {
-    return WebServer::send_html(request, index_html_file.data, index_html_file.size);
+    return WebServer::send_html_gzip(request, index_html_file.data, index_html_file.size);
 });
 
 WebServer::on("/api/ping", WebServer::Method::GET, [](WebServer::Request* request) -> esp_err_t {
@@ -89,9 +90,14 @@ WebServer::on("/api/echo", WebServer::Method::POST, [](WebServer::Request* reque
 
 静态资源建议使用 ESP-IDF `EMBED_TXTFILES` 或 `EMBED_FILES` 随固件烧录到 Flash，再通过 `serve_static()` 或普通路由返回。
 
+本项目的 `web_file` 资源在构建期已压缩，应使用 gzip 响应函数：
+
 ```cpp
-WebServer::serve_static("/", index_html_file.data, index_html_file.size, "text/html");
+WebServer::send_html_gzip(request, index_html_file.data, index_html_file.size);
+WebServer::send_gzip(request, 200, "text/css", app_css_file.data, app_css_file.size);
 ```
+
+只有未压缩资源才使用 `send_html()` 或 `serve_static()`。
 
 ## API 参考
 

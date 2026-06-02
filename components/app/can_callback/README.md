@@ -1,155 +1,117 @@
 # can_callback
 
-CAN 外设初始化与回调注册模块，在 `CanCallback` 命名空间内集中管理 CAN 外设初始化及所有消息接收回调的注册与实现。
+`can_callback` 是设备 CAN 应用协议的入口。它初始化 CAN 终端电阻和 TWAI 驱动，注册设备支持的命令，并启动一个诊断任务记录总线异常。
 
-## 模块特点
+初次阅读时可以先记住：`HXC_TWAI` 负责收发和按 ID 分发，`can_callback` 负责“收到某条命令后做什么”。
 
-- **一站式初始化**：`init()` 内完成 CAN 电阻使能、TWAI 驱动初始化及回调注册
-- **集中管理**：所有回调在 `init()` 中统一注册，添加回调只需修改一处
-- **Lambda 实现**：回调处理函数以 lambda 表达式内联，回调定义与实现紧邻，可读性高
-- **标准注释**：每条回调遵循统一注释模板，包含 ID、用途、参数和注意事项
-- **NVS 参数**：设备 ID 和 CAN 波特率通过 `NVS_DATA` 持久化；波特率会在初始化 `HXC_TWAI` 时读取，修改后重启生效
-- **状态帧类型判断**：`GET_STATE` 响应在 `CAN_ID + CALLBACK_GET_STATE > 0x7ff` 时设置为扩展帧，否则使用标准帧
+## 设计目标
 
-## 架构与时序
+- 集中注册设备 CAN 命令，避免业务回调散落在不同模块。
+- 使用 NVS 保存设备 ID 和波特率。
+- 将输出控制、终端电阻控制和状态查询连接到对应业务组件。
+- 每秒检查 CAN 错误计数，变化时写入黑匣子。
 
-```mermaid
-sequenceDiagram
-    participant Bus as CAN 总线
-    participant TWAI as HXC_TWAI
-    participant CB as CanCallback 回调
-    participant GS as GlobalState
-    participant PO as PowerOutput
-    participant CR as CanResistor
-
-    Bus->>TWAI: 接收 CAN 帧
-    TWAI->>CB: 按 identifier 分发回调
-    alt PING
-        CB->>TWAI: 原样 send(msg)
-    else GET_STATE
-        CB->>GS: 读取电压/电流/温度/保护位
-        CB->>TWAI: 发送 CALLBACK_GET_STATE_DATA_t
-    else SET_OUTPUT
-        CB->>PO: PowerOutput::on()/off()
-    else SET_RESISTOR
-        CB->>CR: set()
-        CR->>GS: 更新 flags.bits.can_resistor_enabled
-    end
-```
+## 架构
 
 ```mermaid
 flowchart TD
-    Init["CanCallback::init()"] --> HW["读取 hardware_config"]
-    HW --> Resistor["初始化 CAN_RESISTOR_ENABLE GPIO"]
-    Resistor --> Bus["new HXC_TWAI(CAN_TX, CAN_RX, CAN_BAUDRATE.read())"]
-    Bus --> Setup["can_bus->setup()"]
-    Setup --> Register["注册 PING / GET_STATE / SET_OUTPUT / SET_RESISTOR / Catch-All"]
+    Init["CanCallback::init()"] --> Resistor["初始化 can_resistor"]
+    Resistor --> Driver["创建 HXC_TWAI<br/>读取 CAN_BAUDRATE"]
+    Driver --> Setup["setup()"]
+    Setup --> Register["注册 4 个协议回调<br/>和 1 个调试 Catch-All"]
+    Register --> Diag["创建 can_diag 任务"]
+
+    Bus["CAN 总线帧"] --> HXC["HXC_TWAI<br/>按 identifier 分发"]
+    HXC --> Callbacks["can_callback 业务回调"]
+    Callbacks --> GS["global_state"]
+    Callbacks --> Output["power_output"]
+    Callbacks --> CR["can_resistor"]
+    Callbacks --> BB["blackbox_service"]
+    Diag --> BB
 ```
 
-## 集成与使用
+回调执行过程已经在下方协议表中逐条列出，因此这里不再展开每个回调的时序图。
+
+## CAN ID 规则
+
+设备命令 ID 由基础设备 ID 和命令偏移相加得到：
+
+```text
+实际帧 ID = CAN_ID + CALLBACK_ID
+```
+
+| 偏移 | 名称 | 作用 |
+|------|------|------|
+| `0x00` | `CALLBACK_PING` | 原样回复收到的帧 |
+| `0x01` | `CALLBACK_GET_STATE` | 返回 8 字节设备状态 |
+| `0x02` | `CALLBACK_SET_OUTPUT` | 开关输出 |
+| `0x03` | `CALLBACK_SET_RESISTOR` | 开关 CAN 终端电阻 |
+
+默认 `CAN_ID` 为 `0x400`。`GET_STATE` 回复 ID 大于 `0x7ff` 时使用扩展帧，否则使用标准帧。
+
+## 协议表
+
+| 请求 ID | 请求数据 | 处理动作 | 回复 |
+|---------|----------|----------|------|
+| `CAN_ID + 0x00` | 任意 | 调用 `send(msg)` 原样回传 | 与请求相同 |
+| `CAN_ID + 0x01` | 无要求 | 读取 `global_state` 和终端电阻状态 | `CALLBACK_GET_STATE_DATA_t` |
+| `CAN_ID + 0x02` | `data[0] == 0x01` 表示开启，其他值表示关闭 | 调用 `PowerOutput::on()` 或 `off()`，并写黑匣子 | 无 |
+| `CAN_ID + 0x03` | `data[0] == 0x01` 表示开启，其他值表示关闭 | 调用 `CanResistor::set()`，并写黑匣子 | 无 |
+| `-1` | 任意 | 调试 Catch-All：打印所有收到的帧 | 无 |
+
+> Catch-All 会打印每条 CAN 帧。总线流量较大或准备发布时，应评估是否保留。
+
+## 状态回复格式
+
+`CALLBACK_GET_STATE_DATA_t` 使用 `packed` 布局，大小为 8 字节。CAN 单帧最多携带 8 字节，因此新增字段前必须检查大小。
+
+| 字段 | 类型 | 单位或含义 |
+|------|------|------------|
+| `voltage_mV` | `uint16_t` | mV |
+| `current_mA` | `int16_t` | 电流绝对值，mA |
+| `Board_temperature` | `int8_t` | TMP235 板温，1 摄氏度 |
+| `Chip_temperature` | `int8_t` | 芯片内温，1 摄氏度 |
+| `output_state` | 1 bit | 输出状态 |
+| `current_direction` | 1 bit | 代码中 `current_uA > 0` 时为 `1` |
+| `CAN_resistor` | 1 bit | CAN 终端电阻状态 |
+| `reserved` | 5 bit | 保留 |
+| `UVP_flag` | 2 bit | 欠压保护状态 |
+| `OVP_flag` | 2 bit | 过压保护状态 |
+| `OTP_flag` | 2 bit | 过温保护状态 |
+| `OCP_flag` | 2 bit | 过流保护状态 |
+
+## NVS 配置
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `CAN_BAUDRATE` | `1_Mbps` | 初始化 TWAI 时读取，修改后需重新初始化或重启 |
+| `CAN_ID` | `0x400` | 注册回调时读取，修改后需重新初始化或重启 |
+
+## 使用方式
 
 ```cpp
 #include "can_callback.h"
 
-// 一站式初始化：使能电阻、TWAI驱动、注册回调
-CanCallback::init();
+ESP_ERROR_CHECK(CanCallback::init());
 
-// 获取 CAN 总线引用（用于发送等操作）
-HXC_TWAI& bus = CanCallback::get_can_bus();
-bus.send(&msg);
-
-// 修改 CAN ID（持久化到 NVS，重启或重新初始化后用于注册回调）
-CanCallback::CAN_ID = 0x500;
+if (CanCallback::is_available()) {
+    HXC_TWAI& bus = CanCallback::get_can_bus();
+    bus.send(&msg);
+}
 ```
 
-## 添加新回调
+`get_can_bus()` 会直接解引用内部指针。只有 `init()` 成功或 `is_available()` 返回 `true` 后才能调用。
 
-在 `can_callback.cpp` 的 `init()` 函数中，按以下模板追加：
+## 添加新命令
 
-```cpp
-/**
- * @brief  0x<ID> - <简要描述>
- * @usage  收到 ID=0x<ID> 的 CAN 帧时执行
- * @param  msg - CAN 消息指针
- * @note   <注意事项>
- */
-can_bus->add_can_receive_callback_func(0x<ID>,
-    [](HXC_CAN_message_t* msg) {
-        // 回调实现
-    });
-```
-
-### 示例：添加 ID 为 0x456 的回调
-
-```cpp
-/**
- * @brief  0x456 - 电机状态反馈
- * @usage  收到 ID=0x456 的 CAN 帧时更新电机状态
- * @param  msg - CAN 消息指针
- * @note   数据格式: [0-1] 转速, [2-3] 电流
- */
-can_bus->add_can_receive_callback_func(0x456,
-    [](HXC_CAN_message_t* msg) {
-        uint16_t rpm = (msg->data[0] << 8) | msg->data[1];
-        uint16_t current = (msg->data[2] << 8) | msg->data[3];
-        ESP_LOGI("Motor", "RPM=%d Current=%dmA", rpm, current);
-    });
-```
-
-## 回调 ID 枚举
-
-| 值 | 名称 | 说明 |
-|----|------|------|
-| `0x00` | `CALLBACK_PING` | 心跳 Ping |
-| `0x01` | `CALLBACK_GET_STATE` | 获取状态 |
-| `0x02` | `CALLBACK_SET_OUTPUT` | 设置输出 |
-| `0x03` | `CALLBACK_SET_RESISTOR` | 设置 CAN 终端电阻 |
-
-回调 ID 与设备 CAN ID 相加得到实际 CAN 帧标识符：`CAN_ID + CALLBACK_ID`。
-
-## 数据结构
-
-### CALLBACK_GET_STATE_DATA_t（8 字节）
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `voltage_mV` | `uint16_t` | 电压，单位 mV |
-| `current_mA` | `int16_t` | 电流绝对值，单位 mA |
-| `Board_temperature` | `int8_t` | 板载温度，单位 1°C |
-| `Chip_temperature` | `int8_t` | 芯片温度，单位 1°C |
-| `output_state` | `uint8_t:1` | 输出状态，0: 关闭 1: 开启 |
-| `current_direction` | `uint8_t:1` | 电流方向，1: 正向，0: 非正向 |
-| `CAN_resistor` | `uint8_t:1` | CAN 终端电阻状态，0: 关闭 1: 开启 |
-| `reserved` | `uint8_t:5` | 保留位 |
-| `UVP_flag` | `ProtectState_t:2` | 低压保护状态 |
-| `OVP_flag` | `ProtectState_t:2` | 高压保护状态 |
-| `OTP_flag` | `ProtectState_t:2` | 过温保护状态 |
-| `OCP_flag` | `ProtectState_t:2` | 过流保护状态 |
-
-### CALLBACK_SET_OUTPUT_DATA_t
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `output_state` | `bool` | `true` 开启输出，`false` 关闭输出 |
-
-## NVS 配置变量
-
-| 变量 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `CAN_BAUDRATE` | `NVS_DATA<uint32_t>` | `1_Mbps` | CAN 波特率配置值；初始化总线时读取，修改后重启生效 |
-| `CAN_ID` | `NVS_DATA<uint32_t>` | `0x400` | 设备 CAN ID，初始化注册回调时与回调 ID 相加得到实际标识符 |
-
-## 已注册回调
-
-| ID | 说明 | 数据格式 |
-|----|------|----------|
-| `CAN_ID+0x00` (PING) | 心跳回应，原样返回接收帧 | 同请求帧 |
-| `CAN_ID+0x01` (GET_STATE) | 返回当前系统状态 | `CALLBACK_GET_STATE_DATA_t` |
-| `CAN_ID+0x02` (SET_OUTPUT) | 根据数据控制输出开关 | `CALLBACK_SET_OUTPUT_DATA_t` |
-| `CAN_ID+0x03` (SET_RESISTOR) | 根据数据控制 CAN 终端电阻 | `CALLBACK_SET_RESISTOR_DATA_t` |
-| `-1` | 调试用 Catch-All，打印所有帧 | 无特定格式 |
+1. 在 `CALLBACK_ID` 中增加偏移值。
+2. 在 `CanCallback::init()` 中调用 `add_can_receive_callback_func()` 注册回调。
+3. 明确请求数据长度、回复格式和标准帧/扩展帧要求。
+4. 若回复结构可能超过 8 字节，增加 `static_assert`。
+5. 更新本 README 的协议表。
 
 ## 环境与依赖
 
-- **软件**：ESP-IDF v6.0+、C++11
-- **组件依赖**：`HXC_TWAI`、`HXC_NVS`、`can_resistor`、`hardware`、`protect`、`global_state`、`power_output`
+- ESP-IDF v6.0+
+- C++11
+- 组件依赖：`HXC_TWAI`、`HXC_NVS`、`can_resistor`、`hardware`、`protect`、`global_state`、`power_output`、`blackbox_service`
