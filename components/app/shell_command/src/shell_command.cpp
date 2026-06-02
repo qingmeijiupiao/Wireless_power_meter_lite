@@ -320,9 +320,9 @@ esp_err_t init() {
 
             char* end = nullptr;
             unsigned long duration_ms = strtoul(argv[1], &end, 10);
-            if (argv[1][0] == '\0' || *end != '\0' || duration_ms > UINT32_MAX) {
+            if (argv[1][0] == '\0' || *end != '\0' || duration_ms > SCREEN::MAX_START_LOGO_DURATION_MS) {
                 printf("Usage: start_logo [duration_ms: 0-%lu]\n",
-                       static_cast<unsigned long>(UINT32_MAX));
+                       static_cast<unsigned long>(SCREEN::MAX_START_LOGO_DURATION_MS));
                 return 1;
             }
 

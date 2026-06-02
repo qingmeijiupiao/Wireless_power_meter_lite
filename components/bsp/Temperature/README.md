@@ -1,72 +1,110 @@
 # Temperature
 
-温度采集模块，提供两种温度传感器封装：TMP235 外置温度传感器（板载）与 ESP 芯片内置温度传感器。
+`Temperature` 封装了两种用途不同的温度传感器：
 
-## 模块特点
+| 传感器 | 测量对象 | 数据来源 | 主要用途 |
+|--------|----------|----------|----------|
+| `TMP235_t` | 电路板温度 | 外置 TMP235 模拟电压，经 ADC 采样 | 保护判断、电流温漂补偿 |
+| `ESPChipTemperatureSensor_t` | ESP32-C6 芯片内部温度 | 芯片内置温度传感器 | 芯片状态监控 |
 
-### TMP235（`TMP235.h`）
-- **ADC 采集**：基于 `adc_t` 类获取经校准的 mV 值
-- **分段线性转换**：三段分段线性公式将 ADC mV 值转换为温度，符合 TMP235 数据手册
-- **滑动均值滤波**：64 点环形缓冲区均值，抑制噪声
-- **异常诊断**：ADC 读取失败或电压超出 `50~2200mV` 时记录错误，并保留最近一次有效均值
+不要把两者混为一谈。板温更接近功率器件和采样电路环境，芯片内温反映 MCU 自身发热。
 
-### ESP 芯片内温（`ESPChipTemperatureSensor.h`）
-- **自动量程切换**：5 档温度范围，接近边界时自动切换以优化精度
-- **精度**：默认范围（-10°C ~ 80°C）±1°C
-
-## 数据流
+## 总体数据流
 
 ```mermaid
 flowchart LR
-    TMP235["TMP235<br/>模拟电压"] --> ADC["adc_t<br/>校准后 mV"]
-    ADC --> Piecewise["TMP235_t::getTemperature()<br/>分段线性换算"]
-    Piecewise --> Avg["64 点滑动均值"]
-    Avg --> Board["board_temperature<br/>0.01°C"]
+    TMP["TMP235 模拟电压"] --> ADC["adc_t<br/>校准后 mV"]
+    ADC --> Convert["分段线性换算"]
+    Convert --> Avg["64 点滑动均值"]
+    Avg --> Board["board_temperature<br/>0.01 摄氏度"]
 
-    TSENS["ESP 内置温度传感器"] --> ChipSensor["ESPChipTemperatureSensor_t"]
-    ChipSensor --> Range{"接近当前量程边界?"}
-    Range -->|否| Chip["chip_temperature<br/>°C"]
-    Range -->|是| Reinstall["切换 temperature_sensor_config_t<br/>重装传感器"]
-    Reinstall --> Chip
+    TSENS["ESP32-C6 片内传感器"] --> Read["读取摄氏度"]
+    Read --> Check["检查当前量程边界"]
+    Check --> Chip["chip_temperature<br/>0.01 摄氏度写入 global_state"]
+    Check --> Switch["必要时切换量程并重读"]
+    Switch --> Chip
 ```
 
-## 集成与使用
+`app_main` 的 5ms 定时器读取两种传感器，并写入 `global_state`。
+
+## TMP235 板温
+
+### 工作方式
+
+TMP235 输出与温度相关的模拟电压。`TMP235_t` 通过 `adc_t` 获取校准后的 mV 值，再按数据手册对应的分段公式转换为 `0.01 摄氏度`。
+
+```mermaid
+flowchart TD
+    Read["ADC 读取 mV"] --> Valid{"读取成功且<br/>50mV <= V <= 2200mV?"}
+    Valid -->|否| Fallback["记录一次错误<br/>返回最近有效均值"]
+    Valid -->|是| Formula{"电压区间"}
+    Formula -->|"V < 1500"| A["(V - 500) * 10"]
+    Formula -->|"1500 <= V <= 1752"| B["(V - 1500) * 1000 / 101 + 10000"]
+    Formula -->|"V > 1752"| C["(V - 1753) * 1000 / 106 + 12500"]
+    A --> Avg["加入 64 点滑动均值"]
+    B --> Avg
+    C --> Avg
+```
+
+### API
 
 ```cpp
 #include "TMP235.h"
-#include "ESPChipTemperatureSensor.h"
 
-// TMP235 板载温度传感器
-TMP235_t& ntc = TMP235_t::instance();
-ntc.init(ADC_CHANNEL_0);
-int16_t ntc_temp = ntc.getTemperature();  // 0.01°C 单位
-
-// ESP 芯片内置温度传感器
-ESPChipTemperatureSensor_t& chip_temp = ESPChipTemperatureSensor_t::instance();
-chip_temp.init();
-float t = chip_temp.getTemperature();       // °C 单位
+TMP235_t& board_sensor = TMP235_t::instance();
+ESP_ERROR_CHECK(board_sensor.init(ADC_CHANNEL_0));
+int16_t board_temp = board_sensor.getTemperature(); // 2534 表示 25.34 摄氏度
 ```
 
-## API 参考
+### 注意事项
 
-### TMP235_t
+- `init()` 需要传入硬件配置对应的 ADC 通道。
+- 初始化前调用 `getTemperature()` 会返回 `0` 并记录错误。
+- ADC 暂时失败或输入越界时，组件保留最近一次有效滑动均值，避免温度瞬间跳变。
+- 启动初期有效样本不足 64 个时，均值只使用已经采到的样本。
 
-| API | 说明 |
-|-----|------|
-| `TMP235_t::instance()` | 获取单例引用 |
-| `init(adc_channel_t channel)` | 初始化 ADC 通道 |
-| `getTemperature()` | 返回温度，0.01°C 单位（int16_t） |
+## ESP 芯片内温
 
-### ESPChipTemperatureSensor_t
+### 为什么需要切换量程
 
-| API | 说明 |
-|-----|------|
-| `ESPChipTemperatureSensor_t::instance()` | 获取单例引用 |
-| `init()` | 初始化芯片内置温度传感器 |
-| `getTemperature()` | 返回芯片温度，°C 单位（float） |
+ESP-IDF 为片内温度传感器提供多档可用范围。范围较宽时能覆盖更极端的温度，但精度较低；范围较窄时覆盖区间较小，但精度更高。
+
+因此本组件默认从中间档位 `index = 2` 启动，并在温度靠近当前范围边缘 `10 摄氏度` 内时切换到相邻档位。这样既能覆盖温度变化，也尽量使用更合适的测量档位。
+
+具体档位边界来自 ESP-IDF 的 `temperature_sensor_attributes`，不是本组件写死的常量。
+
+```mermaid
+flowchart TD
+    Read["temperature_sensor_get_celsius()"] --> Low{"低于当前下限 + 10<br/>且仍有更低档位?"}
+    Low -->|是| Down["切换到 index - 1"]
+    Low -->|否| High{"高于当前上限 - 10<br/>且仍有更高档位?"}
+    High -->|是| Up["切换到 index + 1"]
+    High -->|否| Return["返回当前读数"]
+    Down --> ReRead["重新读取一次"]
+    Up --> ReRead
+    ReRead --> Return
+```
+
+切换档位时会依次 disable、uninstall、install、enable 传感器，然后重新读取一次温度。
+
+### API
+
+```cpp
+#include "ESPChipTemperatureSensor.h"
+
+ESPChipTemperatureSensor_t& chip_sensor = ESPChipTemperatureSensor_t::instance();
+ESP_ERROR_CHECK(chip_sensor.init());
+float chip_temp = chip_sensor.getTemperature(); // 摄氏度
+```
+
+### 注意事项
+
+- 本 API 返回 `float` 摄氏度；写入 `global_state.chip_temperature` 时，`app_main` 会乘以 `100`。
+- 初始化前调用会返回 `0` 并记录错误。
+- 读取失败时返回最近一次读数。
 
 ## 环境与依赖
 
-- **硬件**：TMP235 温度传感器接 ADC 通道
-- **软件**：ESP-IDF v6.0+
-- **组件依赖**：`ADC`（TMP235）、`esp_driver_tsens`、`esp_hal_ana_conv`
+- 硬件：TMP235 连接 ADC 通道；ESP32-C6 片内温度传感器
+- ESP-IDF v6.0+
+- 组件依赖：`ADC`、`esp_driver_tsens`、`esp_hal_ana_conv`

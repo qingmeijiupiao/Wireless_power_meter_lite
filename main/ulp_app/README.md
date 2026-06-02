@@ -1,121 +1,147 @@
 # ulp_app
 
-LP 核应用程序，运行在 ESP32-C6 的 LP Core 上，负责 INA226 采样、电流校准补偿、电量/能量积分以及向 HP 核暴露 RTC 共享变量。主程序入口在 `ulp_main.cpp`，INA226 低功耗 I2C 驱动在 `ina226.hpp`，LP/HP 共享状态位定义在 `ulp_state.h`。
+`ulp_app` 运行在 ESP32-C6 的 LP Core 上。LP Core 可以理解为一个较轻量的辅助处理器：HP 核运行主业务、屏幕和网络，LP 核持续采样 INA226 并累计电量。
 
-## 模块特点
+本目录只包含 LP 核程序。HP 核侧的加载、启动和校准参数搬运见 [`../ulp_loader/README.md`](../ulp_loader/README.md)。
 
-- **LP 核独立采样**：INA226 连续转换，LP 核轮询 `CNVR` 转换完成位后读取电压与分流器寄存器
-- **RTC 共享变量**：采样值、原始寄存器、积分值、状态位和校准参数放在 `.rtc.bss` 段，供 HP 核直接访问
-- **整数电流校准**：使用 `current_base_K`、6 点非等间距插值和 `temperature_K` 完成无浮点温漂补偿
-- **电量/能量积分**：以 `uA·ms` 和 `uA·uV·ms` 累加，跨阈值后更新 `meter_uah` 和 `meter_uwh`
-- **溢出安全计时**：基于 20MHz CPU cycle 维护 `now_time_ms`，处理底层计数回绕
+## 设计目标
 
-## 运行流程
+- 使用 LP I2C 持续读取 INA226，不占用 HP 核主任务。
+- 在 LP 核上完成电流校准、温漂补偿、电量积分和能量积分。
+- 通过 RTC 共享内存向 HP 核暴露测量值和状态。
+- 使用整数运算，适应 LP 核环境。
 
-```mermaid
-flowchart TD
-    Boot["main()"] --> LoadCalib["load_current_calib_params()<br/>加载 RTC 校准参数到插值器"]
-    LoadCalib --> InaInit["ulp_ina226_init()<br/>reset / manufacturer check / config"]
-    InaInit --> Ready["置位 ulp_run 与 ulp_ina226_init_ok"]
-    Ready --> Loop["while(1) 主循环"]
-    Loop --> Sample["ina226_run()<br/>CNVR ready 后读取 BUS 与 SHUNT"]
-    Sample --> Timer["timer_run()<br/>更新 now_time_ms"]
-    Timer --> Freq{"每 1000ms"}
-    Freq -->|是| UpdateFreq["更新 core_run_freq_hz"]
-    Freq -->|否| ReloadCheck
-    UpdateFreq --> ReloadCheck{"每 20ms"}
-    ReloadCheck -->|是| Reload["检查 ulp_reload_calib_params"]
-    ReloadCheck -->|否| MeterCheck
-    Reload --> MeterCheck{"每 10ms"}
-    MeterCheck -->|是| Meter["update_meter()<br/>电量/能量积分"]
-    MeterCheck -->|否| Inc["loop_times++"]
-    Meter --> Inc
-    Inc --> Loop
-```
-
-## 采样与校准数据流
+## 整体架构
 
 ```mermaid
 flowchart LR
-    INA["INA226"] -->|BUS_VOLTAGE| VRaw["voltage_register_raw"]
-    INA -->|SHUNT_VOLTAGE| IRaw["shunt_register_raw"]
-    VRaw --> V["voltage_uv = raw * 1250"]
-    IRaw --> Dead{"abs(raw * current_base_K)<br/>小于死区?"}
+    INA["INA226<br/>I2C 地址 0x40"] --> LP["LP Core ulp_app"]
+    Calib["RTC 共享校准参数"] --> LP
+    Board["HP 核写入板温<br/>0.01 摄氏度"] --> LP
+    LP --> RTC["RTC 共享变量"]
+    RTC --> HP["HP 核 app_main<br/>每 5ms 同步到 global_state"]
+```
+
+## 启动与主循环
+
+```mermaid
+flowchart TD
+    Start["LP Core main()"] --> Load["加载 6 点插值参数"]
+    Load --> Init["ulp_ina226_init()"]
+    Init --> Reset["复位 INA226<br/>读取 manufacturer ID"]
+    Reset --> Config["64 次平均<br/>BUS 与 SHUNT 连续转换"]
+    Config --> First["等待第一次有效电压采样"]
+    First --> InitOK["置位 ulp_ina226_init_ok"]
+    InitOK --> Run["置位 ulp_run"]
+    Run --> Loop["主循环"]
+    Loop --> Sample["ina226_run()<br/>转换完成时更新测量值"]
+    Sample --> Timer["timer_run()<br/>更新内部毫秒计数"]
+    Timer --> Every1s["每约 1000ms<br/>更新循环频率"]
+    Every1s --> Every20ms["每约 20ms<br/>检查校准参数重载"]
+    Every20ms --> Every10ms["每约 10ms<br/>积分电量和能量"]
+    Every10ms --> Loop
+```
+
+初始化失败时 LP 核会停留在 3 秒延时循环中，`ulp_run` 不会置位。HP 核侧 `LP_Core_Load()` 会检测启动失败。
+
+## INA226 采样
+
+INA226 配置为：
+
+| 项目 | 配置 |
+|------|------|
+| I2C 地址 | `0x40` |
+| 平均次数 | `64 samples` |
+| 分流电压转换时间 | `1100 us` |
+| 总线电压转换时间 | `1100 us` |
+| 模式 | 分流电压与总线电压连续转换 |
+
+主循环读取 MASK/ENABLE 寄存器的转换完成标志。只有转换完成时才更新电压和电流。
+
+```mermaid
+flowchart LR
+    VRaw["BUS_VOLTAGE raw"] --> V["voltage_uv = raw * 1250"]
+    IRaw["SHUNT_VOLTAGE raw"] --> Dead{"abs(raw * current_base_K)<br/>< 3000 ?"}
     Dead -->|是| Zero["current_uA = 0"]
-    Dead -->|否| Base["线性基准<br/>current_base_K * raw"]
-    Base --> Interp["6 点插值修正<br/>offset_current_100uA * 100"]
-    Interp --> Temp["温漂补偿<br/>temperature_K ppm/°C"]
+    Dead -->|否| Base["raw * current_base_K"]
+    Base --> Interp["+ 6 点插值补偿 * 100"]
+    Interp --> Temp["减去温漂补偿"]
     Temp --> Current["current_uA"]
-    BoardTemp["Board_temperature<br/>HP 核写入"] --> Temp
-    Calib["current_calib_params<br/>RTC 共享参数"] --> Base
-    Calib --> Interp
-    Calib --> Temp
 ```
 
-## HP/LP 共享变量
+## 电流校准
+
+校准参数类型来自 `current_calibration` 组件：
+
+| 字段 | 作用 |
+|------|------|
+| `current_base_K` | 分流寄存器原始值到电流的基础比例 |
+| `points[6]` | 6 个非等间距插值点，修正不同电流区间误差 |
+| `temperature_K` | 温漂补偿系数 |
+
+HP 核修改参数后，会置位 `ulp_reload_calib_params`。LP 核每约 20ms 检查一次该标志，重新加载插值表后清除标志。
+
+`Board_temperature` 由 HP 核写入，单位是 `0.01 摄氏度`。LP 核先换算成整摄氏度温差，再进行补偿。
+
+## 电量与能量积分
+
+LP 核每约 10ms 调用 `update_meter()`：
 
 ```mermaid
-classDiagram
-    class ULP_CORE_STATE {
-        +ulp_have_log : 1
-        +ulp_i2c_init_err : 1
-        +ulp_ina226_init_ok : 1
-        +ulp_ina226_read_timeout : 1
-        +ulp_run : 1
-        +ulp_reload_calib_params : 1
-    }
-    class CurrentCalib_params_t {
-        +uint16_t current_base_K
-        +point_t points[6]
-        +int16_t temperature_K
-    }
-    class RTC_Shared {
-        +uint32_t voltage_uv
-        +uint16_t voltage_register_raw
-        +int32_t current_uA
-        +int16_t shunt_register_raw
-        +int32_t Board_temperature
-        +int32_t meter_uah
-        +int32_t meter_uwh
-        +uint32_t core_run_freq_hz
-    }
-    RTC_Shared --> ULP_CORE_STATE
-    RTC_Shared --> CurrentCalib_params_t
+flowchart TD
+    Delta["计算 delta_ms"] --> Charge["累加 current_uA * delta_ms"]
+    Delta --> Energy["累加 current_uA * voltage_uv * delta_ms"]
+    Charge --> UAh{"跨过 3,600,000<br/>uA*ms 阈值?"}
+    Energy --> UWh{"跨过 3,600,000,000,000<br/>uA*uV*ms 阈值?"}
+    UAh --> MeterA["更新 meter_uah<br/>保留余数"]
+    UWh --> MeterW["更新 meter_uwh<br/>保留余数"]
 ```
 
-## 与 HP 核交互
+积分保留电流正负号，因此充电和放电方向会影响累计值。
 
-```mermaid
-sequenceDiagram
-    participant HP as HP 核
-    participant RTC as RTC 共享内存
-    participant LP as LP 核 ulp_app
-    participant INA as INA226
+## RTC 共享变量
 
-    HP->>RTC: 写入 current_calib_params
-    HP->>LP: ulp_lp_core_run()
-    LP->>INA: reset + configuration
-    LP->>RTC: 置位 ulp_run / ulp_ina226_init_ok
-    loop 主循环
-        LP->>INA: 读取 BUS / SHUNT 寄存器
-        LP->>RTC: 更新 voltage_uv / current_uA / raw register
-        HP->>RTC: 读取采样值并写入 Board_temperature
-    end
-    HP->>RTC: 修改校准参数并置位 ulp_reload_calib_params
-    LP->>RTC: 重新加载插值表并清除标志
-```
+带 `LP_VAR` 的变量位于 `.rtc.bss` 段，HP 核可直接访问。
+
+| 变量 | 类型 | 单位 | 方向 | 说明 |
+|------|------|------|------|------|
+| `ulp_state` | `uint32_t` | - | LP -> HP，HP 可清零/置重载位 | 状态位集合 |
+| `log_data` | `uint32_t` | - | LP -> HP | 预留 LP 日志数据 |
+| `core_run_freq_hz` | `uint32_t` | Hz | LP -> HP | LP 主循环频率统计 |
+| `voltage_uv` | `uint32_t` | uV | LP -> HP | 总线电压 |
+| `voltage_register_raw` | `uint16_t` | raw | LP -> HP | INA226 总线电压原始值 |
+| `current_uA` | `int32_t` | uA | LP -> HP | 补偿后的电流 |
+| `shunt_register_raw` | `int16_t` | raw | LP -> HP | INA226 分流电压原始值 |
+| `ina226_manufacturer_id` | `uint16_t` | raw | LP -> HP | INA226 厂商 ID |
+| `Board_temperature` | `int32_t` | 0.01 摄氏度 | HP -> LP | 板温，用于温漂补偿 |
+| `meter_uah` | `int32_t` | uAh | LP -> HP | 累计电量 |
+| `meter_uwh` | `int32_t` | uWh | LP -> HP | 累计能量 |
+| `current_calib_params` | `CurrentCalib::params_t` | - | HP -> LP | 校准参数 |
+
+## 状态位
+
+| 位域 | 当前行为 |
+|------|----------|
+| `ulp_have_log` | `lp_log()` 写入日志时置位；当前主循环没有启用日志调用 |
+| `ulp_i2c_init_err` | INA226 初始化中的 I2C 操作失败时置位 |
+| `ulp_ina226_init_ok` | INA226 初始化和首个电压样本成功后置位 |
+| `ulp_ina226_read_timeout` | INA226 连续 1 秒没有完整采样时置位；恢复采样后清零 |
+| `ulp_run` | INA226 初始化成功后、进入主循环前置位 |
+| `ulp_reload_calib_params` | HP 核请求重新加载校准参数时置位，LP 核处理后清除 |
 
 ## 文件说明
 
 | 文件 | 作用 |
 |------|------|
-| `ulp_main.cpp` | LP 核主循环、INA226 调度、电流补偿、电量/能量积分 |
-| `ina226.hpp` | LP Core I2C 版 INA226 寄存器读写与配置 |
-| `ulp_Interp.hpp` | LP 核可用的固定容量非等间距插值器 |
-| `ulp_state.h` | HP/LP 共享状态位定义 |
+| `ulp_main.cpp` | LP 核入口、采样、补偿、积分和 RTC 共享变量 |
+| `ina226.hpp` | LP I2C 版 INA226 寄存器访问和配置 |
+| `ulp_Interp.hpp` | 固定容量非等间距插值器 |
+| `ulp_state.h` | HP/LP 共用的状态位定义 |
 
 ## 注意事项
 
-- `voltage_uv` 实际由 INA226 bus voltage raw 乘以 `voltage_scale = 1250` 得到，HP 核在 `app_main.cpp` 中转换为 mV。
-- `current_uA` 是已完成死区、插值和温漂补偿后的最终电流值，符号保留电流方向。
-- `Board_temperature` 由 HP 核写入，单位为 0.01°C，LP 核用它做温漂补偿。
+- LP 核侧尽量使用整数运算，新增逻辑前要评估代码体积和执行开销。
+- `voltage_uv` 是 uV，HP 核写入 `global_state` 时除以 `1000` 转换为 mV。
+- `current_uA` 已包含死区、插值和温漂补偿，不是 INA226 原始寄存器值。
+- INA226 连续 1 秒没有完整采样时会设置 `ulp_ina226_read_timeout`，同时将电压、电流清零，触发现有 UVP 保守关断链路。
+- `app_loop_every_ms()` 使用 `>` 判断间隔，因此文档使用“约 10ms / 20ms / 1000ms”描述。

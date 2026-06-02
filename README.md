@@ -58,6 +58,7 @@
 
 | 模块 | 文档 |
 |------|------|
+| 构建与资源脚本 | [scripts/README.md](scripts/README.md) |
 | 主入口与 LP 核加载 | [main/ulp_loader/README.md](main/ulp_loader/README.md) |
 | LP 核采样程序 | [main/ulp_app/README.md](main/ulp_app/README.md) |
 | 全局状态 | [components/app/global_state/README.md](components/app/global_state/README.md) |
