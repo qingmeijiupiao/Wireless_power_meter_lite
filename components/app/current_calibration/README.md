@@ -203,7 +203,7 @@ Rshunt_mΩ = 2500 / 1114 ≈ 2.244mΩ
 
 ```
 1. 读取 INA226 Shunt Voltage 寄存器 → shunt_register_raw
-2. 死区判断：|shunt_register_raw × current_base_K| < current_dead_zone_uv → current_uA = 0
+2. 死区判断：|shunt_register_raw × current_base_K| < current_dead_zone_uA → current_uA = 0
 3. 线性基准 + 插值修正：
    no_temp_cali_current_uA = current_base_K × shunt_register_raw
                            + interpolate(shunt_register_raw) × 100
@@ -426,7 +426,7 @@ Calibration current temperatureK: <temperature_K>
 | 分段线性插值 | < 0.05% | 6 点密集覆盖，弦长足够短 |
 | 热延迟与动态热梯度 | 1%~2%（瞬态） | 仅在剧烈动态工况下存在，稳态为 0 |
 | 40A 瞬态外推 | < 0.05% | 继承 25A 系数，$V_{Offset}$ 占比可忽略 |
-| 死区截断 | 取决于 `current_dead_zone_uv` | `current_dead_zone_uv` 对应的小电流以下归零 |
+| 死区截断 | 取决于 `current_dead_zone_uA` | `current_dead_zone_uA` 对应的小电流以下归零 |
 
 ## 文件结构
 

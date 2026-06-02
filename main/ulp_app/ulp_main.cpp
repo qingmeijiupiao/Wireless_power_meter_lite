@@ -15,7 +15,7 @@ constexpr int current_scale = 1114;
 constexpr int voltage_scale = 1250;
 
 constexpr uint32_t LP_CPU_FREQ_HZ = 20000000;
-constexpr uint32_t current_dead_zone_uv = 5000;
+constexpr uint32_t current_dead_zone_uA = 5000;
 
 #define MS_TO_US(ms) ((ms) * 1000)
 
@@ -166,7 +166,7 @@ void ina226_run(){
     const int32_t board_temperature = with_shared_lock([]() {
         return Board_temperature;
     });
-    if(std::abs((int32_t)new_shunt_register_raw * local_current_calib_params.current_base_K) < current_dead_zone_uv){
+    if(std::abs((int32_t)new_shunt_register_raw * local_current_calib_params.current_base_K) < current_dead_zone_uA){
         new_current_uA = 0;
     } else {
         //插值补偿映射

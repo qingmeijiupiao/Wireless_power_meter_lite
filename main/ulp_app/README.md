@@ -61,7 +61,7 @@ INA226 配置为：
 ```mermaid
 flowchart LR
     VRaw["BUS_VOLTAGE raw"] --> V["voltage_uv = raw * 1250"]
-    IRaw["SHUNT_VOLTAGE raw"] --> Dead{"abs(raw * current_base_K)<br/>< 3000 ?"}
+    IRaw["SHUNT_VOLTAGE raw"] --> Dead{"abs(raw * current_base_K)<br/>< 5000 ?"}
     Dead -->|是| Zero["current_uA = 0"]
     Dead -->|否| Base["raw * current_base_K"]
     Base --> Interp["+ 6 点插值补偿 * 100"]
