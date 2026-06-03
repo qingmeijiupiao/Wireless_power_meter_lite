@@ -4,6 +4,6 @@ idf_component_register(
                          "src/ui_manager.cpp"
                          "src/pages.cpp"
                     REQUIRES Button
-                    PRIV_REQUIRES st7735_driver hardware global_state protect freertos log ui_resources Fonts HXC_NVS wifi_service power_output can_callback can_resistor energy_meter blackbox blackbox_service current_calibration esp_app_format
+                    PRIV_REQUIRES st7735_driver hardware global_state protect freertos log ui_resources Fonts HXC_NVS wifi_service wifi_manager power_output can_callback can_resistor energy_meter blackbox blackbox_service current_calibration
                     INCLUDE_DIRS "include"
                     PRIV_INCLUDE_DIRS "private_include")

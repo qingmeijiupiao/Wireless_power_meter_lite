@@ -43,10 +43,9 @@ void append_hardware_config_failure(esp_err_t err) {
 
 void append_system_boot_start() {
     const esp_app_desc_t* app_desc = esp_app_get_description();
-    BlackboxService::append_event("system: boot_start fw=%s build=%s_%s hw_version=%u",
+    BlackboxService::append_event("system: boot_start fw=%s build=%s hw_version=%u",
                                   app_desc->version,
-                                  app_desc->date,
-                                  app_desc->time,
+                                  BUILD_TIME,
                                   static_cast<unsigned>(get_hardware_version()));
 }
 
@@ -62,11 +61,10 @@ void append_early() {
     const auto wifi = WifiService::get_config();
     const auto calibration = CurrentCalib::params_data.read();
 
-    append_boot_line("boot: reset_reason=%u fw=%s build=%s_%s hw=%u",
+    append_boot_line("boot: reset_reason=%u fw=%s build=%s hw=%u",
                      static_cast<unsigned>(esp_reset_reason()),
                      app_desc->version,
-                     app_desc->date,
-                     app_desc->time,
+                     BUILD_TIME,
                      static_cast<unsigned>(get_hardware_version()));
     append_boot_line("boot: flash_bytes=%lu ota_label=%s ota_subtype=%u",
                      static_cast<unsigned long>(flash_size),

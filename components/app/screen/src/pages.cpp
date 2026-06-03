@@ -3,7 +3,7 @@
  * @LastEditors: qingmeijiupiao
  * @Description: 屏幕应用页面实现，包含主页数据渲染、无线状态页、设置页和预留页面
  * @Author: qingmeijiupiao
- * @LastEditTime: 2026-06-03 21:58:26
+ * @LastEditTime: 2026-06-03 22:41:22
  */
 #include "pages.h"
 
@@ -16,7 +16,6 @@
 #include "DENGB20.h"
 #include "current_calibration.h"
 #include "energy_meter.h"
-#include "esp_app_desc.h"
 #include "esp_log.h"
 #include "ErrorRectangle.h"
 #include "WarningRectangle.h"
@@ -36,6 +35,7 @@
 #include "ui_close.h"
 #include "ui_open.h"
 #include "ui_static.h"
+#include "wifi_manager.h"
 #include "wifi_service.h"
 #include "ah_logo.h"
 #include "wh_logo.h"
@@ -393,7 +393,7 @@ void WirelessPage::render(RenderMode mode) {
     (void)mode;
     ST7735::fill_screen(ST7735::BLACK);
 
-    char line[40];
+    char value[24];
     const WifiService::Mode wifi_mode = WifiService::get_mode();
     const bool provisioning = WifiService::is_provisioning();
     const char* mode_text = provisioning ? "AP" : wifi_mode_text(wifi_mode);
@@ -405,64 +405,108 @@ void WirelessPage::render(RenderMode mode) {
         mode_color = ST7735::color_t(0xef2a2a);
     }
 
-    auto draw_header = [&]() {
-        ST7735::draw_string(4, 3, "WiFi", ST7735::WHITE, ST7735::BLACK, DENGB16);
-        ST7735::fill_rect(0, 21, ST7735::WIDTH, 1, ST7735::color_t(0x303030));
-        ST7735::fill_rect(126, 3, 30, 15, ST7735::color_t(0x202020));
-        ST7735::draw_string(132, 5, mode_text, mode_color, ST7735::color_t(0x202020), DENGB12);
+    auto draw_status_pill = [](uint16_t x, uint16_t y, const char* text, ST7735::color_t color) {
+        constexpr uint16_t pill_w = 36;
+        constexpr uint16_t pill_h = 17;
+        const ST7735::color_t background = ST7735::color_t(0x202020);
+        ST7735::fill_round_rect(x, y, pill_w, pill_h, 6, background, ST7735::BLACK);
+        ST7735::draw_string(x + 3, 2, text, color, background, DENGB16);
     };
 
-    auto draw_provisioning = [&]() {
-        ST7735::draw_string(4, 27, "CONFIG AP", ST7735::color_t(0x2FC9EC), ST7735::BLACK, DENGB12);
-        snprintf(line, sizeof(line), "%.20s", WifiService::get_ap_ssid());
-        ST7735::draw_string(4, 44, line, ST7735::WHITE, ST7735::BLACK, DENGB12);
-        ST7735::draw_string(4, 61, "192.168.4.1", ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB12);
+    auto draw_signal_logo = [&]() {
+        constexpr uint16_t bar_x0 = 7;
+        constexpr uint16_t bar_bottom = 76;
+        constexpr uint16_t bar_w = 7;
+        constexpr uint16_t bar_gap = 4;
+        constexpr uint16_t bar_radius = 3;
+        constexpr uint16_t bar_heights[4] = {14, 23, 32, 41};
+        const ST7735::color_t inactive = ST7735::color_t(0x303030);
+        const bool sta_connected = wifi_mode == WifiService::Mode::STA &&
+                                   WifiService::get_wifi_state() == WIFI_STATE_STA_CONNECTED;
+        const uint8_t signal = sta_connected ? WifiService::get_signal_percent() : 0;
+        uint8_t active_bars = provisioning ? 4 : 0;
+        if (!provisioning && signal > 0) {
+            active_bars = static_cast<uint8_t>((signal + 24) / 25);
+            if (active_bars > 4) {
+                active_bars = 4;
+            }
+        }
+
+        for (uint8_t i = 0; i < 4; i++) {
+            const uint16_t x = bar_x0 + i * (bar_w + bar_gap);
+            const uint16_t h = bar_heights[i];
+            const uint16_t y = bar_bottom - h;
+            ST7735::fill_round_rect(x, y, bar_w, h, bar_radius,
+                                     i < active_bars ? ST7735::WHITE : inactive,
+                                     ST7735::BLACK);
+        }
     };
 
-    auto draw_sta = [&]() {
+    auto draw_info_row = [](uint16_t x, uint16_t y, uint16_t w,
+                            const char* label, const char* text, ST7735::color_t text_color) {
+        constexpr uint16_t row_h = 14;
+        constexpr uint16_t row_radius = 5;
+        const ST7735::color_t background = ST7735::color_t(0x202020);
+        const ST7735::color_t label_color = ST7735::color_t(0xB5B5B5);
+        ST7735::fill_round_rect(x, y, w, row_h, row_radius, background, ST7735::BLACK);
+        ST7735::draw_string(x + 4, y + 3, label, label_color, background, DENGB12);
+        ST7735::draw_string(x + 33, y + 3, text, text_color, background, DENGB12);
+    };
+
+    auto draw_text_row = [](uint16_t x, uint16_t y, uint16_t w,
+                            const char* text, ST7735::color_t text_color) {
+        constexpr uint16_t row_h = 14;
+        constexpr uint16_t row_radius = 5;
+        const ST7735::color_t background = ST7735::color_t(0x202020);
+        ST7735::fill_round_rect(x, y, w, row_h, row_radius, background, ST7735::BLACK);
+        ST7735::draw_string(x + 4, y + 3, text, text_color, background, DENGB12);
+    };
+
+    auto draw_details = [&]() {
         WifiService::Config cfg = WifiService::get_config();
         IP_t ip = WifiService::get_ip();
         uint8_t channel = 0;
-        WifiService::get_channel(&channel);
-        snprintf(line, sizeof(line), "%.20s", cfg.ssid[0] == '\0' ? "STA connected" : cfg.ssid);
-        ST7735::draw_string(4, 26, line, ST7735::color_t(0x1ef851), ST7735::BLACK, DENGB12);
-        snprintf(line, sizeof(line), "%u.%u.%u.%u",
+        const bool channel_available = WifiService::get_channel(&channel) == ESP_OK;
+        const uint8_t signal = wifi_mode == WifiService::Mode::STA ? WifiService::get_signal_percent() : 0;
+
+        if (provisioning) {
+            snprintf(value, sizeof(value), "%.18s", WifiService::get_ap_ssid());
+        } else if (wifi_mode == WifiService::Mode::STA) {
+            snprintf(value, sizeof(value), "%.18s", cfg.ssid[0] == '\0' ? "Connected" : cfg.ssid);
+        } else if (last_result_ != ESP_OK) {
+            snprintf(value, sizeof(value), "ERR");
+        } else {
+            snprintf(value, sizeof(value), "OFF");
+        }
+        draw_info_row(2, 19, 156, "SSID", value,
+                      wifi_mode == WifiService::Mode::OFF ? ST7735::color_t(0xB5B5B5) : ST7735::WHITE);
+
+        snprintf(value, sizeof(value), "IP:%u.%u.%u.%u",
                  static_cast<unsigned>(ip.octet1),
                  static_cast<unsigned>(ip.octet2),
                  static_cast<unsigned>(ip.octet3),
                  static_cast<unsigned>(ip.octet4));
-        ST7735::draw_string(4, 42, line, ST7735::color_t(0x2FC9EC), ST7735::BLACK, DENGB12);
+        draw_text_row(54, 42, 104, value,
+                      provisioning ? ST7735::color_t(0x1ef851) : ST7735::color_t(0x2FC9EC));
 
-        const uint8_t signal = WifiService::get_signal_percent();
-        snprintf(line, sizeof(line), "%u%%", static_cast<unsigned>(signal));
-        ST7735::draw_string(4, 59, line, ST7735::WHITE, ST7735::BLACK, DENGB12);
-        ST7735::fill_rect(36, 63, 70, 4, ST7735::color_t(0x303030));
-        ST7735::fill_rect(36, 63, static_cast<uint16_t>(70 * signal / 100), 4, ST7735::color_t(0x1ef851));
-        snprintf(line, sizeof(line), "CH %u", static_cast<unsigned>(channel));
-        ST7735::draw_string(120, 59, line, ST7735::color_t(0x808080), ST7735::BLACK, DENGB12);
+        if (wifi_mode == WifiService::Mode::STA && channel_available) {
+            snprintf(value, sizeof(value), "CH%u %u%%",
+                     static_cast<unsigned>(channel),
+                     static_cast<unsigned>(signal));
+        } else if (provisioning) {
+            snprintf(value, sizeof(value), "AP mode");
+        } else if (last_result_ != ESP_OK) {
+            snprintf(value, sizeof(value), "%.12s", esp_err_to_name(last_result_));
+        } else {
+            snprintf(value, sizeof(value), "Hold AP");
+        }
+        draw_info_row(54, 60, 104, "SIG", value, ST7735::color_t(0xB5B5B5));
     };
 
-    auto draw_error = [&]() {
-        snprintf(line, sizeof(line), "ERR %.20s", esp_err_to_name(last_result_));
-        ST7735::draw_string(4, 33, line, ST7735::color_t(0xef2a2a), ST7735::BLACK, DENGB12);
-        ST7735::draw_string(4, 54, "Hold side: retry", ST7735::color_t(0x808080), ST7735::BLACK, DENGB12);
-    };
-
-    auto draw_off = []() {
-        ST7735::draw_string(4, 33, "WiFi service OFF", ST7735::WHITE, ST7735::BLACK, DENGB12);
-        ST7735::draw_string(4, 54, "Hold side: AP", ST7735::color_t(0x808080), ST7735::BLACK, DENGB12);
-    };
-
-    draw_header();
-    if (provisioning) {
-        draw_provisioning();
-    } else if (wifi_mode == WifiService::Mode::STA) {
-        draw_sta();
-    } else if (last_result_ != ESP_OK) {
-        draw_error();
-    } else {
-        draw_off();
-    }
+    draw_status_pill(2, 0, mode_text, mode_color);
+    // Keep x=40..76 free for a future ESP-NOW status pill with the same height.
+    draw_signal_logo();
+    draw_details();
 }
 
 /** @brief 返回设置页 ID。 */
@@ -717,13 +761,15 @@ void SettingsPage::build_dialog_content() {
     const uint8_t item = selected_;
 
     if (item == FirmwareInfo) {
-        const esp_app_desc_t* app_desc = esp_app_get_description();
-        snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "Ver %u.%u.%u",
+        const MAC_t mac = WiFiManager::instance().get_mac(WIFI_IF_STA);
+        snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "Version %u.%u.%u",
                  static_cast<unsigned>(VERSION_MAJOR),
                  static_cast<unsigned>(VERSION_MINOR),
                  static_cast<unsigned>(VERSION_PATCH));
-        snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "%.11s", app_desc->date);
-        snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "%.8s", app_desc->time);
+        snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Build %s", BUILD_TIME);
+        snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "MAC %02X:%02X:%02X:%02X:%02X:%02X",
+                 mac.octet1, mac.octet2, mac.octet3,
+                 mac.octet4, mac.octet5, mac.octet6);
     } else if (item == BlackboxInfo) {
         const uint32_t interval = BlackboxService::get_snapshot_interval_s();
         snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "State %s", Blackbox::is_enabled() ? "ON" : "OFF");
@@ -731,9 +777,9 @@ void SettingsPage::build_dialog_content() {
                  static_cast<unsigned long>(Blackbox::count()),
                  static_cast<unsigned long>(Blackbox::capacity()));
         if (interval == 0) {
-            snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "Snap OFF");
+            snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "Snapshot OFF");
         } else {
-            snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "Snap %lus",
+            snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "Snapshot %lus",
                      static_cast<unsigned long>(interval));
         }
     } else if (item == CalibrationInfo) {
@@ -745,9 +791,9 @@ void SettingsPage::build_dialog_content() {
             }
         }
         const float sample_resistance_mohm = params.current_base_K == 0 ? 0.0f : 2500.0f / params.current_base_K;
-        snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "6pt %s %u/6",
+        snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "calibration %s %u/6",
                  valid_points == 6 ? "YES" : "NO", static_cast<unsigned>(valid_points));
-        snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Rs %.3fmR", sample_resistance_mohm);
+        snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Resistance %.3fmR", sample_resistance_mohm);
         snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "BaseK %u",
                  static_cast<unsigned>(params.current_base_K));
     } else {

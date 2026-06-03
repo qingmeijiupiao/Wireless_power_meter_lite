@@ -37,7 +37,18 @@ idf_build_set_property(COMPILE_DEFINITIONS
 idf_build_set_property(COMPILE_DEFINITIONS 
     "VERSION_PATCH=${VERSION_PATCH}" APPEND)
 
-# 注入编译时间
-string(TIMESTAMP BUILD_TIME "%Y-%m-%d %H:%M:%S" UTC)
+# 注入编译时间。
+# 不使用构建机本地时区，避免本地环境和 CD 服务器时区不同导致固件显示时间不一致。
+# 固定生成 UTC+8 时间，统一面向中国用户显示为 YYYY/MM/DD HH:MM:SS。
+execute_process(
+    COMMAND python -c "from datetime import datetime, timezone, timedelta; print(datetime.now(timezone(timedelta(hours=8))).strftime('%Y/%m/%d %H:%M:%S'))"
+    OUTPUT_VARIABLE BUILD_TIME
+    RESULT_VARIABLE BUILD_TIME_RESULT
+    ERROR_VARIABLE BUILD_TIME_ERROR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(NOT BUILD_TIME_RESULT EQUAL 0)
+    message(FATAL_ERROR "Failed to generate BUILD_TIME: ${BUILD_TIME_ERROR}")
+endif()
 idf_build_set_property(COMPILE_DEFINITIONS 
     "BUILD_TIME=\"${BUILD_TIME}\"" APPEND)

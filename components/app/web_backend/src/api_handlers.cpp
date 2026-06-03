@@ -69,6 +69,13 @@ static void mac_to_str(MAC_t mac, char* out, size_t out_size) {
         mac.octet1, mac.octet2, mac.octet3, mac.octet4, mac.octet5, mac.octet6);
 }
 
+/** @brief 从统一 BUILD_TIME 中拆出 API 兼容的日期和时钟字段。 */
+static void split_build_time(char* build_date, size_t build_date_size, char* build_clock, size_t build_clock_size) {
+    // BUILD_TIME is fixed by CMake as UTC+8 "YYYY/MM/DD HH:MM:SS" for consistent local/CD display.
+    snprintf(build_date, build_date_size, "%.10s", BUILD_TIME);
+    snprintf(build_clock, build_clock_size, "%.8s", BUILD_TIME + 11);
+}
+
 /**
  * @brief GET /api/state
  *
@@ -206,12 +213,15 @@ esp_err_t system_handler(WebServer::Request* request) {
     const esp_partition_t* running_partition = OtaManager::get_running_partition();
     char sta_mac[18] = {};
     char ap_mac[18] = {};
+    char build_date[11] = {};
+    char build_clock[9] = {};
     mac_to_str(WiFiManager::instance().get_mac(WIFI_IF_STA), sta_mac, sizeof(sta_mac));
     mac_to_str(WiFiManager::instance().get_mac(WIFI_IF_AP), ap_mac, sizeof(ap_mac));
+    split_build_time(build_date, sizeof(build_date), build_clock, sizeof(build_clock));
     snprintf(detail_response_buffer, sizeof(detail_response_buffer),
         "{"
         "\"hardware_version\":%u,"
-        "\"firmware\":{\"major\":%u,\"minor\":%u,\"patch\":%u,\"project\":\"%s\",\"build_date\":\"%s\",\"build_time\":\"%s\"},"
+        "\"firmware\":{\"major\":%u,\"minor\":%u,\"patch\":%u,\"project\":\"%s\",\"build\":\"%s\",\"build_date\":\"%s\",\"build_time\":\"%s\"},"
         "\"app_partition\":{\"slot\":%u,\"label\":\"%s\"},"
         "\"mac\":{\"sta\":\"%s\",\"ap\":\"%s\"},"
         "\"uptime_ms\":%lld"
@@ -221,8 +231,9 @@ esp_err_t system_handler(WebServer::Request* request) {
         static_cast<unsigned>(VERSION_MINOR),
         static_cast<unsigned>(VERSION_PATCH),
         app_desc->project_name,
-        app_desc->date,
-        app_desc->time,
+        BUILD_TIME,
+        build_date,
+        build_clock,
         static_cast<unsigned>(ota_partition_slot(running_partition)),
         running_partition == nullptr ? "" : running_partition->label,
         sta_mac,
