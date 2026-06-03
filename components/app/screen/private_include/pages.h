@@ -97,6 +97,13 @@ private:
     enum class Mode : uint8_t {
         View,
         Menu,
+        Dialog,
+    };
+
+    enum class ItemType : uint8_t {
+        Adjustable,
+        Detail,
+        Action,
     };
 
     enum Item : uint8_t {
@@ -107,10 +114,13 @@ private:
         BlackboxSnapshot,
         CanBaudrate,
         CanTerm,
+        FirmwareInfo,
+        BlackboxInfo,
+        CalibrationInfo,
         ITEM_COUNT,
     };
 
-    static constexpr uint8_t VISIBLE_ROWS = 4;
+    static constexpr uint8_t VISIBLE_ROWS = 3;
 
     /**
      * @brief 获取设置项名称
@@ -127,6 +137,34 @@ private:
     const char* item_value(uint8_t item);
 
     /**
+     * @brief 获取设置项交互类型
+     * @param item 设置项索引
+     * @return 可调、详情或动作按钮
+     */
+    ItemType item_type(uint8_t item) const;
+
+    /**
+     * @brief 激活当前选中项
+     */
+    void activate_selected_item();
+
+    /**
+     * @brief 运行动作类设置项
+     * @return true 表示需要打开弹窗显示动作状态
+     */
+    bool run_action_item(uint8_t item);
+
+    /**
+     * @brief 刷新当前弹窗内容，详情和动作弹窗均可复用
+     */
+    void build_dialog_content();
+
+    /**
+     * @brief 绘制当前设置项弹窗
+     */
+    void draw_dialog_overlay();
+
+    /**
      * @brief 调整当前选中的设置项
      */
     void adjust_selected_item();
@@ -136,6 +174,7 @@ private:
     bool rotation_180_ = false;
     uint8_t backlight_level_ = DEFAULT_BACKLIGHT_LEVEL;
     char value_buf_[8] = {};
+    char detail_lines_[3][28] = {};
 };
 
 } // namespace SCREEN

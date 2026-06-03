@@ -99,7 +99,7 @@ void UIManager::loop_once() {
 
     RenderMode mode = full_redraw_ ? RenderMode::Full : RenderMode::Normal;
     page->render(mode);
-    if (page->is_overlay_active()) {
+    if (page->is_overlay_active() && page->id() != PageId::Settings) {
         draw_edit_indicator();
     }
 

@@ -3,17 +3,20 @@
  * @LastEditors: qingmeijiupiao
  * @Description: 屏幕应用页面实现，包含主页数据渲染、无线状态页、设置页和预留页面
  * @Author: qingmeijiupiao
- * @LastEditTime: 2026-05-31 11:27:02
+ * @LastEditTime: 2026-06-03 21:58:26
  */
 #include "pages.h"
 
 #include <cmath>
 #include <cstdio>
 
+#include "blackbox.h"
 #include "DENGB12.h"
 #include "DENGB16.h"
 #include "DENGB20.h"
+#include "current_calibration.h"
 #include "energy_meter.h"
+#include "esp_app_desc.h"
 #include "esp_log.h"
 #include "ErrorRectangle.h"
 #include "WarningRectangle.h"
@@ -508,13 +511,28 @@ bool SettingsPage::handle_button(ButtonId button, ButtonEvent event) {
         return false;
     }
 
+    if (mode_ == Mode::Dialog) {
+        if ((button == ButtonId::Main && event == ButtonEvent::SHORT_PRESS) ||
+            (button == ButtonId::Side && event == ButtonEvent::SHORT_PRESS)) {
+            mode_ = Mode::Menu;
+            return true;
+        }
+
+        if (button == ButtonId::Side && event == ButtonEvent::LONG_PRESS) {
+            mode_ = Mode::View;
+            return true;
+        }
+
+        return true;
+    }
+
     if (button == ButtonId::Side && event == ButtonEvent::SHORT_PRESS) {
         selected_ = (selected_ + 1) % ITEM_COUNT;
         return true;
     }
 
     if (button == ButtonId::Main && event == ButtonEvent::SHORT_PRESS) {
-        adjust_selected_item();
+        activate_selected_item();
         return true;
     }
 
@@ -536,21 +554,38 @@ void SettingsPage::render(RenderMode mode) {
     ST7735::draw_image(2, 16, SETTINGS_LOGO_WIDTH, SETTINGS_LOGO_HEIGHT, settings_logo_data);
 
     auto draw_menu_rows = [&]() {
+        constexpr uint16_t row_x = 60;
+        constexpr uint16_t row_w = 98;
+        constexpr uint16_t row_h = 22;
+        constexpr uint16_t row_y0 = 4;
+        constexpr uint16_t row_step = 25;
+        constexpr uint16_t row_radius = 7;
         for (uint8_t row = 0; row < VISIBLE_ROWS; row++) {
-            const uint8_t item = (selected_ + row) % ITEM_COUNT;
-            const uint16_t y = 10 + row * 17;
-            const bool selected = row == 0 && mode_ != Mode::View;
+            const uint8_t item = (selected_ + ITEM_COUNT + row - 1) % ITEM_COUNT;
+            const uint16_t y = row_y0 + row * row_step;
+            const bool selected = row == 1 && mode_ != Mode::View;
+            const ST7735::color_t background = selected ? ST7735::YELLOW : ST7735::color_t(0x202020);
             const ST7735::color_t foreground = selected ? ST7735::BLACK : ST7735::WHITE;
-            const ST7735::color_t background = selected ? ST7735::YELLOW : ST7735::BLACK;
-            if (selected) {
-                ST7735::fill_rect(54, y - 1, 106, 15, background);
+            ST7735::fill_round_rect(row_x, y, row_w, row_h, row_radius, background, ST7735::BLACK);
+            ST7735::draw_string(row_x + 4, y + 5, item_name(item), foreground, background, DENGB16);
+            const char* value = item_value(item);
+            if (item_type(item) == ItemType::Detail) {
+                constexpr uint16_t icon_size = 18;
+                const uint16_t icon_x = row_x + row_w - icon_size - 2;
+                const uint16_t icon_y = y + 2;
+                ST7735::draw_round_rect(icon_x, icon_y, icon_size, icon_size, icon_size / 2,
+                                         1, foreground, background);
+                ST7735::draw_string(icon_x + 7, icon_y + 2, "i", foreground, background, DENGB16);
+            } else if (value[0] != '\0') {
+                ST7735::draw_string(row_x + 70, y + 5, value, foreground, background, DENGB16);
             }
-            ST7735::draw_string(56, y, item_name(item), foreground, background, DENGB12);
-            ST7735::draw_string(130, y, item_value(item), foreground, background, DENGB12);
         }
     };
 
     draw_menu_rows();
+    if (mode_ == Mode::Dialog) {
+        draw_dialog_overlay();
+    }
 }
 
 /** @brief 从 NVS 加载设置页使用的显示配置。 */
@@ -571,15 +606,21 @@ const char* SettingsPage::item_name(uint8_t item) const {
         case Backlight:
             return "Bright";
         case WifiBoot:
-            return "WiFi boot";
+            return "WiFi";
         case ProtectBypass:
             return "Protect";
         case BlackboxSnapshot:
-            return "BB snap";
+            return "BBsnap";
         case CanBaudrate:
-            return "CAN baud";
+            return "CANrate";
         case CanTerm:
-            return "CAN term";
+            return "CANRs";
+        case FirmwareInfo:
+            return "Firmware";
+        case BlackboxInfo:
+            return "Blackbox";
+        case CalibrationInfo:
+            return "Calib";
         default:
             return "";
     }
@@ -627,9 +668,107 @@ const char* SettingsPage::item_value(uint8_t item) {
             }
         case CanTerm:
             return CanResistor::instance().get() ? "ON" : "OFF";
+        case FirmwareInfo:
+        case BlackboxInfo:
+        case CalibrationInfo:
+            return "";
         default:
             return "";
     }
+}
+
+/** @brief 获取设置项交互类型。 */
+SettingsPage::ItemType SettingsPage::item_type(uint8_t item) const {
+    switch (item) {
+        case FirmwareInfo:
+        case BlackboxInfo:
+        case CalibrationInfo:
+            return ItemType::Detail;
+        default:
+            return ItemType::Adjustable;
+    }
+}
+
+/** @brief 激活当前选中项。 */
+void SettingsPage::activate_selected_item() {
+    switch (item_type(selected_)) {
+        case ItemType::Adjustable:
+            adjust_selected_item();
+            break;
+        case ItemType::Detail:
+            mode_ = Mode::Dialog;
+            break;
+        case ItemType::Action:
+            if (run_action_item(selected_)) {
+                mode_ = Mode::Dialog;
+            }
+            break;
+    }
+}
+
+/** @brief 运行动作类设置项。 */
+bool SettingsPage::run_action_item(uint8_t item) {
+    (void)item;
+    return false;
+}
+
+/** @brief 刷新当前弹窗内容。 */
+void SettingsPage::build_dialog_content() {
+    const uint8_t item = selected_;
+
+    if (item == FirmwareInfo) {
+        const esp_app_desc_t* app_desc = esp_app_get_description();
+        snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "Ver %u.%u.%u",
+                 static_cast<unsigned>(VERSION_MAJOR),
+                 static_cast<unsigned>(VERSION_MINOR),
+                 static_cast<unsigned>(VERSION_PATCH));
+        snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "%.11s", app_desc->date);
+        snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "%.8s", app_desc->time);
+    } else if (item == BlackboxInfo) {
+        const uint32_t interval = BlackboxService::get_snapshot_interval_s();
+        snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "State %s", Blackbox::is_enabled() ? "ON" : "OFF");
+        snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Used %lu/%lu",
+                 static_cast<unsigned long>(Blackbox::count()),
+                 static_cast<unsigned long>(Blackbox::capacity()));
+        if (interval == 0) {
+            snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "Snap OFF");
+        } else {
+            snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "Snap %lus",
+                     static_cast<unsigned long>(interval));
+        }
+    } else if (item == CalibrationInfo) {
+        const auto params = CurrentCalib::params_data.read();
+        uint8_t valid_points = 0;
+        for (const auto& point : params.points) {
+            if (point.register_value != 0 || point.offset_current_100uA != 0) {
+                valid_points++;
+            }
+        }
+        const float sample_resistance_mohm = params.current_base_K == 0 ? 0.0f : 2500.0f / params.current_base_K;
+        snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "6pt %s %u/6",
+                 valid_points == 6 ? "YES" : "NO", static_cast<unsigned>(valid_points));
+        snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Rs %.3fmR", sample_resistance_mohm);
+        snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "BaseK %u",
+                 static_cast<unsigned>(params.current_base_K));
+    } else {
+        detail_lines_[0][0] = '\0';
+        detail_lines_[1][0] = '\0';
+        detail_lines_[2][0] = '\0';
+    }
+}
+
+/** @brief 绘制设置项弹窗。 */
+void SettingsPage::draw_dialog_overlay() {
+    build_dialog_content();
+    const ST7735::color_t panel = ST7735::BLACK;
+    const ST7735::color_t muted = ST7735::color_t(0xB5B5B5);
+
+    ST7735::fill_round_rect(8, 8, 144, 64, 6, panel, ST7735::BLACK);
+    ST7735::draw_round_rect(8, 8, 144, 64, 6, 1, ST7735::YELLOW, ST7735::BLACK);
+    ST7735::draw_string(14, 13, item_name(selected_), ST7735::YELLOW, panel, DENGB12);
+    ST7735::draw_string(14, 29, detail_lines_[0], ST7735::WHITE, panel, DENGB12);
+    ST7735::draw_string(14, 43, detail_lines_[1], ST7735::WHITE, panel, DENGB12);
+    ST7735::draw_string(14, 57, detail_lines_[2], muted, panel, DENGB12);
 }
 
 /** @brief 修改当前选中的设置项。 */
