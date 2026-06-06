@@ -47,7 +47,7 @@ PeerStore load_store() {
     return store;
 }
 
-esp_err_t save_peer(const EspNowLink::PeerConfig& peer, PairingRole role, uint8_t channel) {
+esp_err_t save_peer(const EspNowLink::PeerConfig& peer, uint8_t channel) {
     PeerStore store = load_store();
     StoredPeer* slot = nullptr;
     // 优先更新相同 MAC；不存在时复用第一个空槽，保持固定表可增删。
@@ -69,7 +69,6 @@ esp_err_t save_peer(const EspNowLink::PeerConfig& peer, PairingRole role, uint8_
     }
     *slot = {};
     slot->used = 1;
-    slot->role = static_cast<uint8_t>(role);
     memcpy(slot->mac, peer.address.bytes, sizeof(slot->mac));
     memcpy(slot->lmk, peer.lmk, sizeof(slot->lmk));
     slot->last_channel = channel;
@@ -135,7 +134,6 @@ esp_err_t read_saved_peer(size_t index, SavedPeer* output) {
         }
         if (current++ == index) {
             memcpy(output->address.bytes, peer.mac, sizeof(peer.mac));
-            output->role = static_cast<PairingRole>(peer.role);
             output->last_channel = peer.last_channel;
             return ESP_OK;
         }

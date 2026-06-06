@@ -21,7 +21,7 @@ constexpr uint8_t STORE_VERSION = 1;
 
 struct StoredPeer {
     uint8_t used;
-    uint8_t role;
+    uint8_t reserved_role; /**< 保留旧存储布局，不再参与链路逻辑。 */
     uint8_t mac[MAC_ADDRESS_SIZE];
     uint8_t lmk[KEY_SIZE];
     uint8_t last_channel;
@@ -62,7 +62,7 @@ struct PairEvent {
 
 uint32_t calculate_checksum(const PeerStore& store);
 PeerStore load_store();
-esp_err_t save_peer(const PeerConfig& peer, PairingRole role, uint8_t channel);
+esp_err_t save_peer(const PeerConfig& peer, uint8_t channel);
 esp_err_t update_peer_channel(const MacAddress& address, uint8_t channel);
 esp_err_t erase_peer(const MacAddress& address);
 esp_err_t erase_all_peers();
@@ -80,7 +80,7 @@ bool decode_discovery_response(const Message& message, const MacAddress& local,
 size_t encode_pair_response(uint32_t nonce, const uint8_t lmk[KEY_SIZE],
                             uint8_t* output, size_t capacity);
 
-esp_err_t init_pairing(PairingRole role);
+esp_err_t init_pairing();
 
 } // namespace EspNowLink::Internal
 

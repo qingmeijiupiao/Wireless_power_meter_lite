@@ -2,14 +2,14 @@
 
 ## 1. 模块简介
 
-`espnow_link` 是主设备与无线开关共用的 ESP-NOW 链路层组件。它位于业务协议与
+`espnow_link` 是面向通用产品的 ESP-NOW 链路层组件。它位于业务协议与
 ESP-IDF `esp_now` 驱动之间，统一负责：
 
 - ESP-NOW 随 WiFi 射频启停的生命周期管理；
 - 固定格式帧的编解码、CRC32 校验和消息 ID 分发；
 - 可靠单播的 ACK、超时重传、重复包抑制与序号检查；
 - peer 运行期管理、LMK 加密密钥和配对结果的 NVS 持久化；
-- 控制器配对窗口、无线开关逐信道发现及配对；
+- 配对响应窗口、主动逐信道发现及配对；
 - 已配对 peer 的加密信道探测与信道恢复；
 - RTT 采样、自适应 ACK RTO、业务响应超时估算和链路诊断统计。
 
@@ -80,7 +80,7 @@ flowchart LR
 classDiagram
     class EspNowLink_API {
         <<Namespace>>
-        +init(PairingRole) esp_err_t
+        +init() esp_err_t
         +deinit() esp_err_t
         +add_peer(PeerConfig) esp_err_t
         +remove_peer(MacAddress) esp_err_t
@@ -246,47 +246,46 @@ sequenceDiagram
     end
 ```
 
-### 2.6 控制器与无线开关配对时序图
+### 2.6 配对发起端与响应端时序图
 
-配对发现阶段使用明文广播和明文单播；控制器生成 LMK 后，双方立即切换为加密 peer，
+配对发现阶段使用明文广播和明文单播；响应端生成 LMK 后，双方立即切换为加密 peer，
 最终 `PAIR_CONFIRM` 必须通过可靠加密单播完成。
 
 ```mermaid
 sequenceDiagram
-    participant Remote
-    participant Controller
-    participant RemoteNVS
-    participant ControllerNVS
+    participant Initiator
+    participant Responder
+    participant InitiatorNVS
+    participant ResponderNVS
 
-    Controller->>Controller: Enter pairing mode
-    Remote->>Remote: Start channel scan
+    Responder->>Responder: Enter pairing mode
+    Initiator->>Initiator: Start channel scan
 
     loop Each candidate channel uses a new nonce
-        Remote->>Controller: Broadcast DISCOVERY_PING
-        Controller-->>Remote: Broadcast DISCOVERY_RESPONSE
+        Initiator->>Responder: Broadcast DISCOVERY_PING
+        Responder-->>Initiator: Broadcast DISCOVERY_RESPONSE
     end
 
-    Remote->>Remote: Install temporary plaintext peer
-    Remote->>Controller: Send plaintext PAIR_REQUEST
-    Controller->>Controller: Lock transaction and generate LMK
-    Controller->>Remote: Send plaintext PAIR_RESPONSE with LMK
-    Controller->>Controller: Replace temporary peer with encrypted peer
-    Remote->>Remote: Install encrypted peer with the LMK
-    Remote->>Controller: Send encrypted reliable PAIR_CONFIRM
-    Controller-->>Remote: Return link ACK
-    Controller->>ControllerNVS: Save remote MAC role LMK and channel
-    Controller->>Controller: Leave pairing mode
-    Remote->>RemoteNVS: Save controller after ACKNOWLEDGED
+    Initiator->>Initiator: Install temporary plaintext peer
+    Initiator->>Responder: Send plaintext PAIR_REQUEST
+    Responder->>Responder: Lock transaction and generate LMK
+    Responder->>Initiator: Send plaintext PAIR_RESPONSE with LMK
+    Responder->>Responder: Replace temporary peer with encrypted peer
+    Initiator->>Initiator: Install encrypted peer with the LMK
+    Initiator->>Responder: Send encrypted reliable PAIR_CONFIRM
+    Responder-->>Initiator: Return link ACK
+    Responder->>ResponderNVS: Save peer MAC LMK and channel
+    Responder->>Responder: Leave pairing mode
+    Initiator->>InitiatorNVS: Save peer after ACKNOWLEDGED
 ```
 
-控制器持久化对端角色为 `REMOTE_SWITCH`；无线开关持久化对端角色为
-`CONTROLLER`。配对表最多保存 3 个 peer，运行期 peer 表最多容纳 7 个。
+配对记录不保存产品角色。配对表最多保存 3 个 peer，运行期 peer 表最多容纳 7 个。
 
-### 2.7 无线开关配对扫描流程图
+### 2.7 主动配对扫描流程图
 
 ```mermaid
 flowchart TD
-    A["start_pairing() 入队 START_PAIRING"] --> B["注册远端配对 handler"]
+    A["start_pairing() 入队 START_PAIRING"] --> B["注册发起端配对 handler"]
     B --> C["读取第 1 个已保存 peer 的 last_channel"]
     C --> D{"存在上次信道?"}
     D -- 是 --> E["先尝试上次信道"]
@@ -318,7 +317,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["recover_peer_channel(peer)"] --> B{"已初始化、链路 active、peer 存在<br/>且未在恢复/远端配对?"}
+    A["recover_peer_channel(peer)"] --> B{"已初始化、链路 active、peer 存在<br/>且未在恢复/主动配对?"}
     B -- 否 --> C["返回 ESP_ERR_INVALID_STATE"]
     B -- 是 --> D["event_queue 入队 START_CHANNEL_RECOVERY"]
     D --> E["按 RTT 历史计算 probe timeout<br/>样本不足默认 30 ms"]
@@ -339,13 +338,13 @@ flowchart TD
 ```mermaid
 stateDiagram-v2
     [*] --> Uninitialized
-    Uninitialized --> InitializedInactive: init(role)\n创建 5 个队列和 2 个任务\n恢复 NVS peer
+    Uninitialized --> InitializedInactive: init()\n创建 5 个队列和 2 个任务\n恢复 NVS peer
     InitializedInactive --> Active: WiFi AFTER_START\nesp_now_init + 注册回调
     Active --> InitializedInactive: WiFi 停止前\ndeactivate + 清空 pending
-    Active --> PairingController: enter_pairing_mode()\n仅 CONTROLLER
-    PairingController --> Active: 成功、超时或 leave_pairing_mode()
-    Active --> PairingRemote: start_pairing()\n仅 REMOTE_SWITCH
-    PairingRemote --> Active: 成功或扫描结束
+    Active --> PairingResponder: enter_pairing_mode()
+    PairingResponder --> Active: 成功、超时或 leave_pairing_mode()
+    Active --> PairingInitiator: start_pairing()
+    PairingInitiator --> Active: 成功或扫描结束
     Active --> ChannelRecovery: recover_peer_channel()
     ChannelRecovery --> Active: 成功或遍历失败
     InitializedInactive --> Uninitialized: deinit()
@@ -383,7 +382,7 @@ stateDiagram-v2
 | pairing `event_queue` | 12 | 链路任务/公共 API 到配对任务 |
 | handler 表 | 16 | `message_id` 到回调的映射 |
 | 运行期 peer 表 | 7 | 当前 RAM 中的 peer 和 RTT/去重状态 |
-| NVS peer 表 | 3 | 持久化 MAC、角色、LMK、最后信道 |
+| NVS peer 表 | 3 | 持久化 MAC、LMK、最后信道 |
 | 最大 payload | 224 字节 | 250 - 20 字节帧头，预留驱动限制 |
 
 ---
@@ -400,12 +399,7 @@ stateDiagram-v2
 #include "espnow_link.h"
 
 void app_main() {
-    // 主设备：
-    ESP_ERROR_CHECK(EspNowLink::init(EspNowLink::PairingRole::CONTROLLER));
-
-    // 无线开关使用：
-    // ESP_ERROR_CHECK(EspNowLink::init(
-    //     EspNowLink::PairingRole::REMOTE_SWITCH));
+    ESP_ERROR_CHECK(EspNowLink::init());
 }
 ```
 
@@ -482,22 +476,25 @@ EspNowLink::send(EspNowLink::BROADCAST_ADDRESS,
 
 ### 4.5 配对
 
-主设备打开配对窗口：
+设备允许其他节点向本机发起配对：
 
 ```cpp
-ESP_ERROR_CHECK(EspNowLink::init(EspNowLink::PairingRole::CONTROLLER));
+ESP_ERROR_CHECK(EspNowLink::init());
 ESP_ERROR_CHECK(EspNowLink::enter_pairing_mode(60000));
 
 // 0 表示持续到成功配对或显式调用 leave_pairing_mode()。
 // EspNowLink::enter_pairing_mode(0);
 ```
 
-无线开关发起逐信道扫描：
+设备主动逐信道扫描并发起配对：
 
 ```cpp
-ESP_ERROR_CHECK(EspNowLink::init(EspNowLink::PairingRole::REMOTE_SWITCH));
+ESP_ERROR_CHECK(EspNowLink::init());
 ESP_ERROR_CHECK(EspNowLink::start_pairing());
 ```
+
+链路层不定义主从或产品角色。同一设备可以在不同时间调用上述任一流程，但响应窗口与
+主动扫描不能同时运行。
 
 ### 4.6 信道恢复
 
@@ -511,7 +508,7 @@ while (EspNowLink::is_recovering_channel()) {
 esp_err_t result = EspNowLink::get_channel_recovery_result();
 ```
 
-恢复操作与远端配对不能并行。成功后会同时更新当前 WiFi 信道、运行期 peer 和 NVS 中的
+恢复操作与主动配对不能并行。成功后会同时更新当前 WiFi 信道、运行期 peer 和 NVS 中的
 `last_channel`。
 
 ---

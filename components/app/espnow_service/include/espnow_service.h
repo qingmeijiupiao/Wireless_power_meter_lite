@@ -44,19 +44,6 @@ struct DeviceData {
     uint8_t status_flags = 0;
 };
 
-/**
- * @brief 收到控制请求时执行输出操作
- * @param source 请求设备 MAC
- * @param action 请求动作
- * @param output_on 返回执行后的实际输出状态
- * @param context 注册时提供的上下文
- * @note 回调在 espnow_business 任务中执行，不在 WiFi 或 espnow_link 回调中执行。
- */
-using SwitchRequestHandler = SwitchResult (*)(const EspNowLink::MacAddress& source,
-                                              SwitchAction action,
-                                              bool* output_on,
-                                              void* context);
-
 /** 收到控制响应时通知请求方。 */
 using SwitchResponseHandler = void (*)(const EspNowLink::MacAddress& source,
                                        uint32_t request_id,
@@ -64,14 +51,6 @@ using SwitchResponseHandler = void (*)(const EspNowLink::MacAddress& source,
                                        SwitchResult result,
                                        bool output_on,
                                        void* context);
-
-/**
- * @brief 收到数据读取请求时生成当前数据
- * @return true 已生成有效数据；false 当前不能提供数据
- */
-using DataRequestHandler = bool (*)(const EspNowLink::MacAddress& source,
-                                    DeviceData* data,
-                                    void* context);
 
 /**
  * @brief 收到数据响应或周期上报时通知应用
@@ -86,43 +65,9 @@ using DataReceivedHandler = void (*)(const EspNowLink::MacAddress& source,
                                      bool periodic,
                                      void* context);
 
-/**
- * @brief 初始化 ESP-NOW 产品服务并从 NVS 恢复已保存 peer
- *
- * 初始化配对、peer 管理和远程开关业务分发。初始化不自动进入配对模式，
- * 控制器和远程开关通过 role 选择配对职责。
- */
-/** Initialize only the product business protocol and callback dispatcher. */
+/** @brief 注册产品协议支持的全部 ESP-NOW 消息回调。 */
 esp_err_t init();
 
-/** @brief 注册或清除控制请求处理器，handler 为 nullptr 时清除。 */
-void set_switch_request_handler(SwitchRequestHandler handler, void* context = nullptr);
-/** @brief 注册或清除控制响应通知，handler 为 nullptr 时清除。 */
-void set_switch_response_handler(SwitchResponseHandler handler, void* context = nullptr);
-/** @brief 注册或清除数据提供器，handler 为 nullptr 时清除。 */
-void set_data_request_handler(DataRequestHandler handler, void* context = nullptr);
-/** @brief 注册或清除数据接收通知，handler 为 nullptr 时清除。 */
-void set_data_received_handler(DataReceivedHandler handler, void* context = nullptr);
-
-/**
- * @brief 可靠发送开关控制请求
- * @param request_id 返回本次业务请求 ID，可传 nullptr
- * @param callback 链路发送结果回调，可用于诊断 NO_ACK
- */
-esp_err_t send_switch_request(const EspNowLink::MacAddress& destination,
-                              SwitchAction action,
-                              uint32_t* request_id = nullptr,
-                              EspNowLink::SendCallback callback = nullptr,
-                              void* context = nullptr);
-
-/**
- * @brief 可靠请求目标设备返回实时数据
- * @param request_id 返回本次业务请求 ID，可传 nullptr
- */
-esp_err_t request_device_data(const EspNowLink::MacAddress& destination,
-                              uint32_t* request_id = nullptr,
-                              EspNowLink::SendCallback callback = nullptr,
-                              void* context = nullptr);
 
 /**
  * @brief 尽力发送周期数据，不等待业务响应

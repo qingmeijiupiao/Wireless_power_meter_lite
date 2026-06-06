@@ -24,11 +24,10 @@ static constexpr uint32_t PAIR_RESPONSE_WAIT_MS = 200;
 
 bool initialized = false;
 bool pairing_mode = false;
-bool remote_pairing = false;
+bool initiating_pairing = false;
 bool channel_recovering = false;
 esp_err_t channel_recovery_result = ESP_ERR_INVALID_STATE;
 bool pair_transaction_active = false;
-PairingRole local_role = PairingRole::CONTROLLER;
 QueueHandle_t event_queue = nullptr;
 TaskHandle_t task_handle = nullptr;
 TickType_t pairing_deadline = 0;
@@ -37,7 +36,7 @@ uint32_t active_nonce = 0;
 EspNowLink::MacAddress pending_peer = {};
 uint8_t pending_lmk[EspNowLink::KEY_SIZE] = {};
 uint8_t pending_channel = 1;
-uint8_t remote_restore_channel = 1;
+uint8_t initiator_restore_channel = 1;
 
 EspNowLink::MacAddress local_mac() {
     EspNowLink::MacAddress result = {};
@@ -125,24 +124,24 @@ void confirm_send_callback(EspNowLink::SendResult result, uint32_t, void*) {
     enqueue_event(event);
 }
 
-void register_controller_handlers() {
+void register_responder_handlers() {
     EspNowLink::register_handler(MSG_DISCOVERY_PING, link_message_handler);
     EspNowLink::register_handler(MSG_PAIR_REQUEST, link_message_handler);
     EspNowLink::register_handler(MSG_PAIR_CONFIRM, link_message_handler);
 }
 
-void unregister_controller_handlers() {
+void unregister_responder_handlers() {
     EspNowLink::unregister_handler(MSG_DISCOVERY_PING);
     EspNowLink::unregister_handler(MSG_PAIR_REQUEST);
     EspNowLink::unregister_handler(MSG_PAIR_CONFIRM);
 }
 
-void register_remote_handlers() {
+void register_initiator_handlers() {
     EspNowLink::register_handler(MSG_DISCOVERY_RESPONSE, link_message_handler);
     EspNowLink::register_handler(MSG_PAIR_RESPONSE, link_message_handler);
 }
 
-void unregister_remote_handlers() {
+void unregister_initiator_handlers() {
     EspNowLink::unregister_handler(MSG_DISCOVERY_RESPONSE);
     EspNowLink::unregister_handler(MSG_PAIR_RESPONSE);
 }
@@ -183,7 +182,7 @@ void handle_pair_request(const PairEvent& event) {
     }
 
     pair_transaction_active = true;
-    // 单次配对模式只处理一个候选设备，避免多个远程开关交叉覆盖临时 LMK。
+    // 单次响应窗口只处理一个候选设备，避免并发请求交叉覆盖临时 LMK。
     active_nonce = event.nonce;
     pending_peer = event.source;
     pending_channel = event.channel;
@@ -240,8 +239,8 @@ void handle_pair_confirm(const PairEvent& event) {
     memcpy(peer.lmk, pending_lmk, sizeof(peer.lmk));
     peer.channel = pending_channel;
     peer.encrypted = true;
-    if (save_peer(peer, PairingRole::REMOTE_SWITCH, pending_channel) == ESP_OK) {
-        ESP_LOGI(TAG, "remote switch paired");
+    if (save_peer(peer, pending_channel) == ESP_OK) {
+        ESP_LOGI(TAG, "peer paired");
         pair_transaction_active = false;
         leave_pairing_mode();
     }
@@ -376,7 +375,7 @@ void run_channel_recovery(const MacAddress& peer) {
 }
 
 bool try_pair_on_channel(uint8_t channel) {
-    // 远程开关未连接基础设施 AP，可以直接切换 STA 射频信道进行发现扫描。
+    // 主动配对要求当前设备可以切换 STA 射频信道完成发现扫描。
     if (WiFiManager::instance().set_channel(channel) != ESP_OK) {
         return false;
     }
@@ -463,20 +462,20 @@ bool try_pair_on_channel(uint8_t channel) {
                             confirm_send_callback) == ESP_OK;
 }
 
-void run_remote_pairing() {
-    register_remote_handlers();
-    remote_pairing = true;
+void run_initiator_pairing() {
+    register_initiator_handlers();
+    initiating_pairing = true;
 
     uint8_t preferred_channel = 0;
     SavedPeer saved = {};
     if (read_saved_peer(0, &saved) == ESP_OK) {
         preferred_channel = saved.last_channel;
     }
-    remote_restore_channel = preferred_channel;
+    initiator_restore_channel = preferred_channel;
     wifi_second_chan_t second = WIFI_SECOND_CHAN_NONE;
-    if (remote_restore_channel == 0 &&
-        WiFiManager::instance().get_channel(&remote_restore_channel, &second) != ESP_OK) {
-        remote_restore_channel = 1;
+    if (initiator_restore_channel == 0 &&
+        WiFiManager::instance().get_channel(&initiator_restore_channel, &second) != ESP_OK) {
+        initiator_restore_channel = 1;
     }
     // 先尝试上次成功信道，失败后再遍历国家码允许的完整信道范围。
     if (preferred_channel != 0 && try_pair_on_channel(preferred_channel)) {
@@ -488,7 +487,7 @@ void run_remote_pairing() {
     const uint8_t first = country.schan == 0 ? 1 : country.schan;
     const uint8_t count = country.nchan == 0 ? 13 : country.nchan;
     for (uint8_t channel = first;
-         channel < static_cast<uint8_t>(first + count) && remote_pairing;
+         channel < static_cast<uint8_t>(first + count) && initiating_pairing;
          ++channel) {
         if (channel == preferred_channel) {
             continue;
@@ -498,11 +497,11 @@ void run_remote_pairing() {
         }
     }
 
-    remote_pairing = false;
-    unregister_remote_handlers();
-    WiFiManager::instance().set_channel(remote_restore_channel);
+    initiating_pairing = false;
+    unregister_initiator_handlers();
+    WiFiManager::instance().set_channel(initiator_restore_channel);
     restore_peers();
-    ESP_LOGW(TAG, "no pairable controller found");
+    ESP_LOGW(TAG, "no pairable peer found");
 }
 
 void pairing_task(void*) {
@@ -519,7 +518,7 @@ void pairing_task(void*) {
         // 所有配对状态转移在单一任务中串行完成，Link 回调不直接写 NVS。
         switch (event.type) {
             case PairEventType::START_PAIRING:
-                run_remote_pairing();
+                run_initiator_pairing();
                 break;
             case PairEventType::START_CHANNEL_RECOVERY:
                 run_channel_recovery(event.source);
@@ -548,15 +547,15 @@ void pairing_task(void*) {
                     memcpy(peer.lmk, pending_lmk, sizeof(peer.lmk));
                     peer.channel = pending_channel;
                     peer.encrypted = true;
-                    save_peer(peer, PairingRole::CONTROLLER, pending_channel);
-                    remote_pairing = false;
-                    unregister_remote_handlers();
-                    ESP_LOGI(TAG, "controller paired");
+                    save_peer(peer, pending_channel);
+                    initiating_pairing = false;
+                    unregister_initiator_handlers();
+                    ESP_LOGI(TAG, "peer paired");
                 } else {
                     EspNowLink::remove_peer(pending_peer);
-                    remote_pairing = false;
-                    unregister_remote_handlers();
-                    WiFiManager::instance().set_channel(remote_restore_channel);
+                    initiating_pairing = false;
+                    unregister_initiator_handlers();
+                    WiFiManager::instance().set_channel(initiator_restore_channel);
                     restore_peers();
                     ESP_LOGW(TAG, "pair confirm failed");
                 }
@@ -570,10 +569,10 @@ void pairing_task(void*) {
 } // namespace
 } // namespace Internal
 
-esp_err_t Internal::init_pairing(PairingRole role) {
+esp_err_t Internal::init_pairing() {
     using namespace Internal;
     if (initialized) {
-        return local_role == role ? ESP_OK : ESP_ERR_INVALID_STATE;
+        return ESP_OK;
     }
     if (!EspNowLink::is_initialized()) {
         return ESP_ERR_INVALID_STATE;
@@ -582,7 +581,6 @@ esp_err_t Internal::init_pairing(PairingRole role) {
     if (event_queue == nullptr) {
         return ESP_ERR_NO_MEM;
     }
-    local_role = role;
     restore_peers();
     esp_err_t ret =
         EspNowLink::register_handler(MSG_CHANNEL_PROBE, link_message_handler);
@@ -610,14 +608,14 @@ esp_err_t Internal::init_pairing(PairingRole role) {
 
 esp_err_t enter_pairing_mode(uint32_t timeout_ms) {
     using namespace Internal;
-    if (!initialized || local_role != PairingRole::CONTROLLER) {
+    if (!initialized) {
         return ESP_ERR_INVALID_STATE;
     }
     if (!EspNowLink::is_active()) {
         return ESP_ERR_INVALID_STATE;
     }
     if (!pairing_mode) {
-        register_controller_handlers();
+        register_responder_handlers();
     }
     pairing_mode = true;
     pairing_has_deadline = timeout_ms != 0;
@@ -638,7 +636,7 @@ void leave_pairing_mode() {
     }
     pairing_mode = false;
     pairing_has_deadline = false;
-    unregister_controller_handlers();
+    unregister_responder_handlers();
     if (pair_transaction_active) {
         EspNowLink::remove_peer(pending_peer);
         restore_peers();
@@ -647,12 +645,12 @@ void leave_pairing_mode() {
 }
 
 bool is_pairing() {
-    return Internal::pairing_mode || Internal::remote_pairing;
+    return Internal::pairing_mode || Internal::initiating_pairing;
 }
 
 esp_err_t start_pairing() {
     using namespace Internal;
-    if (!initialized || local_role != PairingRole::REMOTE_SWITCH || remote_pairing) {
+    if (!initialized || initiating_pairing || pairing_mode) {
         return ESP_ERR_INVALID_STATE;
     }
     if (!EspNowLink::is_active()) {
@@ -665,7 +663,7 @@ esp_err_t start_pairing() {
 
 esp_err_t recover_peer_channel(const MacAddress& peer) {
     using namespace Internal;
-    if (!initialized || channel_recovering || remote_pairing ||
+    if (!initialized || channel_recovering || initiating_pairing ||
         !has_peer(peer) || !is_active()) {
         return ESP_ERR_INVALID_STATE;
     }

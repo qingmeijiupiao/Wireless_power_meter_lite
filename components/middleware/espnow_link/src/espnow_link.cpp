@@ -173,7 +173,7 @@ static void radio_event_handler(WiFiManager::RadioEvent event, void*) {
 
 } // namespace Internal
 
-esp_err_t init(PairingRole role) {
+esp_err_t init() {
     using namespace Internal;
     if (initialized) {
         return ESP_OK;
@@ -216,7 +216,7 @@ esp_err_t init(PairingRole role) {
         ret = activate();
     }
     if (ret == ESP_OK) {
-        ret = init_pairing(role);
+        ret = init_pairing();
     }
     return ret;
 }

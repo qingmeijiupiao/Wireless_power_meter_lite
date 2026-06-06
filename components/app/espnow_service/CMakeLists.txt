@@ -2,7 +2,6 @@ idf_component_register(
     SRCS
         "src/espnow_service_business.cpp"
         "src/espnow_service_business_protocol.cpp"
-        "src/espnow_service_product.cpp"
     INCLUDE_DIRS "include"
     PRIV_INCLUDE_DIRS "private_include"
     REQUIRES

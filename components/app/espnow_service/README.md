@@ -1,14 +1,15 @@
 # espnow_service
 
-`espnow_service` 只实现 Wireless Power Meter 产品业务协议：
+`espnow_service` 只实现 Wireless Power Meter 的产品业务定义和处理逻辑：
 
 - 开关控制请求与响应
 - 实时数据读取请求与响应
 - 周期数据上报
 - 业务 payload 编解码
-- 业务任务队列和产品回调分发
+- 功率输出、测量状态和能量计业务回调
 
-配对、PING、信道扫描、peer/LMK 持久化、RTT 和信道恢复均由 `espnow_link` 提供。
+可靠收发、ACK、重传、去重、ESP-NOW 驱动回调、配对、peer/LMK 持久化、信道恢复和
+消息 ID 分发全部由 `espnow_link` 负责。
 
 ## 结构
 
@@ -18,11 +19,12 @@ espnow_service/
 ├── private_include/espnow_service_internal.h
 └── src/
     ├── espnow_service_business.cpp
-    ├── espnow_service_business_protocol.cpp
-    └── espnow_service_product.cpp
+    └── espnow_service_business_protocol.cpp
 ```
 
-`espnow_service_product.cpp` 将通用业务回调接到功率输出、全局测量状态和能量计。
+`init()` 为每个业务消息 ID 直接向 `espnow_link` 注册独立回调，不创建额外业务队列或
+二次分发任务。每个接收回调内部直接完成校验、解码和业务处理，不再注册第二层产品
+处理回调。回调由 `espnow_link` 消息分发任务调用，因此业务处理必须快速返回。
 
 ## 消息
 
@@ -34,22 +36,20 @@ espnow_service/
 | `0x0211` | 可靠实时数据响应 |
 | `0x0212` | 尽力周期数据上报 |
 
-请求和响应使用非零 `request_id` 关联。协议逐字段使用小端固定宽度编码，不发送 C++
-结构体的原始内存。
+请求和响应使用非零 `request_id` 关联。协议字段通过 `espnow_codec.h` 按明确的小端格式
+读写，不使用可能产生未对齐访问、严格别名违规和本机端序依赖的 `reinterpret_cast`。
 
 ## 初始化
 
-必须先初始化 link：
-
 ```cpp
-EspNowLink::init(EspNowLink::PairingRole::CONTROLLER);
-EspNowService::init();
+ESP_ERROR_CHECK(EspNowLink::init());
+ESP_ERROR_CHECK(EspNowService::init());
 ```
-
-link handler 只解码并投递事件；开关操作、数据采集和用户回调在独立业务任务中执行。
 
 ## 依赖
 
 - `espnow_link`
-- 功率计产品回调所需的 app 组件
-- FreeRTOS
+- `power_output`
+- `energy_meter`
+- `global_state`
+- `blackbox_service`

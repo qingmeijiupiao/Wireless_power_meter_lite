@@ -3,7 +3,7 @@
  * @LastEditors: qingmeijiupiao
  * @Description: WiFi/Web/ESP-NOW 射频策略服务，负责 NVS、STA/AP/ESPNOW_ONLY 与配网
  * @Author: qingmeijiupiao
- * @LastEditTime: 2026-05-28
+ * @LastEditTime: 2026-06-06 22:00:57
  */
 #include "wifi_service.h"
 
@@ -247,9 +247,6 @@ esp_err_t init() {
     }
     HXC::NVS_Base::setup();
     ESP_RETURN_ON_ERROR(WiFiManager::instance().init(), TAG, "wifi manager init failed");
-    ESP_RETURN_ON_ERROR(EspNowLink::init(EspNowLink::PairingRole::CONTROLLER),
-                        TAG,
-                        "ESP-NOW link init failed");
     ESP_RETURN_ON_ERROR(EspNowService::init(), TAG, "ESP-NOW service init failed");
     ESP_RETURN_ON_ERROR(TimeService::init(), TAG, "time service init failed");
     make_ap_ssid();

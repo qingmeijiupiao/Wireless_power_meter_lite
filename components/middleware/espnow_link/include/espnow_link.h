@@ -23,14 +23,8 @@ struct MacAddress {
 /** ESP-NOW 广播 MAC 地址 FF:FF:FF:FF:FF:FF。 */
 extern const MacAddress BROADCAST_ADDRESS;
 
-enum class PairingRole : uint8_t {
-    CONTROLLER = 1,
-    REMOTE_SWITCH = 2,
-};
-
 struct SavedPeer {
     MacAddress address;
-    PairingRole role;
     uint8_t last_channel;
 };
 
@@ -121,7 +115,7 @@ struct PeerMetrics {
 };
 
 /** @brief 创建固定队列和链路任务，并监听 WiFi 驱动启停。 */
-esp_err_t init(PairingRole role);
+esp_err_t init();
 /** @brief 注销监听器并释放链路任务和队列。 */
 esp_err_t deinit();
 bool is_initialized();
@@ -172,10 +166,11 @@ uint32_t get_delivery_timeout_ms(const MacAddress& peer,
                                  uint16_t mac_completion_budget_ms = 250);
 uint16_t get_channel_probe_timeout_ms(const MacAddress& peer);
 
-/** @brief 控制器进入配对模式；timeout_ms 为 0 时持续到成功配对或手动退出。 */
+/** @brief 允许本机响应其他设备的配对请求；timeout_ms 为 0 时持续到成功或手动退出。 */
 esp_err_t enter_pairing_mode(uint32_t timeout_ms = 60000);
 void leave_pairing_mode();
 bool is_pairing();
+/** @brief 主动扫描并向可配对设备发起配对。 */
 esp_err_t start_pairing();
 esp_err_t recover_peer_channel(const MacAddress& peer);
 bool is_recovering_channel();

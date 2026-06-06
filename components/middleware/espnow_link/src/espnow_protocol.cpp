@@ -2,32 +2,10 @@
 
 #include <cstring>
 
+#include "espnow_codec.h"
+
 namespace EspNowLink::Internal {
 namespace {
-
-uint16_t read_u16(const uint8_t* data) {
-    return static_cast<uint16_t>(data[0]) |
-           static_cast<uint16_t>(data[1] << 8);
-}
-
-uint32_t read_u32(const uint8_t* data) {
-    return static_cast<uint32_t>(data[0]) |
-           (static_cast<uint32_t>(data[1]) << 8) |
-           (static_cast<uint32_t>(data[2]) << 16) |
-           (static_cast<uint32_t>(data[3]) << 24);
-}
-
-void write_u16(uint8_t* data, uint16_t value) {
-    data[0] = static_cast<uint8_t>(value);
-    data[1] = static_cast<uint8_t>(value >> 8);
-}
-
-void write_u32(uint8_t* data, uint32_t value) {
-    data[0] = static_cast<uint8_t>(value);
-    data[1] = static_cast<uint8_t>(value >> 8);
-    data[2] = static_cast<uint8_t>(value >> 16);
-    data[3] = static_cast<uint8_t>(value >> 24);
-}
 
 uint32_t update_crc32(uint32_t crc, const uint8_t* data, size_t size) {
     for (size_t i = 0; i < size; ++i) {
@@ -52,13 +30,13 @@ bool quick_validate_frame(const uint8_t* data, size_t size) {
     if (data == nullptr || size < FRAME_HEADER_SIZE || size > 250) {
         return false;
     }
-    if (read_u16(data) != FRAME_MAGIC || data[2] != FRAME_VERSION) {
+    if (Codec::load_le<uint16_t>(data) != FRAME_MAGIC || data[2] != FRAME_VERSION) {
         return false;
     }
     if ((data[3] & ~(FRAME_FLAG_RELIABLE | FRAME_FLAG_ACK)) != 0) {
         return false;
     }
-    const uint16_t payload_size = read_u16(data + 6);
+    const uint16_t payload_size = Codec::load_le<uint16_t>(data + 6);
     return payload_size <= MAX_PAYLOAD_SIZE &&
            FRAME_HEADER_SIZE + payload_size == size;
 }
@@ -68,17 +46,17 @@ bool decode_frame(const uint8_t* data, size_t size, ParsedFrame* frame) {
         return false;
     }
 
-    const uint16_t payload_size = read_u16(data + 6);
+    const uint16_t payload_size = Codec::load_le<uint16_t>(data + 6);
     // 完整路径校验 CRC32，内容错误统一计入非法链路包。
-    if (read_u32(data + 16) != frame_crc32(data, payload_size)) {
+    if (Codec::load_le<uint32_t>(data + 16) != frame_crc32(data, payload_size)) {
         return false;
     }
 
     frame->flags = data[3];
-    frame->message_id = read_u16(data + 4);
-    frame->payload_size = read_u16(data + 6);
-    frame->sequence = read_u32(data + 8);
-    frame->correlation = read_u32(data + 12);
+    frame->message_id = Codec::load_le<uint16_t>(data + 4);
+    frame->payload_size = Codec::load_le<uint16_t>(data + 6);
+    frame->sequence = Codec::load_le<uint32_t>(data + 8);
+    frame->correlation = Codec::load_le<uint32_t>(data + 12);
     frame->payload = data + FRAME_HEADER_SIZE;
 
     const bool ack = (frame->flags & FRAME_FLAG_ACK) != 0;
@@ -106,18 +84,18 @@ esp_err_t encode_frame(uint8_t flags,
         return ESP_ERR_INVALID_ARG;
     }
 
-    write_u16(output, FRAME_MAGIC);
+    Codec::store_le<uint16_t>(output, FRAME_MAGIC);
     output[2] = FRAME_VERSION;
     output[3] = flags;
-    write_u16(output + 4, message_id);
-    write_u16(output + 6, static_cast<uint16_t>(payload_size));
-    write_u32(output + 8, sequence);
-    write_u32(output + 12, correlation);
-    write_u32(output + 16, 0);
+    Codec::store_le<uint16_t>(output + 4, message_id);
+    Codec::store_le<uint16_t>(output + 6, static_cast<uint16_t>(payload_size));
+    Codec::store_le<uint32_t>(output + 8, sequence);
+    Codec::store_le<uint32_t>(output + 12, correlation);
+    Codec::store_le<uint32_t>(output + 16, 0);
     if (payload_size > 0) {
         memcpy(output + FRAME_HEADER_SIZE, payload, payload_size);
     }
-    write_u32(output + 16, frame_crc32(output, payload_size));
+    Codec::store_le<uint32_t>(output + 16, frame_crc32(output, payload_size));
     *output_size = FRAME_HEADER_SIZE + payload_size;
     return ESP_OK;
 }
