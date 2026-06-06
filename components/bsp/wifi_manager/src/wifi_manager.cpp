@@ -6,6 +6,7 @@
  * @LastEditTime: 2026-04-20 22:37:09
  */
 #include "wifi_manager.h"
+#include "esp_check.h"
 #include "esp_log.h"
 #include "esp_netif.h"
 #include "lwip/ip_addr.h"
@@ -29,6 +30,7 @@ WiFiManager::WiFiManager()
       ap_netif_(nullptr),
       event_group_(nullptr) {
     memset(&ip_, 0, sizeof(ip_));
+    memset(radio_listeners_, 0, sizeof(radio_listeners_));
 }
 
 WiFiManager::~WiFiManager() {
@@ -143,8 +145,7 @@ esp_err_t WiFiManager::connect_sta(const char* ssid, const char* password, bool 
 
     /* 如果WiFi已在运行，先停止 */
     if (wifi_started_) {
-        esp_wifi_stop();
-        wifi_started_ = false;
+        stop_wifi_driver();
     }
 
     /* 设置STA模式 */
@@ -171,13 +172,11 @@ esp_err_t WiFiManager::connect_sta(const char* ssid, const char* password, bool 
     xEventGroupClearBits(event_group_, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT | WIFI_ASSOCIATED_BIT);
 
     /* 启动WiFi驱动 */
-    ret = esp_wifi_start();
+    ret = start_wifi_driver();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "wifi start failed: %s", esp_err_to_name(ret));
         return ret;
     }
-    wifi_started_ = true;
-
     /* 发起连接 */
     ret = esp_wifi_connect();
     if (ret != ESP_OK) {
@@ -218,6 +217,25 @@ esp_err_t WiFiManager::connect_sta(const char* ssid, const char* password, bool 
     return ESP_OK;
 }
 
+esp_err_t WiFiManager::start_sta_radio(uint8_t channel) {
+    if (!initialized_ || channel == 0 || channel > 14) {
+        return !initialized_ ? ESP_ERR_INVALID_STATE : ESP_ERR_INVALID_ARG;
+    }
+    if (wifi_started_) {
+        ESP_RETURN_ON_ERROR(stop_wifi_driver(), TAG, "stop WiFi before STA radio start failed");
+    }
+    ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_STA), TAG, "set STA mode failed");
+    ESP_RETURN_ON_ERROR(start_wifi_driver(), TAG, "start STA radio failed");
+    esp_err_t ret = esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+    if (ret != ESP_OK) {
+        stop_wifi_driver();
+        return ret;
+    }
+    state_ = WIFI_STATE_DISCONNECTED;
+    ESP_LOGI(TAG, "STA radio started on channel %u", static_cast<unsigned>(channel));
+    return ESP_OK;
+}
+
 /* ==================== AP模式启动 ==================== */
 
 esp_err_t WiFiManager::start_ap(const char* ssid, const char* password, uint8_t max_conn, uint8_t channel) {
@@ -227,8 +245,7 @@ esp_err_t WiFiManager::start_ap(const char* ssid, const char* password, uint8_t 
 
     /* 如果WiFi已在运行，先停止 */
     if (wifi_started_) {
-        esp_wifi_stop();
-        wifi_started_ = false;
+        stop_wifi_driver();
     }
 
     /* 设置AP模式 */
@@ -255,13 +272,11 @@ esp_err_t WiFiManager::start_ap(const char* ssid, const char* password, uint8_t 
     }
 
     /* 启动WiFi驱动 */
-    ret = esp_wifi_start();
+    ret = start_wifi_driver();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "wifi start failed: %s", esp_err_to_name(ret));
         return ret;
     }
-    wifi_started_ = true;
-
     state_ = WIFI_STATE_AP_ACTIVE;
     ESP_LOGI(TAG, "AP started SSID:%s Channel:%d", ssid, channel);
     return ESP_OK;
@@ -273,8 +288,7 @@ esp_err_t WiFiManager::start_apsta(const char* ssid, const char* password, uint8
     }
 
     if (wifi_started_) {
-        esp_wifi_stop();
-        wifi_started_ = false;
+        stop_wifi_driver();
     }
 
     esp_err_t ret = esp_wifi_set_mode(WIFI_MODE_APSTA);
@@ -297,13 +311,11 @@ esp_err_t WiFiManager::start_apsta(const char* ssid, const char* password, uint8
         return ret;
     }
 
-    ret = esp_wifi_start();
+    ret = start_wifi_driver();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "wifi start failed: %s", esp_err_to_name(ret));
         return ret;
     }
-    wifi_started_ = true;
-
     state_ = WIFI_STATE_AP_ACTIVE;
     ESP_LOGI(TAG, "APSTA started SSID:%s Channel:%d", ssid, channel);
     return ESP_OK;
@@ -338,13 +350,8 @@ esp_err_t WiFiManager::disconnect() {
 }
 
 esp_err_t WiFiManager::stop() {
-    if (!wifi_started_) {
-        return ESP_OK;
-    }
-
-    esp_err_t ret = esp_wifi_stop();
+    esp_err_t ret = stop_wifi_driver();
     if (ret == ESP_OK) {
-        wifi_started_ = false;
         state_ = WIFI_STATE_DISCONNECTED;
         memset(&ip_, 0, sizeof(ip_));
         xEventGroupClearBits(event_group_, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT | WIFI_ASSOCIATED_BIT);
@@ -401,6 +408,38 @@ bool WiFiManager::is_connected() const {
 
 bool WiFiManager::is_initialized() const {
     return initialized_;
+}
+
+bool WiFiManager::is_started() const {
+    return wifi_started_;
+}
+
+esp_err_t WiFiManager::register_radio_listener(RadioEventHandler handler, void* context) {
+    if (handler == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    for (const auto& listener : radio_listeners_) {
+        if (listener.handler == handler && listener.context == context) {
+            return ESP_OK;
+        }
+    }
+    for (auto& listener : radio_listeners_) {
+        if (listener.handler == nullptr) {
+            listener = {handler, context};
+            return ESP_OK;
+        }
+    }
+    return ESP_ERR_NO_MEM;
+}
+
+esp_err_t WiFiManager::unregister_radio_listener(RadioEventHandler handler, void* context) {
+    for (auto& listener : radio_listeners_) {
+        if (listener.handler == handler && listener.context == context) {
+            listener = {};
+            return ESP_OK;
+        }
+    }
+    return ESP_ERR_NOT_FOUND;
 }
 
 /* ==================== 扫描功能 ==================== */
@@ -579,6 +618,38 @@ void WiFiManager::update_ip_from_netif() {
     esp_netif_ip_info_t ip_info;
     if (esp_netif_get_ip_info(sta_netif_, &ip_info) == ESP_OK) {
         ip_.addr = ip_info.ip.addr;
+    }
+}
+
+esp_err_t WiFiManager::start_wifi_driver() {
+    if (wifi_started_) {
+        return ESP_OK;
+    }
+    esp_err_t ret = esp_wifi_start();
+    if (ret == ESP_OK) {
+        wifi_started_ = true;
+        notify_radio_event(RadioEvent::AFTER_START);
+    }
+    return ret;
+}
+
+esp_err_t WiFiManager::stop_wifi_driver() {
+    if (!wifi_started_) {
+        return ESP_OK;
+    }
+    notify_radio_event(RadioEvent::BEFORE_STOP);
+    esp_err_t ret = esp_wifi_stop();
+    if (ret == ESP_OK) {
+        wifi_started_ = false;
+    }
+    return ret;
+}
+
+void WiFiManager::notify_radio_event(RadioEvent event) {
+    for (const auto& listener : radio_listeners_) {
+        if (listener.handler != nullptr) {
+            listener.handler(event, listener.context);
+        }
     }
 }
 

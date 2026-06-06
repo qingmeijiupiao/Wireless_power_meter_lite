@@ -1,6 +1,8 @@
 # wifi_service
 
-`wifi_service` 是 WiFi/Web 的应用层服务组件，位于底层 `wifi_manager`、`DNSServer` 和 `WebServer` 之上，负责统一管理设备联网策略、NVS 配置和 AP 配网模式。
+`wifi_service` 是 WiFi、Web 与 ESP-NOW 共用射频的策略组件。它位于
+`wifi_manager`、`espnow_link`、`espnow_service`、`DNSServer` 和 `WebServer`
+之上，统一管理 STA、AP 配网和 ESPNOW_ONLY 模式。
 
 ## 模块特点
 
@@ -12,6 +14,7 @@
 - **APSTA 扫描配网**：AP 配网模式下保持热点在线，同时使用 STA 接口扫描附近 WiFi，供 Web 配网页选择 SSID。
 - **DNS 劫持**：AP 配网模式下启动 `DNSServer`，将域名请求解析到组件配置的 AP IP，用于 Captive Portal。
 - **统一状态入口**：Shell 命令和 Web API 均通过 `WifiService` 查询/控制 WiFi 状态，避免重复实现状态机。
+- **ESP-NOW-only 模式**：Web 关闭时保留 STA 射频和 ESP-NOW，不连接路由器也不启动 HTTP 服务。
 
 ## NVS Key
 
@@ -20,6 +23,7 @@
 | `wifi_ssid` | string | `""` | 已保存的 STA SSID |
 | `wifi_pass` | string | `""` | 已保存的 STA 密码，开放网络可为空 |
 | `web_boot` | blob(uint8_t) | `1` | 启动时是否自动启用 WiFi/Web，`1` 启用，`0` 禁用 |
+| `espnow_ch` | blob(uint8_t) | `1` | ESPNOW_ONLY 默认信道 |
 
 ## 启动流程
 
@@ -27,7 +31,7 @@
 flowchart TD
     Main["app_main"] --> Init["WifiService::start_default()"]
     Init --> BootCheck{"web_boot == 1?"}
-    BootCheck -->|否| Off["Mode::OFF"]
+    BootCheck -->|否| Now["Mode::ESPNOW_ONLY"]
     BootCheck -->|是| HasSta{"NVS 有 SSID?"}
     HasSta -->|是| StaConnect["connect_sta(ssid, pass, false)"]
     HasSta -->|否| AP["start_provision_ap()"]
@@ -36,6 +40,10 @@ flowchart TD
     AP --> APSTA["WiFiManager::start_apsta()"]
     APSTA --> DNS["DNSServer::start(AP_IP_OCTET*)"]
     AP --> Portal["WebServer::enable_captive_portal(true)"]
+    Now --> Radio["WiFiManager::start_sta_radio()"]
+    Radio --> Link["WiFi AFTER_START -> EspNowLink active"]
+    STA --> Link
+    APSTA --> Link
 ```
 
 ## 集成方式
@@ -46,17 +54,20 @@ flowchart TD
 WebBackend::start_with_wifi_service();
 ```
 
-应用入口推荐通过 `WebBackend::start_with_wifi_service()` 启动 WiFi/Web；该函数内部会按 NVS 配置调用 `WifiService::start_default()`，避免 `app_main` 直接编排 Web 和 WiFi 启动细节。
+应用入口通过 `WebBackend::start_with_wifi_service()` 启动。该函数始终先调用
+`WifiService::start_default()`；若进入 ESPNOW_ONLY 则不启动 HTTP。
 
 ## API 参考
 
 ### `esp_err_t init()`
 
-初始化 NVS、底层 `WiFiManager`，并生成默认配网 AP 名称。
+初始化 NVS、`WiFiManager`、`EspNowLink` 和控制器角色的 `EspNowService`，
+并生成默认配网 AP 名称。ESP-NOW 不由 `app_main` 直接初始化。
 
 ### `esp_err_t start_default(const char* source)`
 
-按 NVS 配置启动默认网络模式。若 `web_boot` 为 0，则保持关闭；若保存了 STA 凭据则尝试连接；连接失败或未配置时进入 AP 配网模式。
+按 NVS 配置启动默认网络模式。若 `web_boot` 为 0，则进入 ESPNOW_ONLY；
+若保存了 STA 凭据则尝试连接；连接失败或未配置时进入 AP 配网模式。
 
 ### `esp_err_t connect_sta(const char* ssid, const char* password, bool save, const char* source)`
 
@@ -74,7 +85,7 @@ WebBackend::start_with_wifi_service();
 
 ### `esp_err_t stop(const char* source)`
 
-停止 DNS 劫持、关闭 Captive Portal，并停止底层 WiFi。
+停止 DNS 劫持和 Captive Portal，然后切换到 `ESPNOW_ONLY`，不关闭 ESP-NOW 射频。
 
 ### `esp_err_t set_web_enabled_on_boot(bool enabled, const char* source)`
 

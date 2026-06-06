@@ -19,6 +19,8 @@
 #include "protect.h"
 #include "screen.h"
 #include "wifi_service.h"
+#include "espnow_link.h"
+#include "espnow_service.h"
 #include "web_backend.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -171,7 +173,73 @@ esp_err_t init() {
             return 0;
         }));
 
-    
+    /**
+     * @brief  espnow - ESP-NOW 配对和 peer 管理
+     * @usage  espnow [status|pair [timeout_s]|stop|clear]
+     * @param  pair - 开启一次配对窗口，成功配对一个设备后自动退出
+     * @param  stop - 手动退出当前配对窗口
+     * @param  clear - 退出配对并清除全部已保存 peer
+     */
+    shell.register_command(ShellCommand_t(
+        "espnow",
+        "ESP-NOW pairing and peer control",
+        "status|pair [timeout_s]|stop|clear",
+        [](int argc, char** argv) -> int {
+            auto print_status = []() {
+                uint8_t channel = 0;
+                const bool channel_available = WifiService::get_channel(&channel) == ESP_OK;
+                printf("active: %d, pairing: %d, paired_peers: %u, channel: %s%u\n",
+                       EspNowLink::is_active() ? 1 : 0,
+                       EspNowLink::is_pairing() ? 1 : 0,
+                       static_cast<unsigned>(EspNowLink::get_saved_peer_count()),
+                       channel_available ? "" : "N/A",
+                       channel_available ? static_cast<unsigned>(channel) : 0U);
+            };
+
+            if (argc < 2 || strcmp(argv[1], "status") == 0) {
+                print_status();
+                return 0;
+            }
+
+            if (strcmp(argv[1], "pair") == 0) {
+                uint32_t timeout_s = 60;
+                if (argc >= 3) {
+                    char* end = nullptr;
+                    const unsigned long parsed = strtoul(argv[2], &end, 10);
+                    if (end == argv[2] || *end != '\0' || parsed < 1 || parsed > 300) {
+                        printf("Usage: espnow pair [timeout_s], timeout range 1-300\n");
+                        return 1;
+                    }
+                    timeout_s = static_cast<uint32_t>(parsed);
+                }
+                const esp_err_t ret = EspNowLink::enter_pairing_mode(timeout_s * 1000);
+                printf("single-device pairing start: %s, timeout_s: %lu\n",
+                       esp_err_to_name(ret),
+                       static_cast<unsigned long>(timeout_s));
+                print_status();
+                return ret == ESP_OK ? 0 : 1;
+            }
+
+            if (strcmp(argv[1], "stop") == 0) {
+                EspNowLink::leave_pairing_mode();
+                printf("pairing stopped\n");
+                print_status();
+                return 0;
+            }
+
+            if (strcmp(argv[1], "clear") == 0) {
+                EspNowLink::leave_pairing_mode();
+                const esp_err_t ret = EspNowLink::clear_saved_peers();
+                printf("paired peers clear: %s\n", esp_err_to_name(ret));
+                print_status();
+                return ret == ESP_OK ? 0 : 1;
+            }
+
+            printf("Usage: espnow status|pair [timeout_s]|stop|clear\n");
+            return 1;
+        }));
+
+
     /**
      * @brief  backlight - 设置屏幕背光亮度
      * @usage  backlight <0-255>
@@ -608,22 +676,23 @@ esp_err_t init() {
         }));
 
     /**
-     * @brief  wifi - WiFi/Web 功能管理
+     * @brief  wifi - WiFi、Web 与 ESP-NOW 共用射频状态管理
      * @usage  wifi [status|ip|on|off|connect|ap|boot|clear]
      * @param  status/ip - 查询当前 WiFiService 模式、IP、已保存 SSID、配网 AP 名称和最近错误
      * @param  on - 按 NVS 配置启动 WiFi/Web，优先连接已保存 STA，失败则进入 AP 配网模式
-     * @param  off - 停止 WiFiService 管理的网络功能
+     * @param  off - 关闭 STA/AP 与 Web，切换到 ESPNOW_ONLY，保留远程控制链路
      * @param  connect <ssid> [password] - 连接指定 WiFi，成功后保存到 NVS
      * @param  ap - 手动切换到 AP 配网模式
      * @param  boot <0|1> - 设置启动时是否默认启用 WiFi/Web 功能
      * @param  clear - 清除已保存的 STA SSID 和密码
-     * @note   命令通过 WifiService 统一处理状态机，不直接调用底层 esp_wifi；Web 启动失败时返回错误码，不触发重启。
+     * @note   OFF 仅表示射频尚未启动；执行 wifi off 后进入 ESPNOW_ONLY，不会关闭 ESP-NOW。
      */
-    shell.register_command(ShellCommand_t("wifi", "WiFi/Web control", "status|ip|on|off|connect|ap|boot|clear",
+    shell.register_command(ShellCommand_t("wifi", "WiFi/Web/ESP-NOW control", "status|ip|on|off|connect|ap|boot|clear",
         [](int argc, char** argv) -> int {
             auto mode_to_str = [](WifiService::Mode mode) -> const char* {
                 switch(mode){
                     case WifiService::Mode::OFF: return "OFF";
+                    case WifiService::Mode::ESPNOW_ONLY: return "ESPNOW_ONLY";
                     case WifiService::Mode::STA: return "STA";
                     case WifiService::Mode::AP_PROVISION: return "AP_PROVISION";
                     default: return "UNKNOWN";
@@ -635,6 +704,10 @@ esp_err_t init() {
                 MAC_t sta_mac = WiFiManager::instance().get_mac(WIFI_IF_STA);
                 MAC_t ap_mac = WiFiManager::instance().get_mac(WIFI_IF_AP);
                 auto cfg = WifiService::get_config();
+                uint8_t channel = 0;
+                const bool channel_available = WifiService::get_channel(&channel) == ESP_OK;
+                EspNowLink::LinkStatistics now_stats = {};
+                EspNowLink::get_statistics(&now_stats);
                 printf("mode: %s, wifi_state: %d, web_running: %d, boot_enabled: %d\n",
                        mode_to_str(WifiService::get_mode()),
                        (int)WifiService::get_wifi_state(),
@@ -645,6 +718,14 @@ esp_err_t init() {
                        cfg.ssid[0] ? cfg.ssid : "(none)",
                        WifiService::get_ap_ssid(),
                        WifiService::get_last_error());
+                printf("espnow_active: %d, channel: %s%u, tx: %lu, no_ack: %lu, invalid: %lu, timing: %lu\n",
+                       EspNowLink::is_active() ? 1 : 0,
+                       channel_available ? "" : "N/A",
+                       channel_available ? static_cast<unsigned>(channel) : 0U,
+                       static_cast<unsigned long>(now_stats.tx_packets),
+                       static_cast<unsigned long>(now_stats.ack_timeouts),
+                       static_cast<unsigned long>(now_stats.rx_invalid_packets),
+                       static_cast<unsigned long>(now_stats.timing_errors));
                 printf("sta_mac: %02X:%02X:%02X:%02X:%02X:%02X, ap_mac: %02X:%02X:%02X:%02X:%02X:%02X\n",
                        sta_mac.octet1, sta_mac.octet2, sta_mac.octet3,
                        sta_mac.octet4, sta_mac.octet5, sta_mac.octet6,
@@ -658,21 +739,25 @@ esp_err_t init() {
             }
 
             if(strcmp(argv[1], "on") == 0){
-                esp_err_t web_init_ret = WebBackend::init();
-                esp_err_t web_start_ret = WebBackend::start();
-                if(web_init_ret != ESP_OK || web_start_ret != ESP_OK){
-                    printf("web start failed: %s %s\n", esp_err_to_name(web_init_ret), esp_err_to_name(web_start_ret));
-                    return 1;
-                }
                 esp_err_t ret = WifiService::start_default(TAG);
+                if(ret == ESP_OK && WifiService::get_mode() != WifiService::Mode::ESPNOW_ONLY){
+                    esp_err_t web_init_ret = WebBackend::init();
+                    esp_err_t web_start_ret = WebBackend::start();
+                    if(web_init_ret != ESP_OK || web_start_ret != ESP_OK){
+                        printf("web start failed: %s %s\n", esp_err_to_name(web_init_ret), esp_err_to_name(web_start_ret));
+                        return 1;
+                    }
+                }
                 printf("wifi on: %s\n", esp_err_to_name(ret));
                 print_status();
                 return ret == ESP_OK ? 0 : 1;
             }
 
             if(strcmp(argv[1], "off") == 0){
+                WebBackend::stop();
                 esp_err_t ret = WifiService::stop(TAG);
-                printf("wifi off: %s\n", esp_err_to_name(ret));
+                printf("wifi network off, ESP-NOW remains active: %s\n", esp_err_to_name(ret));
+                print_status();
                 return ret == ESP_OK ? 0 : 1;
             }
 
@@ -682,26 +767,26 @@ esp_err_t init() {
                     return 1;
                 }
                 const char* password = argc >= 4 ? argv[3] : "";
-                esp_err_t web_init_ret = WebBackend::init();
-                esp_err_t web_start_ret = WebBackend::start();
+                esp_err_t ret = WifiService::connect_sta(argv[2], password, true, TAG);
+                esp_err_t web_init_ret = ret == ESP_OK ? WebBackend::init() : ret;
+                esp_err_t web_start_ret = web_init_ret == ESP_OK ? WebBackend::start() : web_init_ret;
                 if(web_init_ret != ESP_OK || web_start_ret != ESP_OK){
                     printf("web start failed: %s %s\n", esp_err_to_name(web_init_ret), esp_err_to_name(web_start_ret));
                     return 1;
                 }
-                esp_err_t ret = WifiService::connect_sta(argv[2], password, true, TAG);
                 printf("wifi connect: %s\n", esp_err_to_name(ret));
                 print_status();
                 return ret == ESP_OK ? 0 : 1;
             }
 
             if(strcmp(argv[1], "ap") == 0){
-                esp_err_t web_init_ret = WebBackend::init();
-                esp_err_t web_start_ret = WebBackend::start();
+                esp_err_t ret = WifiService::start_provision_ap(TAG);
+                esp_err_t web_init_ret = ret == ESP_OK ? WebBackend::init() : ret;
+                esp_err_t web_start_ret = web_init_ret == ESP_OK ? WebBackend::start() : web_init_ret;
                 if(web_init_ret != ESP_OK || web_start_ret != ESP_OK){
                     printf("web start failed: %s %s\n", esp_err_to_name(web_init_ret), esp_err_to_name(web_start_ret));
                     return 1;
                 }
-                esp_err_t ret = WifiService::start_provision_ap(TAG);
                 printf("wifi ap: %s\n", esp_err_to_name(ret));
                 print_status();
                 return ret == ESP_OK ? 0 : 1;

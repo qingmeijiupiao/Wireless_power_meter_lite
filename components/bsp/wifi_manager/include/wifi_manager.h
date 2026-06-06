@@ -83,6 +83,13 @@ constexpr int WIFI_CONNECT_TIMEOUT_MS = 30000;
  */
 class WiFiManager {
 public:
+    enum class RadioEvent : uint8_t {
+        BEFORE_STOP = 0,
+        AFTER_START,
+    };
+
+    using RadioEventHandler = void (*)(RadioEvent event, void* context);
+
     /** @brief 获取单例实例 */
     static WiFiManager& instance() {
         static WiFiManager inst;
@@ -117,6 +124,15 @@ public:
      * @return ESP_OK成功，ESP_ERR_TIMEOUT等待超时，其他见esp_err.h
      */
     esp_err_t connect_sta(const char* ssid, const char* password, bool wait = false);
+
+    /**
+     * @brief 仅启动 STA 无线接口，不连接基础设施 AP
+     *
+     * 供 ESP-NOW-only 等只需要 Wi-Fi 射频的场景使用。
+     *
+     * @param channel 启动后设置的主信道，范围 1~14
+     */
+    esp_err_t start_sta_radio(uint8_t channel = 1);
 
     /**
      * @brief 以AP模式启动热点
@@ -177,6 +193,17 @@ public:
 
     /** @brief 判断WiFi子系统是否已初始化 */
     bool is_initialized() const;
+    /** @brief 判断 WiFi 驱动是否已经启动 */
+    bool is_started() const;
+
+    /**
+     * @brief 注册 WiFi 驱动启停监听器
+     *
+     * 监听器在调用 esp_wifi_stop() 前和 esp_wifi_start() 成功后同步执行，
+     * 回调中不得阻塞或再次切换 WiFi 模式。
+     */
+    esp_err_t register_radio_listener(RadioEventHandler handler, void* context);
+    esp_err_t unregister_radio_listener(RadioEventHandler handler, void* context);
 
     /**
      * @brief 启动AP扫描
@@ -313,6 +340,16 @@ private:
 
     /** @brief 从netif刷新IP地址到ip_成员 */
     void update_ip_from_netif();
+    esp_err_t start_wifi_driver();
+    esp_err_t stop_wifi_driver();
+    void notify_radio_event(RadioEvent event);
+
+    struct RadioListener {
+        RadioEventHandler handler;
+        void* context;
+    };
+
+    static constexpr size_t MAX_RADIO_LISTENERS = 4;
 
     wifi_state_t state_;            /**< 当前WiFi状态 */
     IP_t ip_;                       /**< 当前IP地址 */
@@ -321,6 +358,7 @@ private:
     esp_netif_t* sta_netif_;        /**< STA接口netif句柄 */
     esp_netif_t* ap_netif_;         /**< AP接口netif句柄 */
     EventGroupHandle_t event_group_;/**< FreeRTOS事件组，用于连接/扫描同步 */
+    RadioListener radio_listeners_[MAX_RADIO_LISTENERS];
 };
 
 #endif

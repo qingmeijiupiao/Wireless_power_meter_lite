@@ -70,12 +70,14 @@
 | 电流校准 | [components/app/current_calibration/README.md](components/app/current_calibration/README.md) |
 | Web 后端 | [components/app/web_backend/README.md](components/app/web_backend/README.md) |
 | WiFi 服务 | [components/app/wifi_service/README.md](components/app/wifi_service/README.md) |
+| ESP-NOW 服务 | [components/app/espnow_service/README.md](components/app/espnow_service/README.md) |
 | 时间同步服务 | [components/middleware/time_service/README.md](components/middleware/time_service/README.md) |
 | 黑匣子服务 | [components/app/blackbox_service/README.md](components/app/blackbox_service/README.md) |
 | 硬件配置 | [components/bsp/hardware/README.md](components/bsp/hardware/README.md) |
 | ST7735 驱动 | [components/bsp/st7735_driver/README.md](components/bsp/st7735_driver/README.md) |
 | CAN/TWAI 驱动 | [components/bsp/HXC_TWAI/README.md](components/bsp/HXC_TWAI/README.md) |
 | WiFi 管理 | [components/bsp/wifi_manager/README.md](components/bsp/wifi_manager/README.md) |
+| ESP-NOW 链路 | [components/middleware/espnow_link/README.md](components/middleware/espnow_link/README.md) |
 | NVS 封装 | [components/bsp/HXC_NVS/README.md](components/bsp/HXC_NVS/README.md) |
 | Shell 底层 | [components/bsp/shell/README.md](components/bsp/shell/README.md) |
 | ADC 采样 | [components/bsp/ADC/README.md](components/bsp/ADC/README.md) |
@@ -113,7 +115,8 @@ Web 后端由 `components/app/web_backend` 提供，对外入口为 `WebBackend:
 4. 初始化温度采样、状态更新定时器和屏幕任务。
 5. 加载 LP 核采样程序。
 6. 初始化保护、输出控制、按键、CAN、Shell。
-7. 调用 `WebBackend::start_with_wifi_service()` 按配置启动 WiFi/Web。
+7. 调用 `WebBackend::start_with_wifi_service()` 启动 WifiService；所有非 OFF 模式
+   启用 ESP-NOW，按配置决定是否继续启动 WiFi IP 网络与 Web。
 8. 写入依赖运行期状态的补充诊断，包括 CAN 电阻、WiFi 模式、IP、INA226 原始值和全局标志。
 
 具体模块行为以对应 README 和源码为准。

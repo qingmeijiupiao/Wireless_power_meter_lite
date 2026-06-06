@@ -62,7 +62,7 @@ sequenceDiagram
 | 主页 | `DashboardPage` | 约 33ms | 显示电压、电流、功率、板温、运行时间、输出状态和保护标签 |
 | 电量页 | `BatteryPage` | 250ms | 顶部显示实时电压、电流、功率和输出状态，下方显示累计 `mWh`、`mAh`、系统时间和计量时间；长按侧键清零页面累计值并重新开始计量时间 |
 | 曲线页 | `CurvePage` | 200ms | 当前为曲线功能占位页面 |
-| 无线页 | `WirelessPage` | 500ms | 顶部显示 WiFi 模式；STA 显示 SSID、IP、信号强度条和信道；AP、关闭及错误状态使用独立布局；长按侧键进入 AP 配网 |
+| 无线页 | `WirelessPage` | 500ms | 显示 STA、AP 配网或 ESPNOW_ONLY；仅 ESP-NOW 模式显示当前信道；长按侧键进入 AP 配网 |
 | 设置页 | `SettingsPage` | 200ms | 长按侧键进入菜单，短按侧键切换设置项，短按正面键修改当前设置 |
 
 ## 按键行为
@@ -100,9 +100,11 @@ sequenceDiagram
 |------|------|------|------|
 | 屏幕旋转 | `Rotate` | `0` / `180` 之间切换，立即调用 `ST7735::set_rotation()` | `ui_rot` |
 | 背光档位 | `Bright` | 1-5 档循环，映射到 0-255 背光值 | `ui_bl` |
-| WiFi 开机启动 | `WiFi boot` | 调用 `WifiService::set_web_enabled_on_boot()` | `wifi_service` 内部 NVS |
+| Web 开机启动 | `Web boot` | 控制启动时是否连接 STA/AP 并开启 Web；ESP-NOW 不受影响 | `wifi_service` 内部 NVS |
 | 保护开关 | `Protect` | 调用 `protect_set_bypassed()` | 否，仅运行期 |
 | 黑匣子周期快照 | `BB snap` | 在 `OFF`、`1s`、`5s`、`10s`、`30s`、`60s` 之间循环切换 | `blackbox_service` 内部 NVS |
+| ESP-NOW 配对 | `ESPNOW pair` | 无时间限制等待一个设备，成功后自动退出；配对中再次执行可手动停止 | 否 |
+| ESP-NOW 信息 | `ESPNOW info` | 显示已配对数量和最多 3 个设备的 MAC 地址 | `espnow_link` 内部 NVS |
 | CAN 波特率 | `CAN baud` | 在 `1M`、`500K`、`250K`、`125K` 之间循环切换，重启后生效 | `CAN_BAUDRATE` |
 | CAN 终端电阻 | `CAN term` | 调用 `CanResistor::instance().toggle()` | `can_term` |
 

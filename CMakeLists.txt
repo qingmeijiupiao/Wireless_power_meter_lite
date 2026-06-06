@@ -13,9 +13,10 @@ set(EXTRA_COMPONENT_DIRS
     "components/middleware"
 )
 
-# 版本号 MAJOR.MINOR 由开发者修改，PATCH 区分本地/CD
+# 版本号 MAJOR.MINOR 由开发者修改
 set(VERSION_MAJOR 0 CACHE STRING "Major version")
-set(VERSION_MINOR 1 CACHE STRING "Minor version")
+set(VERSION_MINOR 2 CACHE STRING "Minor version")
+# PATCH 区分本地/CD 不要修改
 set(VERSION_PATCH 99 CACHE STRING "Patch version (99=local, 0=CD)")
 
 set(PROJECT_VER "v${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}")
@@ -39,7 +40,7 @@ idf_build_set_property(COMPILE_DEFINITIONS
 
 # 注入编译时间。
 # 不使用构建机本地时区，避免本地环境和 CD 服务器时区不同导致固件显示时间不一致。
-# 固定生成 UTC+8 时间，统一面向中国用户显示为 YYYY/MM/DD HH:MM:SS。
+# 固定生成 UTC+8 时间，显示为 YYYY/MM/DD HH:MM:SS。
 execute_process(
     COMMAND python -c "from datetime import datetime, timezone, timedelta; print(datetime.now(timezone(timedelta(hours=8))).strftime('%Y/%m/%d %H:%M:%S'))"
     OUTPUT_VARIABLE BUILD_TIME

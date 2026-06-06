@@ -123,6 +123,9 @@ esp_err_t init() {
     ESP_ERROR_CHECK(WebServer::on("/api/wifi/off", WebServer::Method::POST, wifi_off_handler));
     ESP_ERROR_CHECK(WebServer::on("/api/wifi/boot", WebServer::Method::POST, wifi_boot_handler));
     ESP_ERROR_CHECK(WebServer::on("/api/wifi/clear", WebServer::Method::POST, wifi_clear_handler));
+    ESP_ERROR_CHECK(WebServer::on("/api/espnow/pair", WebServer::Method::POST, espnow_pair_handler));
+    ESP_ERROR_CHECK(WebServer::on("/api/espnow/pair/stop", WebServer::Method::POST, espnow_pair_stop_handler));
+    ESP_ERROR_CHECK(WebServer::on("/api/espnow/pair/clear", WebServer::Method::POST, espnow_pair_clear_handler));
     ESP_ERROR_CHECK(WebServer::on("/api/ota/status", WebServer::Method::GET, ota_status_handler));
     ESP_ERROR_CHECK(WebServer::on("/api/ota/upload", WebServer::Method::POST, ota_upload_handler));
     ESP_ERROR_CHECK(WebServer::on("/api/ota/activate", WebServer::Method::POST, ota_activate_handler));
@@ -171,8 +174,15 @@ esp_err_t start() {
  * WiFi 失败不会阻止返回 Web 错误，便于日志中同时看到网络和 HTTP 的状态。
  */
 esp_err_t start_with_wifi_service() {
+    // WifiService 始终先启动网络模式。web_boot=0 时会进入 ESPNOW_ONLY，
+    // 因此 ESP-NOW 保持可用，但无需初始化和启动 HTTP 服务。
+    esp_err_t wifi_ret = WifiService::start_default(TAG);
+    if (wifi_ret != ESP_OK) {
+        ESP_LOGE(TAG, "WiFi service start failed: %s", esp_err_to_name(wifi_ret));
+        return wifi_ret;
+    }
     if (!WifiService::is_web_enabled_on_boot()) {
-        ESP_LOGI(TAG, "Web/WiFi startup disabled by NVS");
+        ESP_LOGI(TAG, "Web startup disabled; ESP-NOW-only mode active");
         return ESP_OK;
     }
 
@@ -180,11 +190,6 @@ esp_err_t start_with_wifi_service() {
     if (init_ret != ESP_OK) {
         ESP_LOGE(TAG, "Web backend init failed: %s", esp_err_to_name(init_ret));
         return init_ret;
-    }
-
-    esp_err_t wifi_ret = WifiService::start_default(TAG);
-    if (wifi_ret != ESP_OK) {
-        ESP_LOGE(TAG, "WiFi service start failed: %s", esp_err_to_name(wifi_ret));
     }
 
     esp_err_t web_ret = start();

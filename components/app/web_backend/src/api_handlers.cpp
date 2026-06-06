@@ -6,6 +6,7 @@
  * @LastEditTime: 2026-05-29
  */
 #include "web_backend_internal.h"
+#include "web_backend.h"
 
 #include <cstdio>
 #include <cstring>
@@ -27,6 +28,8 @@
 #include "screen.h"
 #include "st7735.h"
 #include "wifi_service.h"
+#include "espnow_link.h"
+#include "espnow_service.h"
 #include "blackbox_service.h"
 
 namespace WebBackend {
@@ -37,10 +40,24 @@ static char log_snapshot_buffer[LOG_RESPONSE_RAW_MAX + 1];
 
 static bool append_checked(char* out, size_t out_size, size_t* pos, const char* fmt, ...);
 
+/** @brief HTTP 响应发出后再关闭 Web 和 IP 网络，避免在 handler 内销毁当前连接。 */
+static void wifi_off_deferred_task(void*) {
+    vTaskDelay(pdMS_TO_TICKS(100));
+    WebBackend::stop();
+    const esp_err_t ret = WifiService::stop(TAG);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "IP network stopped; ESP-NOW remains active");
+    } else {
+        ESP_LOGW(TAG, "deferred network stop failed: %s", esp_err_to_name(ret));
+    }
+    vTaskDelete(nullptr);
+}
+
 /** @brief 将 WiFiService 模式转换为 API 字符串。 */
 const char* mode_to_str(WifiService::Mode mode) {
     switch (mode) {
         case WifiService::Mode::OFF: return "off";
+        case WifiService::Mode::ESPNOW_ONLY: return "espnow_only";
         case WifiService::Mode::STA: return "sta";
         case WifiService::Mode::AP_PROVISION: return "ap_provision";
         default: return "unknown";
@@ -511,7 +528,7 @@ esp_err_t diagnostics_handler(WebServer::Request* request) {
     return WebServer::send_json(request, response_buffer);
 }
 
-/** @brief GET /api/wifi/status，返回 WiFiService 当前状态、信号、信道和 MAC 信息。 */
+/** @brief GET /api/wifi/status，返回 WiFi、Web 和 ESP-NOW 共用射频状态。 */
 esp_err_t wifi_status_handler(WebServer::Request* request) {
     IP_t ip = WifiService::get_ip();
     char ip_text[16] = {};
@@ -522,9 +539,33 @@ esp_err_t wifi_status_handler(WebServer::Request* request) {
     mac_to_str(WiFiManager::instance().get_mac(WIFI_IF_STA), sta_mac, sizeof(sta_mac));
     mac_to_str(WiFiManager::instance().get_mac(WIFI_IF_AP), ap_mac, sizeof(ap_mac));
     auto cfg = WifiService::get_config();
+    EspNowLink::LinkStatistics now_stats = {};
+    EspNowLink::get_statistics(&now_stats);
+    char peer_json[192] = {};
+    size_t peer_json_pos = 0;
+    peer_json[peer_json_pos++] = '[';
+    const size_t peer_count = EspNowLink::get_saved_peer_count();
+    for (size_t i = 0; i < peer_count && i < 3; ++i) {
+        EspNowLink::SavedPeer peer = {};
+        if (EspNowLink::get_saved_peer(i, &peer) != ESP_OK) {
+            continue;
+        }
+        const int written = snprintf(
+            peer_json + peer_json_pos, sizeof(peer_json) - peer_json_pos,
+            "%s{\"mac\":\"%02X:%02X:%02X:%02X:%02X:%02X\",\"channel\":%u}",
+            peer_json_pos == 1 ? "" : ",",
+            peer.address.bytes[0], peer.address.bytes[1], peer.address.bytes[2],
+            peer.address.bytes[3], peer.address.bytes[4], peer.address.bytes[5],
+            static_cast<unsigned>(peer.last_channel));
+        if (written < 0 || static_cast<size_t>(written) >= sizeof(peer_json) - peer_json_pos) {
+            break;
+        }
+        peer_json_pos += static_cast<size_t>(written);
+    }
+    snprintf(peer_json + peer_json_pos, sizeof(peer_json) - peer_json_pos, "]");
     const bool channel_available = WifiService::get_channel(&channel) == ESP_OK;
     snprintf(response_buffer, sizeof(response_buffer),
-        "{\"mode\":\"%s\",\"state\":%d,\"ip\":\"%s\",\"saved_ssid\":\"%s\",\"ap_ssid\":\"%s\",\"rssi\":%d,\"signal_percent\":%u,\"channel\":%u,\"channel_available\":%s,\"sta_mac\":\"%s\",\"ap_mac\":\"%s\",\"boot_enabled\":%s,\"last_error\":\"%s\"}\n",
+        "{\"mode\":\"%s\",\"state\":%d,\"ip\":\"%s\",\"saved_ssid\":\"%s\",\"ap_ssid\":\"%s\",\"rssi\":%d,\"signal_percent\":%u,\"channel\":%u,\"channel_available\":%s,\"sta_mac\":\"%s\",\"ap_mac\":\"%s\",\"boot_enabled\":%s,\"espnow_active\":%s,\"espnow_pairing\":%s,\"espnow_peer_count\":%u,\"espnow_peers\":%s,\"espnow_tx\":%lu,\"espnow_no_ack\":%lu,\"espnow_invalid\":%lu,\"espnow_timing\":%lu,\"last_error\":\"%s\"}\n",
         mode_to_str(WifiService::get_mode()),
         (int)WifiService::get_wifi_state(),
         ip_text,
@@ -537,6 +578,14 @@ esp_err_t wifi_status_handler(WebServer::Request* request) {
         sta_mac,
         ap_mac,
         cfg.web_enabled_on_boot ? "true" : "false",
+        EspNowLink::is_active() ? "true" : "false",
+        EspNowLink::is_pairing() ? "true" : "false",
+        static_cast<unsigned>(peer_count),
+        peer_json,
+        static_cast<unsigned long>(now_stats.tx_packets),
+        static_cast<unsigned long>(now_stats.ack_timeouts),
+        static_cast<unsigned long>(now_stats.rx_invalid_packets),
+        static_cast<unsigned long>(now_stats.timing_errors),
         WifiService::get_last_error());
     return WebServer::send_json(request, response_buffer);
 }
@@ -751,18 +800,20 @@ esp_err_t wifi_ap_handler(WebServer::Request* request) {
     return WebServer::send_json(request, response_buffer);
 }
 
-/** @brief POST /api/wifi/off，关闭 WifiService 管理的网络功能。 */
+/** @brief POST /api/wifi/off，关闭 IP 网络并切换到 ESPNOW_ONLY。 */
 esp_err_t wifi_off_handler(WebServer::Request* request) {
-    esp_err_t ret = WifiService::stop(TAG);
-    if (ret == ESP_OK) {
-        ESP_LOGI(TAG, "WiFi service stopped");
-    } else {
-        ESP_LOGW(TAG, "WiFi service stop failed: reason=%s", esp_err_to_name(ret));
-    }
+    const BaseType_t task_result = xTaskCreate(wifi_off_deferred_task,
+                                               "wifi_web_off",
+                                               3072,
+                                               nullptr,
+                                               3,
+                                               nullptr);
+    const bool scheduled = task_result == pdPASS;
     snprintf(response_buffer, sizeof(response_buffer),
-        "{\"ok\":%s,\"reason\":\"%s\"}\n",
-        ret == ESP_OK ? "true" : "false",
-        ret == ESP_OK ? "ok" : esp_err_to_name(ret));
+        "{\"ok\":%s,\"reason\":\"%s\",\"target_mode\":\"espnow_only\",\"espnow_active\":%s}\n",
+        scheduled ? "true" : "false",
+        scheduled ? "scheduled" : "no_memory",
+        EspNowLink::is_active() ? "true" : "false");
     return WebServer::send_json(request, response_buffer);
 }
 
@@ -823,6 +874,58 @@ esp_err_t wifi_clear_handler(WebServer::Request* request) {
         "{\"ok\":%s,\"reason\":\"%s\"}\n",
         ret == ESP_OK ? "true" : "false",
         ret == ESP_OK ? "ok" : esp_err_to_name(ret));
+    return WebServer::send_json(request, response_buffer);
+}
+
+/** @brief POST /api/espnow/pair，持续等待一个设备配对，成功或手动退出后关闭。 */
+esp_err_t espnow_pair_handler(WebServer::Request* request) {
+    esp_err_t ret = WebServer::load_body(request);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    ret = EspNowLink::enter_pairing_mode(0);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "ESP-NOW single-device pairing started without timeout");
+        BlackboxService::append_text_event("espnow: pair_start source=web unlimited=1");
+    } else {
+        ESP_LOGW(TAG, "ESP-NOW pairing start failed: reason=%s", esp_err_to_name(ret));
+    }
+    snprintf(response_buffer, sizeof(response_buffer),
+        "{\"ok\":%s,\"reason\":\"%s\",\"pairing\":%s,\"peer_count\":%u,\"single_device\":true,\"unlimited\":true}\n",
+        ret == ESP_OK ? "true" : "false",
+        ret == ESP_OK ? "ok" : esp_err_to_name(ret),
+        EspNowLink::is_pairing() ? "true" : "false",
+        static_cast<unsigned>(EspNowLink::get_saved_peer_count()));
+    return WebServer::send_json(request, response_buffer);
+}
+
+/** @brief POST /api/espnow/pair/stop，手动关闭当前配对窗口。 */
+esp_err_t espnow_pair_stop_handler(WebServer::Request* request) {
+    EspNowLink::leave_pairing_mode();
+    ESP_LOGI(TAG, "ESP-NOW pairing stopped");
+    BlackboxService::append_text_event("espnow: pair_stop source=web");
+    snprintf(response_buffer, sizeof(response_buffer),
+        "{\"ok\":true,\"pairing\":false,\"peer_count\":%u}\n",
+        static_cast<unsigned>(EspNowLink::get_saved_peer_count()));
+    return WebServer::send_json(request, response_buffer);
+}
+
+/** @brief POST /api/espnow/pair/clear，退出配对并清除全部已保存 peer。 */
+esp_err_t espnow_pair_clear_handler(WebServer::Request* request) {
+    EspNowLink::leave_pairing_mode();
+    const esp_err_t ret = EspNowLink::clear_saved_peers();
+    if (ret == ESP_OK) {
+        ESP_LOGW(TAG, "all ESP-NOW paired peers cleared");
+        BlackboxService::append_text_event("espnow: pair_clear source=web");
+    } else {
+        ESP_LOGW(TAG, "clear ESP-NOW paired peers failed: reason=%s", esp_err_to_name(ret));
+    }
+    snprintf(response_buffer, sizeof(response_buffer),
+        "{\"ok\":%s,\"reason\":\"%s\",\"pairing\":false,\"peer_count\":%u}\n",
+        ret == ESP_OK ? "true" : "false",
+        ret == ESP_OK ? "ok" : esp_err_to_name(ret),
+        static_cast<unsigned>(EspNowLink::get_saved_peer_count()));
     return WebServer::send_json(request, response_buffer);
 }
 

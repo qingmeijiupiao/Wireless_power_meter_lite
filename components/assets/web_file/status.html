@@ -52,7 +52,7 @@
     const $ = id => document.getElementById(id);
     const stateName = ['正常', '告警', '保护'];
     const protectName = { OTP: '过温保护', OVP: '过压保护', UVP: '欠压保护', OCP: '过流保护' };
-    const wifiModeName = { off: '关闭', sta: 'STA 客户端', ap_provision: 'AP 配网' };
+    const wifiModeName = { off: '未启动', espnow_only: '仅 ESP-NOW', sta: 'STA 客户端', ap_provision: 'AP 配网' };
     const wifiStateName = ['未连接', 'STA 已连接', 'AP 已启动'];
     const taskStateName = ['运行', '就绪', '阻塞', '挂起', '删除', '无效'];
     const fmt = (n, d) => Number.isFinite(n) ? Number(n).toFixed(d) : '--';
@@ -119,9 +119,14 @@
         ['配网热点 SSID', wifi.ap_ssid || '--'],
         ['信号强度', wifi.state === 1 ? `${wifi.rssi} dBm (${wifi.signal_percent}%)` : '--'],
         ['信道', wifi.channel_available ? wifi.channel : '--'],
+        ['ESP-NOW', wifi.espnow_active ? '运行中' : '未运行'],
+        ['ESP-NOW 发送包', wifi.espnow_tx],
+        ['ESP-NOW 无 ACK', wifi.espnow_no_ack],
+        ['ESP-NOW 非法包', wifi.espnow_invalid],
+        ['ESP-NOW 时序错误', wifi.espnow_timing],
         ['STA MAC', wifi.sta_mac],
         ['AP MAC', wifi.ap_mac],
-        ['开机启动', wifi.boot_enabled ? '开启' : '关闭'],
+        ['Web 开机启动', wifi.boot_enabled ? '开启' : '关闭'],
         ['最近错误', wifi.last_error || '(无)']
       ]);
       $('diagText').className = 'info-list';

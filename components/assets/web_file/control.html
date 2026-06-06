@@ -48,15 +48,24 @@
         </div>
       </div>
       <div class="card stack">
-        <strong>WiFi / Web</strong>
+        <strong>WiFi / Web / ESP-NOW</strong>
         <div class="muted" id="wifiText">--</div>
         <div class="actions">
           <button onclick="location.href='/provision.html'">配置 WiFi</button>
           <button class="secondary" id="wifiOn">启动 WiFi/Web</button>
+          <button class="secondary" id="wifiOff">关闭 WiFi/Web，保留 ESP-NOW</button>
           <button class="secondary" id="wifiAp">进入配网模式</button>
-          <button class="secondary" id="wifiBoot">切换开机启动</button>
+          <button class="secondary" id="wifiBoot">切换 Web 开机启动</button>
           <button class="danger" id="wifiClear">清除保存的 WiFi</button>
         </div>
+        <div class="muted" id="espnowPairText">--</div>
+        <div class="info-list" id="espnowPeerList"></div>
+        <div class="actions">
+          <button id="espnowPair">进入单次配对</button>
+          <button class="secondary" id="espnowPairStop">退出配对</button>
+          <button class="danger" id="espnowPairClear">清除全部配对</button>
+        </div>
+        <div class="notice">配对会持续等待，直到成功配对一个设备或手动退出。最多保存 3 个设备。</div>
       </div>
       <div class="card stack">
         <strong>系统操作</strong>
@@ -106,9 +115,17 @@
       $('wifiText').innerHTML = infoHtml([
         ['模式', w.mode],
         ['IP', w.ip],
-        ['开机启动', w.boot_enabled ? '开启' : '关闭']
+        ['ESP-NOW', w.espnow_active ? '运行中' : '未运行'],
+        ['信道', w.channel_available ? w.channel : '--'],
+        ['Web 开机启动', w.boot_enabled ? '开启' : '关闭']
       ]);
-      $('wifiBoot').textContent = w.boot_enabled ? '关闭开机启动' : '开启开机启动';
+      $('wifiBoot').textContent = w.boot_enabled ? '关闭 Web 开机启动' : '开启 Web 开机启动';
+      $('espnowPairText').textContent = `配对窗口：${w.espnow_pairing ? '等待设备' : '已关闭'} · 已配对设备：${w.espnow_peer_count}`;
+      $('espnowPeerList').innerHTML = infoHtml(
+        (w.espnow_peers || []).map((peer, index) => [`设备 ${index + 1}`, `${peer.mac} · 信道 ${peer.channel}`])
+      ) || '<div class="muted">暂无已配对设备</div>';
+      $('espnowPair').disabled = !w.espnow_active || w.espnow_pairing;
+      $('espnowPairStop').disabled = !w.espnow_pairing;
     }
     let backlightTimer = null;
     $('backlight').oninput = () => {
@@ -158,9 +175,21 @@
       await postJson('/api/can', { baudrate, id }); await load();
     };
     $('wifiOn').onclick = async () => { await postJson('/api/wifi/on'); await load(); };
+    $('wifiOff').onclick = async () => { await postJson('/api/wifi/off'); await load(); };
     $('wifiAp').onclick = async () => { await postJson('/api/wifi/ap'); await load(); };
     $('wifiBoot').onclick = async () => { await postJson('/api/wifi/boot', { enabled: !(wifi && wifi.boot_enabled) }); await load(); };
     $('wifiClear').onclick = async () => { if (confirm('确定清除已保存的 WiFi 吗？')) { await postJson('/api/wifi/clear'); await load(); } };
+    $('espnowPair').onclick = async () => {
+      const result = await postJson('/api/espnow/pair');
+      if (!result.ok) alert(`进入配对失败：${result.reason}`);
+      await load();
+    };
+    $('espnowPairStop').onclick = async () => { await postJson('/api/espnow/pair/stop'); await load(); };
+    $('espnowPairClear').onclick = async () => {
+      if (!confirm('确定清除全部 ESP-NOW 配对设备吗？清除后需要重新配对。')) return;
+      await postJson('/api/espnow/pair/clear');
+      await load();
+    };
     $('rebootBtn').onclick = async () => { if (!confirm('确定要重启设备吗？')) return; await postJson('/api/reboot'); $('topStatus').textContent = '设备正在重启'; };
     load().catch(() => $('topStatus').textContent = '读取失败');
     setInterval(() => load().catch(() => {}), 5000);

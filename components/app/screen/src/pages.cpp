@@ -3,7 +3,7 @@
  * @LastEditors: qingmeijiupiao
  * @Description: 屏幕应用页面实现，包含主页数据渲染、无线状态页、设置页和预留页面
  * @Author: qingmeijiupiao
- * @LastEditTime: 2026-06-03 22:41:22
+ * @LastEditTime: 2026-06-06 20:00:41
  */
 #include "pages.h"
 
@@ -16,6 +16,7 @@
 #include "DENGB20.h"
 #include "current_calibration.h"
 #include "energy_meter.h"
+#include "espnow_link.h"
 #include "esp_log.h"
 #include "ErrorRectangle.h"
 #include "WarningRectangle.h"
@@ -400,7 +401,7 @@ void WirelessPage::render(RenderMode mode) {
     ST7735::color_t mode_color = wifi_mode == WifiService::Mode::STA
         ? ST7735::color_t(0x1ef851)
         : ST7735::color_t(0x2FC9EC);
-    if (last_result_ != ESP_OK && wifi_mode != WifiService::Mode::STA && !provisioning) {
+    if (last_result_ != ESP_OK && wifi_mode == WifiService::Mode::OFF) {
         mode_text = "ERR";
         mode_color = ST7735::color_t(0xef2a2a);
     }
@@ -473,6 +474,8 @@ void WirelessPage::render(RenderMode mode) {
             snprintf(value, sizeof(value), "%.18s", WifiService::get_ap_ssid());
         } else if (wifi_mode == WifiService::Mode::STA) {
             snprintf(value, sizeof(value), "%.18s", cfg.ssid[0] == '\0' ? "Connected" : cfg.ssid);
+        } else if (wifi_mode == WifiService::Mode::ESPNOW_ONLY) {
+            snprintf(value, sizeof(value), "ESP-NOW only");
         } else if (last_result_ != ESP_OK) {
             snprintf(value, sizeof(value), "ERR");
         } else {
@@ -495,6 +498,9 @@ void WirelessPage::render(RenderMode mode) {
                      static_cast<unsigned>(signal));
         } else if (provisioning) {
             snprintf(value, sizeof(value), "AP mode");
+        } else if (wifi_mode == WifiService::Mode::ESPNOW_ONLY && channel_available) {
+            snprintf(value, sizeof(value), "CH%u NOW",
+                     static_cast<unsigned>(channel));
         } else if (last_result_ != ESP_OK) {
             snprintf(value, sizeof(value), "%.12s", esp_err_to_name(last_result_));
         } else {
@@ -504,7 +510,7 @@ void WirelessPage::render(RenderMode mode) {
     };
 
     draw_status_pill(2, 0, mode_text, mode_color);
-    // Keep x=40..76 free for a future ESP-NOW status pill with the same height.
+    // 右侧预留状态区域，后续用于显示已配对远程开关数量。
     draw_signal_logo();
     draw_details();
 }
@@ -649,12 +655,16 @@ const char* SettingsPage::item_name(uint8_t item) const {
             return "Rotate";
         case Backlight:
             return "Bright";
-        case WifiBoot:
-            return "WiFi";
+        case WebBoot:
+            return "Web";
         case ProtectBypass:
             return "Protect";
         case BlackboxSnapshot:
             return "BBsnap";
+        case EspNowPair:
+            return "NOWpair";
+        case EspNowInfo:
+            return "NOWinfo";
         case CanBaudrate:
             return "CANrate";
         case CanTerm:
@@ -682,7 +692,7 @@ const char* SettingsPage::item_value(uint8_t item) {
         case Backlight:
             snprintf(value_buf_, sizeof(value_buf_), "%u/5", static_cast<unsigned>(backlight_level_));
             return value_buf_;
-        case WifiBoot:
+        case WebBoot:
             return WifiService::is_web_enabled_on_boot() ? "ON" : "OFF";
         case ProtectBypass:
             return protect_is_bypassed() ? "OFF" : "ON";
@@ -697,6 +707,12 @@ const char* SettingsPage::item_value(uint8_t item) {
                 default: return "Other";
             }
         }
+        case EspNowPair:
+            return EspNowLink::is_pairing() ? "WAIT" : "";
+        case EspNowInfo:
+            snprintf(value_buf_, sizeof(value_buf_), "%u/3",
+                     static_cast<unsigned>(EspNowLink::get_saved_peer_count()));
+            return value_buf_;
         case CanBaudrate:
             switch (CanCallback::CAN_BAUDRATE.read()) {
                 case 1_Mbps:
@@ -724,6 +740,9 @@ const char* SettingsPage::item_value(uint8_t item) {
 /** @brief 获取设置项交互类型。 */
 SettingsPage::ItemType SettingsPage::item_type(uint8_t item) const {
     switch (item) {
+        case EspNowPair:
+            return ItemType::Action;
+        case EspNowInfo:
         case FirmwareInfo:
         case BlackboxInfo:
         case CalibrationInfo:
@@ -752,15 +771,56 @@ void SettingsPage::activate_selected_item() {
 
 /** @brief 运行动作类设置项。 */
 bool SettingsPage::run_action_item(uint8_t item) {
-    (void)item;
-    return false;
+    if (item != EspNowPair) {
+        return false;
+    }
+
+    esp_err_t ret = ESP_OK;
+    if (EspNowLink::is_pairing()) {
+        EspNowLink::leave_pairing_mode();
+        ESP_LOGI(TAG, "ESP-NOW pairing stopped source=screen");
+        BlackboxService::append_text_event("espnow: pair_stop source=screen");
+    } else {
+        ret = EspNowLink::enter_pairing_mode(0);
+        ESP_LOGI(TAG, "ESP-NOW pairing start source=screen result=%s", esp_err_to_name(ret));
+        BlackboxService::append_text_event("espnow: pair_start source=screen unlimited=1 result=%s",
+                                           esp_err_to_name(ret));
+    }
+    return true;
 }
 
 /** @brief 刷新当前弹窗内容。 */
 void SettingsPage::build_dialog_content() {
     const uint8_t item = selected_;
 
-    if (item == FirmwareInfo) {
+    for (auto& line : detail_lines_) {
+        line[0] = '\0';
+    }
+
+    if (item == EspNowPair) {
+        snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "State %s",
+                 EspNowLink::is_pairing() ? "PAIRING" : "STOPPED");
+        snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Paired %u/3",
+                 static_cast<unsigned>(EspNowLink::get_saved_peer_count()));
+        snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "No time limit");
+        snprintf(detail_lines_[3], sizeof(detail_lines_[3]), "Success auto exits");
+    } else if (item == EspNowInfo) {
+        const size_t count = EspNowLink::get_saved_peer_count();
+        snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "Paired %u/3",
+                 static_cast<unsigned>(count));
+        for (size_t i = 0; i < 3; ++i) {
+            EspNowLink::SavedPeer peer = {};
+            if (i < count && EspNowLink::get_saved_peer(i, &peer) == ESP_OK) {
+                snprintf(detail_lines_[i + 1], sizeof(detail_lines_[i + 1]),
+                         "%02X:%02X:%02X:%02X:%02X:%02X",
+                         peer.address.bytes[0], peer.address.bytes[1],
+                         peer.address.bytes[2], peer.address.bytes[3],
+                         peer.address.bytes[4], peer.address.bytes[5]);
+            } else {
+                snprintf(detail_lines_[i + 1], sizeof(detail_lines_[i + 1]), "--");
+            }
+        }
+    } else if (item == FirmwareInfo) {
         const MAC_t mac = WiFiManager::instance().get_mac(WIFI_IF_STA);
         snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "Version %u.%u.%u",
                  static_cast<unsigned>(VERSION_MAJOR),
@@ -796,10 +856,6 @@ void SettingsPage::build_dialog_content() {
         snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Resistance %.3fmR", sample_resistance_mohm);
         snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "BaseK %u",
                  static_cast<unsigned>(params.current_base_K));
-    } else {
-        detail_lines_[0][0] = '\0';
-        detail_lines_[1][0] = '\0';
-        detail_lines_[2][0] = '\0';
     }
 }
 
@@ -809,12 +865,13 @@ void SettingsPage::draw_dialog_overlay() {
     const ST7735::color_t panel = ST7735::BLACK;
     const ST7735::color_t muted = ST7735::color_t(0xB5B5B5);
 
-    ST7735::fill_round_rect(8, 8, 144, 64, 6, panel, ST7735::BLACK);
-    ST7735::draw_round_rect(8, 8, 144, 64, 6, 1, ST7735::YELLOW, ST7735::BLACK);
-    ST7735::draw_string(14, 13, item_name(selected_), ST7735::YELLOW, panel, DENGB12);
-    ST7735::draw_string(14, 29, detail_lines_[0], ST7735::WHITE, panel, DENGB12);
-    ST7735::draw_string(14, 43, detail_lines_[1], ST7735::WHITE, panel, DENGB12);
-    ST7735::draw_string(14, 57, detail_lines_[2], muted, panel, DENGB12);
+    ST7735::fill_round_rect(8, 2, 144, 76, 6, panel, ST7735::BLACK);
+    ST7735::draw_round_rect(8, 2, 144, 76, 6, 1, ST7735::YELLOW, ST7735::BLACK);
+    ST7735::draw_string(14, 5, item_name(selected_), ST7735::YELLOW, panel, DENGB12);
+    ST7735::draw_string(14, 19, detail_lines_[0], ST7735::WHITE, panel, DENGB12);
+    ST7735::draw_string(14, 33, detail_lines_[1], ST7735::WHITE, panel, DENGB12);
+    ST7735::draw_string(14, 47, detail_lines_[2], muted, panel, DENGB12);
+    ST7735::draw_string(14, 61, detail_lines_[3], muted, panel, DENGB12);
 }
 
 /** @brief 修改当前选中的设置项。 */
@@ -838,7 +895,7 @@ void SettingsPage::adjust_selected_item() {
             BlackboxService::append_text_event("ui: config source=%s backlight_level=%u",
                                                TAG, static_cast<unsigned>(backlight_level_));
             break;
-        case WifiBoot: {
+        case WebBoot: {
             bool enabled = !WifiService::is_web_enabled_on_boot();
             WifiService::set_web_enabled_on_boot(enabled, TAG);
             break;

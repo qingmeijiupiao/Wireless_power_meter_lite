@@ -1,7 +1,7 @@
 /*
  * @version: 1.0
  * @LastEditors: qingmeijiupiao
- * @Description: WiFi/Web 应用层服务组件，封装 STA 自动连接、AP 配网、DNS 劫持和 NVS 配置
+ * @Description: WiFi/Web/ESP-NOW 射频策略服务，封装 STA、AP 配网、ESPNOW_ONLY 和 NVS 配置
  * @Author: qingmeijiupiao
  * @LastEditTime: 2026-05-28
  */
@@ -25,7 +25,8 @@ constexpr uint8_t AP_IP_OCTET4 = 1;
  * @brief WiFiService 当前工作模式
  */
 enum class Mode : uint8_t {
-    OFF = 0,        /**< WiFi/Web 服务未启动或已停止 */
+    OFF = 0,        /**< WiFi 射频尚未启动，仅用于初始化前或完整反初始化状态 */
+    ESPNOW_ONLY,    /**< 仅启动 STA 射频，供 ESP-NOW 通信使用 */
     STA,            /**< STA 模式，已连接到外部路由器并通过路由器 IP 提供 Web 服务 */
     AP_PROVISION,   /**< AP 配网模式，设备启动热点并开启 DNS 劫持 */
 };
@@ -53,17 +54,17 @@ struct ScanResult {
 /**
  * @brief 初始化 WiFiService
  *
- * 初始化 NVS、底层 WiFiManager，并基于 AP MAC 生成默认配网热点名。
+ * 初始化 NVS、WiFiManager、EspNowLink 和 EspNowService，并生成默认配网热点名。
  *
  * @return ESP_OK 成功，其他值表示 WiFiManager 初始化失败
  */
 esp_err_t init();
 
 /**
- * @brief 按 NVS 配置启动默认 WiFi/Web 网络模式
+ * @brief 按 NVS 配置启动默认网络模式
  *
  * 流程：
- * 1. 若 web_boot 为 0，则保持 OFF。
+ * 1. 若 web_boot 为 0，则进入 ESPNOW_ONLY。
  * 2. 若已保存 SSID，则尝试 STA 连接。
  * 3. STA 连接失败或未保存 SSID 时，切换到 AP 配网模式。
  *
@@ -71,12 +72,15 @@ esp_err_t init();
  */
 esp_err_t start_default(const char* source);
 
+/** @brief 启动仅 ESP-NOW 使用的 STA 射频模式 */
+esp_err_t start_espnow_only(const char* source);
+
 /**
- * @brief 停止 WiFiService 管理的网络功能
+ * @brief 关闭 IP 网络和 Web 所需射频模式，保留 ESP-NOW
  *
- * 停止 DNS 劫持、关闭 Captive Portal，并停止底层 WiFi 驱动。
+ * 停止 DNS 劫持、关闭 Captive Portal，并切换到 ESPNOW_ONLY。
  *
- * @return ESP_OK 成功，其他值来自 WiFiManager::stop()
+ * @return ESP_OK 成功，其他值来自 ESPNOW_ONLY 启动流程
  */
 esp_err_t stop(const char* source);
 
@@ -172,6 +176,9 @@ uint8_t get_signal_percent();
  * @return ESP_OK 成功，其他值来自底层 WiFiManager
  */
 esp_err_t get_channel(uint8_t* channel);
+
+/** @brief 设置并持久化 ESP-NOW-only 模式使用的信道 */
+esp_err_t set_espnow_channel(uint8_t channel);
 
 } // namespace WifiService
 

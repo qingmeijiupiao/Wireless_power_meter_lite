@@ -10,6 +10,8 @@
 
 - **单例管理**：通过 `WiFiManager::instance()` 获取唯一实例
 - **STA/AP/APSTA 模式切换**：支持连接外部 AP、启动本机 AP，或在 AP 配网时保留 STA 扫描能力
+- **仅射频 STA 模式**：`start_sta_radio()` 为 ESP-NOW-only 场景启动 STA 接口但不连接 AP
+- **驱动生命周期通知**：允许 ESP-NOW 等组件监听 WiFi 启停并同步恢复底层状态
 - **同步等待能力**：STA 连接可选择阻塞等待连接结果
 - **事件驱动状态**：通过 WiFi/IP 事件更新连接状态、IP 和扫描完成标志
 - **AP 地址配置**：支持设置 AP 接口 IP，并同步重启 DHCP Server
@@ -73,6 +75,7 @@ ESP_ERROR_CHECK(wifi.start_ap("WPM-Lite", "", WIFI_AP_MAX_CONN, 1));
 | `init()` | 初始化 netif、事件循环、WiFi 驱动和事件组 |
 | `deinit()` | 停止 WiFi 并释放资源 |
 | `connect_sta(ssid, password, wait)` | STA 模式连接外部 AP |
+| `start_sta_radio(channel)` | 仅启动 STA 射频并设置初始信道 |
 | `start_ap(ssid, password, max_conn, channel)` | AP 模式启动热点 |
 | `start_apsta(ssid, password, max_conn, channel)` | APSTA 模式启动热点，保留 STA 扫描能力 |
 | `disconnect()` | 断开 STA 连接 |
@@ -89,6 +92,9 @@ ESP_ERROR_CHECK(wifi.start_ap("WPM-Lite", "", WIFI_AP_MAX_CONN, 1));
 | `get_rssi()` | 获取当前连接 AP 的 RSSI |
 | `is_connected()` | 是否已 STA 连接 |
 | `is_initialized()` | 是否已初始化 |
+| `is_started()` | WiFi 驱动是否已经启动 |
+| `register_radio_listener()` | 注册驱动启停监听器 |
+| `unregister_radio_listener()` | 注销驱动启停监听器 |
 
 ### 扩展能力
 

@@ -1,7 +1,7 @@
 /*
  * @version: 1.0
  * @LastEditors: qingmeijiupiao
- * @Description: WiFi/Web 应用层服务组件实现，负责 NVS 配置、STA/AP 模式切换和配网 DNS 劫持
+ * @Description: WiFi/Web/ESP-NOW 射频策略服务，负责 NVS、STA/AP/ESPNOW_ONLY 与配网
  * @Author: qingmeijiupiao
  * @LastEditTime: 2026-05-28
  */
@@ -16,6 +16,8 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
+#include "espnow_link.h"
+#include "espnow_service.h"
 #include "web_server.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
@@ -48,6 +50,7 @@ static const char* source_or_unknown(const char* source) {
 static HXC::NVS_DATA<char*> sta_ssid("wifi_ssid", "");
 static HXC::NVS_DATA<char*> sta_pass("wifi_pass", "");
 static HXC::NVS_DATA<uint8_t> web_boot("web_boot", 1);
+static HXC::NVS_DATA<uint8_t> espnow_channel("espnow_ch", 1);
 
 // 运行期状态由 WiFiService 统一维护，供 Shell 和 WebBackend 查询。
 static bool initialized = false;
@@ -195,6 +198,18 @@ static void set_last_error(const char* err) {
 }
 
 /**
+ * @brief 校验当前非 OFF 网络模式下 ESP-NOW 链路已经随 WiFi 射频启动。
+ */
+static esp_err_t require_espnow_active() {
+    if (EspNowLink::is_active()) {
+        return ESP_OK;
+    }
+    set_last_error("espnow inactive");
+    ESP_LOGE(TAG, "ESP-NOW link did not activate with WiFi radio");
+    return ESP_ERR_INVALID_STATE;
+}
+
+/**
  * @brief 基于 AP MAC 生成默认配网热点名
  *
  * 命名格式为 `WPM-Lite-XXXXXX`，后缀取 AP MAC 的后三字节，便于用户区分多台设备。
@@ -232,6 +247,10 @@ esp_err_t init() {
     }
     HXC::NVS_Base::setup();
     ESP_RETURN_ON_ERROR(WiFiManager::instance().init(), TAG, "wifi manager init failed");
+    ESP_RETURN_ON_ERROR(EspNowLink::init(EspNowLink::PairingRole::CONTROLLER),
+                        TAG,
+                        "ESP-NOW link init failed");
+    ESP_RETURN_ON_ERROR(EspNowService::init(), TAG, "ESP-NOW service init failed");
     ESP_RETURN_ON_ERROR(TimeService::init(), TAG, "time service init failed");
     make_ap_ssid();
     scan_mutex = xSemaphoreCreateMutex();
@@ -381,6 +400,7 @@ esp_err_t connect_sta(const char* ssid, const char* password, bool save, const c
                  static_cast<unsigned>(STA_CONNECT_MAX_ATTEMPTS));
     }
     if (ret == ESP_OK) {
+        ESP_RETURN_ON_ERROR(require_espnow_active(), TAG, "ESP-NOW link inactive");
         mode = Mode::STA;
         reconnect_enabled = true;
         update_global_state_flags();
@@ -427,6 +447,7 @@ esp_err_t start_provision_ap(const char* source) {
     // AP 使用空密码，降低首次配网门槛；HTTP 404/Captive 请求回落到配网页。
     ESP_RETURN_ON_ERROR(configure_ap_ip(), TAG, "set ap ip failed");
     ESP_RETURN_ON_ERROR(WiFiManager::instance().start_apsta(ap_ssid, ""), TAG, "start apsta failed");
+    ESP_RETURN_ON_ERROR(require_espnow_active(), TAG, "ESP-NOW link inactive");
     ESP_RETURN_ON_ERROR(DNSServer::start(AP_IP_OCTET1, AP_IP_OCTET2, AP_IP_OCTET3, AP_IP_OCTET4), TAG, "start dns failed");
     WebServer::enable_captive_portal(true);
     mode = Mode::AP_PROVISION;
@@ -434,6 +455,30 @@ esp_err_t start_provision_ap(const char* source) {
     set_last_error("none");
     ESP_LOGI(TAG, "Provision AP active: %s", ap_ssid);
     BlackboxService::append_event("wifi: provision_ap source=%s ssid=%s", source_or_unknown(source), ap_ssid);
+    return ESP_OK;
+}
+
+esp_err_t start_espnow_only(const char* source) {
+    ESP_RETURN_ON_ERROR(init(), TAG, "init failed");
+    cancel_reconnect();
+    DNSServer::stop();
+    WebServer::enable_captive_portal(false);
+
+    uint8_t channel = espnow_channel.read();
+    if (channel == 0 || channel > 14) {
+        channel = 1;
+        espnow_channel = channel;
+    }
+    ESP_RETURN_ON_ERROR(WiFiManager::instance().start_sta_radio(channel),
+                        TAG,
+                        "start ESP-NOW-only radio failed");
+    ESP_RETURN_ON_ERROR(require_espnow_active(), TAG, "ESP-NOW link inactive");
+    mode = Mode::ESPNOW_ONLY;
+    update_global_state_flags();
+    set_last_error("none");
+    BlackboxService::append_event("wifi: espnow_only source=%s channel=%u",
+                                  source_or_unknown(source),
+                                  static_cast<unsigned>(channel));
     return ESP_OK;
 }
 
@@ -518,12 +563,9 @@ esp_err_t start_default(const char* source) {
     ESP_RETURN_ON_ERROR(init(), TAG, "init failed");
 
     if (!is_web_enabled_on_boot()) {
-        cancel_reconnect();
-        ESP_LOGI(TAG, "web/wifi startup disabled by NVS");
-        mode = Mode::OFF;
-        update_global_state_flags();
+        ESP_LOGI(TAG, "Web startup disabled; keeping ESP-NOW radio active");
         BlackboxService::append_event("wifi: startup_disabled source=%s", source_or_unknown(source));
-        return ESP_OK;
+        return start_espnow_only(source);
     }
 
     Config cfg = get_config();
@@ -539,16 +581,16 @@ esp_err_t start_default(const char* source) {
 }
 
 /**
- * @brief 停止 WiFiService 管理的网络功能
+ * @brief 关闭 IP 网络并保留 ESP-NOW 射频
  */
 esp_err_t stop(const char* source) {
     cancel_reconnect();
     DNSServer::stop();
     WebServer::enable_captive_portal(false);
-    esp_err_t ret = WiFiManager::instance().stop();
-    mode = Mode::OFF;
-    update_global_state_flags();
-    BlackboxService::append_event("wifi: stop source=%s result=%s", source_or_unknown(source), esp_err_to_name(ret));
+    esp_err_t ret = start_espnow_only(source);
+    BlackboxService::append_event("wifi: web_stop source=%s espnow_result=%s",
+                                  source_or_unknown(source),
+                                  esp_err_to_name(ret));
     return ret;
 }
 
@@ -640,6 +682,17 @@ esp_err_t get_channel(uint8_t* channel) {
 
     wifi_second_chan_t second = WIFI_SECOND_CHAN_NONE;
     return WiFiManager::instance().get_channel(channel, &second);
+}
+
+esp_err_t set_espnow_channel(uint8_t channel) {
+    if (channel == 0 || channel > 14) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    espnow_channel = channel;
+    if (mode == Mode::ESPNOW_ONLY) {
+        return WiFiManager::instance().set_channel(channel);
+    }
+    return ESP_OK;
 }
 
 } // namespace WifiService

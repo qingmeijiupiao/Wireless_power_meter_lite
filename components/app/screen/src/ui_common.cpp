@@ -60,6 +60,8 @@ const char* wifi_mode_text(WifiService::Mode mode) {
     switch (mode) {
         case WifiService::Mode::OFF:
             return "OFF";
+        case WifiService::Mode::ESPNOW_ONLY:
+            return "NOW";
         case WifiService::Mode::STA:
             return "STA";
         case WifiService::Mode::AP_PROVISION:

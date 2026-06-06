@@ -59,7 +59,7 @@ public:
 };
 
 /**
- * @brief 无线页，显示 WiFi 状态并支持长按进入 AP 配网
+ * @brief 无线页，显示 STA、AP 配网和 ESP-NOW-only 状态，并支持长按进入 AP 配网
  */
 class WirelessPage final : public Page {
 public:
@@ -109,9 +109,11 @@ private:
     enum Item : uint8_t {
         Rotate180,
         Backlight,
-        WifiBoot,
+        WebBoot,
         ProtectBypass,
         BlackboxSnapshot,
+        EspNowPair,
+        EspNowInfo,
         CanBaudrate,
         CanTerm,
         FirmwareInfo,
@@ -174,7 +176,7 @@ private:
     bool rotation_180_ = false;
     uint8_t backlight_level_ = DEFAULT_BACKLIGHT_LEVEL;
     char value_buf_[8] = {};
-    char detail_lines_[3][28] = {};
+    char detail_lines_[4][28] = {};
 };
 
 } // namespace SCREEN
