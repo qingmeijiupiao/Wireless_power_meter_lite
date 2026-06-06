@@ -9,6 +9,7 @@
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "ota_manager.h"
+#include "ota_service.h"
 #include "blackbox_service.h"
 
 namespace WebBackend {
@@ -74,6 +75,7 @@ void append_partition_json(char* out, size_t out_size, const esp_partition_t* pa
 
 esp_err_t send_ota_status(WebServer::Request* request, bool ok, const char* reason) {
     const OtaManager::Status status = OtaManager::get_status();
+    const OtaService::Status remote = OtaService::get_status();
     const esp_partition_t* running = OtaManager::get_running_partition();
     const esp_partition_t* boot = OtaManager::get_boot_partition();
     const esp_partition_t* target = status_target_partition();
@@ -101,7 +103,16 @@ esp_err_t send_ota_status(WebServer::Request* request, bool ok, const char* reas
         "\"target_version\":\"%s\","
         "\"running\":%s,"
         "\"boot\":%s,"
-        "\"target\":%s"
+        "\"target\":%s,"
+        "\"remote\":{"
+        "\"state\":\"%s\","
+        "\"current_version\":\"%s\","
+        "\"latest_version\":\"%s\","
+        "\"source\":\"%s\","
+        "\"last_error\":\"%s\","
+        "\"bytes_downloaded\":%u,"
+        "\"image_size\":%u"
+        "}"
         "}\n",
         ok ? "true" : "false",
         reason,
@@ -112,7 +123,14 @@ esp_err_t send_ota_status(WebServer::Request* request, bool ok, const char* reas
         target_version,
         running_json,
         boot_json,
-        target_json);
+        target_json,
+        OtaService::state_to_string(remote.state),
+        remote.current_version,
+        remote.latest_version,
+        remote.active_source,
+        remote.last_error,
+        static_cast<unsigned>(remote.bytes_downloaded),
+        static_cast<unsigned>(remote.image_size));
     return WebServer::send_json(request, detail_response_buffer);
 }
 
@@ -318,19 +336,29 @@ esp_err_t ota_abort_handler(WebServer::Request* request) {
     return send_ota_status(request, true, "aborted");
 }
 
-/** @brief GET /api/ota/remote/check，预留远端版本查询接口。 */
+/** @brief GET /api/ota/remote/check，异步检查远端最新版本。 */
 esp_err_t ota_remote_check_handler(WebServer::Request* request) {
-    return WebServer::send(request, 501, "application/json",
-        "{\"ok\":false,\"reason\":\"not_configured\"}\n",
-        strlen("{\"ok\":false,\"reason\":\"not_configured\"}\n"));
+    const esp_err_t err = OtaService::request_check();
+    if (err != ESP_OK) {
+        snprintf(response_buffer, sizeof(response_buffer),
+            "{\"ok\":false,\"reason\":\"%s\"}\n", ota_error_to_str(err));
+        return WebServer::send(request, err == ESP_ERR_INVALID_STATE ? 409 : 500,
+                               "application/json", response_buffer, strlen(response_buffer));
+    }
+    return send_ota_status(request, true, "checking");
 }
 
-/** @brief POST /api/ota/remote/download，预留远端固件拉取接口。 */
+/** @brief POST /api/ota/remote/download，异步在线升级并在成功后自动重启。 */
 esp_err_t ota_remote_download_handler(WebServer::Request* request) {
-    BlackboxService::append_text_event("ota: remote_download_rejected reason=not_configured");
-    return WebServer::send(request, 501, "application/json",
-        "{\"ok\":false,\"reason\":\"not_configured\"}\n",
-        strlen("{\"ok\":false,\"reason\":\"not_configured\"}\n"));
+    const esp_err_t err = OtaService::request_upgrade();
+    if (err != ESP_OK) {
+        snprintf(response_buffer, sizeof(response_buffer),
+            "{\"ok\":false,\"reason\":\"%s\"}\n", ota_error_to_str(err));
+        return WebServer::send(request, err == ESP_ERR_INVALID_STATE ? 409 : 500,
+                               "application/json", response_buffer, strlen(response_buffer));
+    }
+    BlackboxService::append_text_event("ota: remote_upgrade_requested source=web");
+    return send_ota_status(request, true, "upgrade_started");
 }
 
 } // namespace WebBackend

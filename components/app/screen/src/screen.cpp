@@ -66,6 +66,9 @@ esp_err_t init_buttons() {
             PowerOutput::toggle(TAG);
         }
     });
+    main_button.bind_event(ButtonEvent::LONG_PRESS, []() {
+        post_button_event(ButtonId::Main, ButtonEvent::LONG_PRESS);
+    });
     side_button.bind_event(ButtonEvent::SHORT_PRESS, []() {
         post_button_event(ButtonId::Side, ButtonEvent::SHORT_PRESS);
     });

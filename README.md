@@ -92,6 +92,7 @@
 | 共享电量计量 | [components/middleware/energy_meter/README.md](components/middleware/energy_meter/README.md) |
 | CAN 终端电阻控制 | [components/middleware/can_resistor/README.md](components/middleware/can_resistor/README.md) |
 | OTA 固件切换 | [components/middleware/ota_manager/README.md](components/middleware/ota_manager/README.md) |
+| 在线 OTA 服务 | [components/app/ota_service/README.md](components/app/ota_service/README.md) |
 | 插值工具 | [components/common/Interp/README.md](components/common/Interp/README.md) |
 | 字体资源 | [components/assets/Fonts/README.md](components/assets/Fonts/README.md) |
 | UI 资源 | [components/assets/ui_resources/README.md](components/assets/ui_resources/README.md) |

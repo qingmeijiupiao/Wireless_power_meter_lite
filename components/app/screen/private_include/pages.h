@@ -117,6 +117,7 @@ private:
         CanBaudrate,
         CanTerm,
         FirmwareInfo,
+        FirmwareUpdate,
         BlackboxInfo,
         CalibrationInfo,
         ITEM_COUNT,
@@ -177,6 +178,7 @@ private:
     uint8_t backlight_level_ = DEFAULT_BACKLIGHT_LEVEL;
     char value_buf_[8] = {};
     char detail_lines_[4][28] = {};
+    bool update_confirm_ = false;
 };
 
 } // namespace SCREEN

@@ -30,6 +30,7 @@ idf_component_register(
         current_calibration
         web_backend
         ota_manager
+        ota_service
 )
 
 # LP核程序配置

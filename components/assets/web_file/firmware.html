@@ -47,10 +47,10 @@
       </div>
       <div class="card stack">
         <strong>在线更新</strong>
-        <div class="muted">接口已预留。当前尚未配置固件服务器，后续可扩展为手动或自动检查更新。</div>
+        <div class="muted">从 GitHub Release 获取最新 APP 固件。仅允许升级到更高版本，下载失败后可手动重试。</div>
         <div class="actions">
           <button id="remoteCheck" class="secondary">检查更新</button>
-          <button id="remoteDownload" class="secondary">拉取并校验固件</button>
+          <button id="remoteUpgrade" class="danger" disabled>在线升级</button>
         </div>
         <div class="muted" id="remoteText">尚未检查。</div>
       </div>
@@ -74,7 +74,13 @@
       flash_timeout: 'Flash 写入超时',
       receive_timeout: '上传接收超时',
       running_firmware_not_confirmed: '当前运行固件尚未确认，暂时不能再次升级',
-      not_configured: '固件服务器尚未配置'
+      config_download_failed: '无法获取远端版本配置',
+      config_version_invalid: '远端版本配置格式无效',
+      version_invalid: '固件版本号格式无效',
+      time_not_synchronized: '系统时间尚未同步，请稍后重试',
+      ota_busy: '已有本地 OTA 会话，请先完成或放弃当前固件',
+      ESP_ERR_INVALID_VERSION: '远端没有更高版本',
+      ESP_FAIL: '全部固件下载地址均失败'
     }[reason] || reason || '未知错误');
     async function jsonRequest(url, options) {
       const res = await fetch(url, Object.assign({ cache: 'no-store' }, options || {}));
@@ -107,6 +113,31 @@
       $('activate').disabled = !verified;
       $('discard').disabled = !verified;
       $('upload').disabled = ota.state === 'writing' || ota.state === 'ready_to_reboot';
+      renderRemote();
+    }
+    function renderRemote() {
+      const remote = ota && ota.remote;
+      if (!remote) return;
+      const busy = ['checking', 'downloading', 'verifying', 'restarting'].includes(remote.state);
+      $('remoteCheck').disabled = busy;
+      $('remoteUpgrade').disabled = remote.state !== 'update_available';
+      if (remote.state === 'idle') return;
+      if (remote.state === 'checking') {
+        $('remoteText').textContent = '正在通过 jsDelivr 检查最新版本...';
+      } else if (remote.state === 'update_available') {
+        $('remoteText').textContent = `发现新版本 ${remote.latest_version}，当前版本 ${remote.current_version}。`;
+      } else if (remote.state === 'up_to_date') {
+        $('remoteText').textContent = `当前已是最新版本 ${remote.current_version}。`;
+      } else if (remote.state === 'downloading') {
+        const percent = remote.image_size ? Math.round(remote.bytes_downloaded * 100 / remote.image_size) : 0;
+        $('remoteText').textContent = `正在从 ${remote.source || '远端'} 下载 ${remote.latest_version}：${percent}%`;
+      } else if (remote.state === 'verifying') {
+        $('remoteText').textContent = `固件下载完成，正在校验 ${remote.latest_version}...`;
+      } else if (remote.state === 'restarting') {
+        $('remoteText').textContent = '固件校验通过，设备正在重启...';
+      } else if (remote.state === 'failed') {
+        $('remoteText').textContent = `在线更新失败：${reasonText(remote.last_error)}。请检查网络后手动重试。`;
+      }
     }
     async function refresh() {
       [system, ota] = await Promise.all([jsonRequest('/api/system'), jsonRequest('/api/ota/status')]);
@@ -229,21 +260,37 @@
         await refresh().catch(() => {});
       }
     };
+    async function pollRemote(terminalStates) {
+      for (let i = 0; i < 900; i++) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        try {
+          await refresh();
+          if (terminalStates.includes(ota.remote.state)) return ota.remote;
+        } catch (_) {}
+      }
+      throw new Error('等待设备响应超时');
+    }
     $('remoteCheck').onclick = async () => {
       try {
-        const data = await jsonRequest('/api/ota/remote/check');
-        $('remoteText').textContent = `远端检查完成：${data.version || '没有可用版本信息'}`;
+        ota = await jsonRequest('/api/ota/remote/check');
+        render();
+        await pollRemote(['update_available', 'up_to_date', 'failed']);
       } catch (e) {
-        $('remoteText').textContent = e.reason === 'not_configured' ? '固件服务器尚未配置。' : `检查更新失败：${e.message}`;
+        $('remoteText').textContent = `检查更新失败：${e.message}`;
       }
     };
-    $('remoteDownload').onclick = async () => {
+    $('remoteUpgrade').onclick = async () => {
+      if (!ota || !ota.remote || ota.remote.state !== 'update_available') return;
+      if (!confirm(`将在线升级到 ${ota.remote.latest_version}。下载和校验成功后设备会自动重启，是否继续？`)) return;
       try {
-        await post('/api/ota/remote/download');
-        $('remoteText').textContent = '远端固件已拉取并校验，请确认升级。';
-        await refresh();
+        ota = await post('/api/ota/remote/download');
+        render();
+        const result = await pollRemote(['restarting', 'failed']);
+        if (result.state === 'restarting') {
+          await waitForRestart(ota.target.slot);
+        }
       } catch (e) {
-        $('remoteText').textContent = e.reason === 'not_configured' ? '固件服务器尚未配置。' : `拉取固件失败：${e.message}`;
+        $('remoteText').textContent = `在线升级失败：${e.message}`;
       }
     };
     $('refresh').onclick = () => refresh().catch(e => $('topStatus').textContent = `状态读取失败：${e.message}`);

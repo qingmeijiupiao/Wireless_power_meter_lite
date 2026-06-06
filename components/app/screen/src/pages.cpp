@@ -33,6 +33,7 @@
 #include "meter_w_logo.h"
 #include "settings_logo.h"
 #include "st7735.h"
+#include "ota_service.h"
 #include "ui_close.h"
 #include "ui_open.h"
 #include "ui_static.h"
@@ -562,6 +563,36 @@ bool SettingsPage::handle_button(ButtonId button, ButtonEvent event) {
     }
 
     if (mode_ == Mode::Dialog) {
+        if (selected_ == FirmwareUpdate) {
+            const OtaService::Status ota = OtaService::get_status();
+            if (button == ButtonId::Side && event == ButtonEvent::SHORT_PRESS) {
+                update_confirm_ = false;
+                mode_ = Mode::Menu;
+                return true;
+            }
+            if (!update_confirm_ &&
+                button == ButtonId::Main && event == ButtonEvent::SHORT_PRESS &&
+                ota.state == OtaService::State::UPDATE_AVAILABLE) {
+                update_confirm_ = true;
+                return true;
+            }
+            if (update_confirm_ &&
+                button == ButtonId::Main && event == ButtonEvent::LONG_PRESS) {
+                const esp_err_t err = OtaService::request_upgrade();
+                if (err == ESP_OK) {
+                    update_confirm_ = false;
+                }
+                return true;
+            }
+            if (button == ButtonId::Main && event == ButtonEvent::SHORT_PRESS &&
+                (ota.state == OtaService::State::FAILED ||
+                 ota.state == OtaService::State::UP_TO_DATE)) {
+                OtaService::request_check();
+                return true;
+            }
+            return true;
+        }
+
         if ((button == ButtonId::Main && event == ButtonEvent::SHORT_PRESS) ||
             (button == ButtonId::Side && event == ButtonEvent::SHORT_PRESS)) {
             mode_ = Mode::Menu;
@@ -671,6 +702,8 @@ const char* SettingsPage::item_name(uint8_t item) const {
             return "CANRs";
         case FirmwareInfo:
             return "Firmware";
+        case FirmwareUpdate:
+            return "Update";
         case BlackboxInfo:
             return "Blackbox";
         case CalibrationInfo:
@@ -729,6 +762,16 @@ const char* SettingsPage::item_value(uint8_t item) {
         case CanTerm:
             return CanResistor::instance().get() ? "ON" : "OFF";
         case FirmwareInfo:
+            return "";
+        case FirmwareUpdate: {
+            const OtaService::State state = OtaService::get_status().state;
+            if (state == OtaService::State::UPDATE_AVAILABLE) return "NEW";
+            if (state == OtaService::State::CHECKING ||
+                state == OtaService::State::DOWNLOADING ||
+                state == OtaService::State::VERIFYING) return "BUSY";
+            if (state == OtaService::State::FAILED) return "ERR";
+            return "";
+        }
         case BlackboxInfo:
         case CalibrationInfo:
             return "";
@@ -741,6 +784,7 @@ const char* SettingsPage::item_value(uint8_t item) {
 SettingsPage::ItemType SettingsPage::item_type(uint8_t item) const {
     switch (item) {
         case EspNowPair:
+        case FirmwareUpdate:
             return ItemType::Action;
         case EspNowInfo:
         case FirmwareInfo:
@@ -771,6 +815,18 @@ void SettingsPage::activate_selected_item() {
 
 /** @brief 运行动作类设置项。 */
 bool SettingsPage::run_action_item(uint8_t item) {
+    if (item == FirmwareUpdate) {
+        update_confirm_ = false;
+        const OtaService::Status ota = OtaService::get_status();
+        if (ota.state != OtaService::State::UPDATE_AVAILABLE &&
+            ota.state != OtaService::State::CHECKING &&
+            ota.state != OtaService::State::DOWNLOADING &&
+            ota.state != OtaService::State::VERIFYING &&
+            ota.state != OtaService::State::RESTARTING) {
+            OtaService::request_check();
+        }
+        return true;
+    }
     if (item != EspNowPair) {
         return false;
     }
@@ -830,6 +886,45 @@ void SettingsPage::build_dialog_content() {
         snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "MAC %02X:%02X:%02X:%02X:%02X:%02X",
                  mac.octet1, mac.octet2, mac.octet3,
                  mac.octet4, mac.octet5, mac.octet6);
+    } else if (item == FirmwareUpdate) {
+        const OtaService::Status ota = OtaService::get_status();
+        if (update_confirm_) {
+            snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "Upgrade to %.15s", ota.latest_version);
+            snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Hold MAIN confirm");
+            snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "SIDE cancel");
+            snprintf(detail_lines_[3], sizeof(detail_lines_[3]), "Auto reboot");
+        } else {
+            snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "State %s",
+                     OtaService::state_to_string(ota.state));
+            if (ota.state == OtaService::State::UPDATE_AVAILABLE) {
+                snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "%.11s -> %.11s",
+                         ota.current_version, ota.latest_version);
+                snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "MAIN to confirm");
+            } else if (ota.state == OtaService::State::DOWNLOADING) {
+                const unsigned percent = ota.image_size == 0
+                    ? 0U
+                    : static_cast<unsigned>(ota.bytes_downloaded * 100 / ota.image_size);
+                snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Source %.18s", ota.active_source);
+                snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "Download %u%%", percent);
+                snprintf(detail_lines_[3], sizeof(detail_lines_[3]), "Do not power off");
+            } else if (ota.state == OtaService::State::FAILED) {
+                snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "%.26s", ota.last_error);
+                snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "MAIN retry");
+            } else if (ota.state == OtaService::State::UP_TO_DATE) {
+                snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Latest %.15s", ota.current_version);
+                snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "MAIN recheck");
+            } else if (ota.state == OtaService::State::VERIFYING) {
+                snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Verifying image");
+                snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "Do not power off");
+            } else if (ota.state == OtaService::State::RESTARTING) {
+                snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Upgrade complete");
+                snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "Restarting...");
+            } else {
+                snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Checking GitHub...");
+                snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "Please wait");
+            }
+            snprintf(detail_lines_[3], sizeof(detail_lines_[3]), "SIDE close");
+        }
     } else if (item == BlackboxInfo) {
         const uint32_t interval = BlackboxService::get_snapshot_interval_s();
         snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "State %s", Blackbox::is_enabled() ? "ON" : "OFF");

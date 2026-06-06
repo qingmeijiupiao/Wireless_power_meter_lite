@@ -18,6 +18,7 @@
 #include "can_callback.h"
 #include "power_output.h"
 #include "web_backend.h"
+#include "ota_service.h"
 
 auto& global_state   = get_global_state();
 auto& Chip_Temperature_Sensor = ESPChipTemperatureSensor_t::instance();
@@ -53,6 +54,7 @@ extern "C" void app_main(void){
     global_state.flags.bits.blackbox_enabled = Blackbox::is_enabled();
     HXC::NVS_Base::setup();
     ESP_ERROR_CHECK(BlackboxService::init());
+    ESP_ERROR_CHECK(OtaService::init());
 
     BootDiagnostics::append_stage("hardware_config_init");
     esp_err_t hardware_ret = hardware_config_init();
