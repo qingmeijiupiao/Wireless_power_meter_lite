@@ -180,36 +180,36 @@ flowchart TD
 ```mermaid
 %%{init: { 'theme': 'base', 'themeVariables': { 'primaryColor': '#E3F2FD', 'primaryBorderColor': '#1E88E5', 'primaryTextColor': '#0D47A1', 'lineColor': '#37474F' } }}%%
 sequenceDiagram
-    participant App as 业务任务;
-    participant TXQ as tx_queue;
-    participant Link as espnow_link 任务;
-    participant WiFi as ESP-NOW 驱动;
-    participant Peer as 对端设备;
-    participant RXQ as rx_queue;
+    participant App
+    participant TXQ
+    participant LinkTask
+    participant WiFi
+    participant Peer
+    participant RXQ
 
-    App->>TXQ: send(RELIABLE)，复制 SendRequest;
-    TXQ-->>App: ESP_OK，仅代表入队;
-    Link->>TXQ: 取出请求;
-    Link->>Link: 分配 sequence，编码帧并计算 CRC32;
-    Link->>WiFi: esp_now_send();
-    WiFi-->>Link: send_callback 投递 mac_queue;
-    Link->>Link: MAC 成功后启动 ACK RTO;
-    WiFi->>Peer: 可靠业务帧;
-    Peer->>Peer: 验帧并记录 session 和 sequence;
-    Peer->>WiFi: 链路 ACK;
-    WiFi-->>RXQ: receive_callback 快速校验并复制;
-    RXQ->>Link: ACK 帧;
-    Link->>Link: 匹配 source、session 和 sequence;
+    App->>TXQ: Enqueue reliable SendRequest
+    TXQ-->>App: Return ESP_OK
+    LinkTask->>TXQ: Dequeue request
+    LinkTask->>LinkTask: Allocate sequence and encode frame
+    LinkTask->>WiFi: Call esp_now_send
+    WiFi-->>LinkTask: Queue MAC completion event
+    LinkTask->>LinkTask: Start ACK timeout after MAC completion
+    WiFi->>Peer: Deliver reliable frame
+    Peer->>Peer: Validate frame and record sequence
+    Peer->>WiFi: Send link ACK
+    WiFi-->>RXQ: Queue received ACK frame
+    RXQ->>LinkTask: Dequeue ACK frame
+    LinkTask->>LinkTask: Match source session and sequence
 
-    alt 首次发送收到有效 ACK
-        Link->>Link: 更新 RTT、平滑 RTT 和 RTO;
-        Link-->>App: SendCallback(ACKNOWLEDGED);
-    else RTO 到期且仍可重试
-        Link->>WiFi: 重发相同帧和 sequence;
-        Note over Link: 重传后的 RTT 不参与采样;
-    else 达到 max_attempts
-        Link-->>App: SendCallback(NO_ACK);
-    end;
+    alt Valid ACK for first transmission
+        LinkTask->>LinkTask: Update RTT and adaptive RTO
+        LinkTask-->>App: Callback ACKNOWLEDGED
+    else ACK timeout and attempts remain
+        LinkTask->>WiFi: Retransmit same sequence
+        Note over LinkTask: Retransmitted packets do not update RTT
+    else Maximum attempts reached
+        LinkTask-->>App: Callback NO_ACK
+    end
 ```
 
 可靠包使用 `(session, sequence)` 标识。设备每次启动生成新的 `local_session_id`；
@@ -220,30 +220,30 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant Driver as WiFi 高优先级任务;
-    participant RXQ as rx_queue;
-    participant Link as espnow_link 任务;
-    participant ACKQ as ack_queue;
-    participant PairQ as pairing event_queue;
-    participant Pair as espnow_pair 任务;
-    participant App as 业务 Handler;
+    participant Driver
+    participant RXQ
+    participant LinkTask
+    participant ACKQ
+    participant PairQ
+    participant PairTask
+    participant App
 
-    Driver->>Driver: 校验 magic、version、flags 和长度;
-    Driver->>RXQ: 非阻塞复制完整 RxEvent;
-    Note right of RXQ: 队列满时丢包并增加 rx_queue_overflows;
-    RXQ->>Link: 取出事件;
-    Link->>Link: 完整校验 CRC32 与 ACK 语义;
+    Driver->>Driver: Validate fixed frame header
+    Driver->>RXQ: Copy RxEvent without blocking
+    Note right of RXQ: A full queue increments rx_queue_overflows
+    RXQ->>LinkTask: Dequeue event
+    LinkTask->>LinkTask: Validate CRC and ACK semantics
 
-    alt 可靠业务包
-        Link->>Link: 检查 peer、session 和 sequence;
-        Link->>ACKQ: 排队 AckRequest;
-        Link->>App: 首次有效包才调用 handler;
-    else 配对或探测消息
-        Link->>PairQ: link_message_handler 解析后入队;
-        PairQ->>Pair: 串行推进状态机和 NVS;
-    else 普通业务包
-        Link->>App: 按 message_id 分发;
-    end;
+    alt Reliable application frame
+        LinkTask->>LinkTask: Check peer session and sequence
+        LinkTask->>ACKQ: Queue AckRequest
+        LinkTask->>App: Invoke handler for a new frame
+    else Pairing or channel probe frame
+        LinkTask->>PairQ: Decode and queue PairEvent
+        PairQ->>PairTask: Advance state machine and NVS work
+    else Best effort application frame
+        LinkTask->>App: Dispatch by message ID
+    end
 ```
 
 ### 2.6 控制器与无线开关配对时序图
@@ -253,30 +253,30 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant Remote as 无线开关 REMOTE_SWITCH;
-    participant Controller as 主设备 CONTROLLER;
-    participant NVS_R as 开关 NVS;
-    participant NVS_C as 主设备 NVS;
+    participant Remote
+    participant Controller
+    participant RemoteNVS
+    participant ControllerNVS
 
-    Controller->>Controller: enter_pairing_mode()，注册控制器消息 handler;
-    Remote->>Remote: start_pairing()，先上次信道再遍历允许信道;
+    Controller->>Controller: Enter pairing mode
+    Remote->>Remote: Start channel scan
 
-    loop 每个候选信道使用独立 nonce
-        Remote->>Controller: 广播 DISCOVERY_PING(nonce);
-        Controller-->>Remote: 广播 DISCOVERY_RESPONSE(remote MAC, nonce);
-    end;
+    loop Each candidate channel uses a new nonce
+        Remote->>Controller: Broadcast DISCOVERY_PING
+        Controller-->>Remote: Broadcast DISCOVERY_RESPONSE
+    end
 
-    Remote->>Remote: 添加明文临时 peer;
-    Remote->>Controller: 明文 PAIR_REQUEST(nonce);
-    Controller->>Controller: 锁定单一事务并生成 16 字节 LMK;
-    Controller->>Remote: 明文 PAIR_RESPONSE(nonce, LMK);
-    Controller->>Controller: 发送完成后切换为加密 peer;
-    Remote->>Remote: 安装相同 LMK 和加密 peer;
-    Remote->>Controller: 加密可靠 PAIR_CONFIRM(nonce);
-    Controller-->>Remote: 链路 ACK;
-    Controller->>NVS_C: 保存远端 MAC、角色、LMK 和信道;
-    Controller->>Controller: 自动退出配对窗口;
-    Remote->>NVS_R: ACKNOWLEDGED 后保存控制器信息;
+    Remote->>Remote: Install temporary plaintext peer
+    Remote->>Controller: Send plaintext PAIR_REQUEST
+    Controller->>Controller: Lock transaction and generate LMK
+    Controller->>Remote: Send plaintext PAIR_RESPONSE with LMK
+    Controller->>Controller: Replace temporary peer with encrypted peer
+    Remote->>Remote: Install encrypted peer with the LMK
+    Remote->>Controller: Send encrypted reliable PAIR_CONFIRM
+    Controller-->>Remote: Return link ACK
+    Controller->>ControllerNVS: Save remote MAC role LMK and channel
+    Controller->>Controller: Leave pairing mode
+    Remote->>RemoteNVS: Save controller after ACKNOWLEDGED
 ```
 
 控制器持久化对端角色为 `REMOTE_SWITCH`；无线开关持久化对端角色为
