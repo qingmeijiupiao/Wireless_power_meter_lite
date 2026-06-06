@@ -76,18 +76,14 @@ jobs:
             | 文件 | 说明 |
             |------|------|
             | `*_merged_v*.bin` | **先烧后贴固件（推荐）**：包含 bootloader + 分区表 + APP，适用于全新烧录或 Flash 全擦除后烧录 |
-            | `*_app_v*.bin` | **APP 固件**：仅包含应用程序，适用于 OTA 升级或已有 bootloader 的设备追加烧录 |
+            | `*_app_v*.bin` | **APP 固件**：仅包含应用程序，适用于 OTA 升级 |
 
             ### 烧录方式
 
             **先烧后贴固件（merged）：**
-            ```bash
-            esptool.py --chip esp32c6 write_flash 0x0 Wireless_power_meter_lite_merged_v*.bin
-            ```
+            [在线烧录](https://espressif.github.io/esp-launchpad/?flashConfigURL=https://raw.githubusercontent.com/qingmeijiupiao/Wireless_power_meter_lite/refs/heads/main/.github/workflows/config.toml)
 
-            **APP 固件：**
-            ```bash
-            esptool.py --chip esp32c6 write_flash 0x20000 Wireless_power_meter_lite_app_v*.bin
-            ```
+            **OTA固件：**
+            使用功率计连接wifi后自动检查最新版本固件,也可手动下载在升级页面拖拽固件升级
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

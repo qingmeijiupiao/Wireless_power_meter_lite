@@ -3,7 +3,7 @@ firmware_images_url = "https://cors-anywhere.ramrod.workers.dev/?url=https://git
 supported_apps = ["Wireless_power_meter_lite"]
 
 ["Wireless_power_meter_lite"]
-image.esp32c3 = "Wireless_power_meter_lite_merged.bin"
+image.esp32c3 = "Wireless_power_meter_lite_merged_v0.2.0.bin"
 description = "lite版本功率计固件-手动烧录"
 android_app_url = ""
 ios_app_url = ""
