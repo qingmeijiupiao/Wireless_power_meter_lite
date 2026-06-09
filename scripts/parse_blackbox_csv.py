@@ -15,7 +15,7 @@ from pathlib import Path
 
 UINT32_MOD = 1 << 32
 ROLLOVER_EDGE_MS = 24 * 60 * 60 * 1000
-SYNC_RAW_RE = re.compile(r"\[W\]\[TimeService\] sync raw unix_s=(\d+) unix_us=(\d+)")
+SYNC_RAW_RE = re.compile(r"\[[EWIDV]\]\[TimeService\].*unix_s=(\d+)\s+unix_us=(\d+)")
 BOOT_RE = re.compile(r"system: boot_start\b")
 RESET_RE = re.compile(r"^\[Blackbox\]: reset$")
 SEVERITY_RE = re.compile(r"^\[([EW])\]\[")
