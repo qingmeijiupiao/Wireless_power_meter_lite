@@ -7,6 +7,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: firmware-release
+  cancel-in-progress: false
+
 jobs:
   release:
     name: Build & Release
@@ -20,8 +24,13 @@ jobs:
 
       - name: Extract version from tag
         id: version
+        shell: bash
         run: |
           TAG="${GITHUB_REF_NAME#v}"
+          if [[ ! "${TAG}" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "Tag must match vMAJOR.MINOR or vMAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
           MAJOR="${TAG%%.*}"
           MINOR="$(echo $TAG | cut -d. -f2)"
           echo "major=${MAJOR}" >> $GITHUB_OUTPUT
@@ -42,8 +51,80 @@ jobs:
           cp build/Wireless_power_meter_lite.bin "Wireless_power_meter_lite_app_v${VERSION}.bin"
           cp Wireless_power_meter_lite_merged.bin "Wireless_power_meter_lite_merged_v${VERSION}.bin"
 
+      - name: Checkout firmware distribution branch
+        uses: actions/checkout@v4
+        with:
+          ref: firmware-dist
+          path: firmware-dist
+          fetch-depth: 1
+
+      - name: Publish firmware distribution
+        id: distribution
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.full }}
+        run: |
+          set -euo pipefail
+
+          APP_NAME="Wireless_power_meter_lite_app_v${VERSION}.bin"
+          MERGED_NAME="Wireless_power_meter_lite_merged_v${VERSION}.bin"
+          DIST_DIR="firmware-dist/firmware/v${VERSION}"
+
+          mkdir -p "${DIST_DIR}" firmware-dist/ota "firmware-dist/launchpad/v${VERSION}"
+          cp "${APP_NAME}" "${DIST_DIR}/${APP_NAME}"
+          cp "${MERGED_NAME}" "${DIST_DIR}/${MERGED_NAME}"
+
+          git -C firmware-dist config user.name "github-actions[bot]"
+          git -C firmware-dist config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C firmware-dist add -f "firmware/v${VERSION}/${APP_NAME}" \
+            "firmware/v${VERSION}/${MERGED_NAME}"
+          git -C firmware-dist commit -m "Publish firmware v${VERSION}"
+          ARTIFACT_COMMIT="$(git -C firmware-dist rev-parse HEAD)"
+
+          APP_SIZE="$(stat -c%s "${DIST_DIR}/${APP_NAME}")"
+          CDN_ROOT="https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${ARTIFACT_COMMIT}"
+
+          cat > firmware-dist/ota/latest.json <<EOF
+          {
+            "schema_version": 1,
+            "version": "${VERSION}",
+            "published_at": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
+            "firmware": {
+              "filename": "${APP_NAME}",
+              "size": ${APP_SIZE},
+              "url": "${CDN_ROOT}/firmware/v${VERSION}/${APP_NAME}"
+            }
+          }
+          EOF
+
+          cat > "firmware-dist/launchpad/v${VERSION}/config.toml" <<EOF
+          esp_toml_version = 1.0
+          firmware_images_url = "${CDN_ROOT}/firmware/v${VERSION}/"
+          supported_apps = ["Wireless_power_meter_lite"]
+
+          ["Wireless_power_meter_lite"]
+          image.esp32c6 = "${MERGED_NAME}"
+          description = "lite版本功率计固件-手动烧录"
+          android_app_url = ""
+          ios_app_url = ""
+          chipsets = ["esp32c6"]
+          EOF
+
+          git -C firmware-dist add ota/latest.json "launchpad/v${VERSION}/config.toml"
+          git -C firmware-dist commit -m "Update release metadata for v${VERSION}"
+          METADATA_COMMIT="$(git -C firmware-dist rev-parse HEAD)"
+          git -C firmware-dist push origin HEAD:firmware-dist
+
+          CONFIG_PATH="launchpad/v${VERSION}/config.toml"
+          CONFIG_URL="https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${METADATA_COMMIT}/${CONFIG_PATH}"
+          echo "config_path=firmware-dist/${CONFIG_PATH}" >> "$GITHUB_OUTPUT"
+          echo "config_url=${CONFIG_URL}" >> "$GITHUB_OUTPUT"
+          echo "manifest_path=firmware-dist/ota/latest.json" >> "$GITHUB_OUTPUT"
+
       - name: Generate release notes
         shell: bash
+        env:
+          LAUNCHPAD_CONFIG_URL: ${{ steps.distribution.outputs.config_url }}
         run: |
           CURRENT_TAG="${GITHUB_REF_NAME}"
           REPOSITORY_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
@@ -77,16 +158,18 @@ jobs:
 
             | 文件 | 说明 |
             |------|------|
-            | `*_merged_v*.bin` | **先烧后贴固件（推荐）**：包含 bootloader + 分区表 + APP，适用于全新烧录或 Flash 全擦除后烧录 |
+            | `*_merged_v*.bin` | **手动烧录固件（推荐）**：包含 bootloader + 分区表 + APP，适用于全新烧录，注意烧录会清空校准信息等NVS数据,请在必要时备份数据!!! |
             | `*_app_v*.bin` | **APP 固件**：仅包含应用程序，适用于 OTA 升级 |
 
             ### 烧录方式
 
-            **先烧后贴固件（merged）：**
-            [在线烧录](https://espressif.github.io/esp-launchpad/?flashConfigURL=https://raw.githubusercontent.com/qingmeijiupiao/Wireless_power_meter_lite/refs/heads/main/.github/workflows/config.toml)
+            **手动烧录固件（merged）：**
+          EOF
+            echo "[网页在线烧录](https://espressif.github.io/esp-launchpad/?flashConfigURL=${LAUNCHPAD_CONFIG_URL})"
+            cat <<'EOF'
 
             **OTA固件：**
-            使用功率计连接wifi后自动检查最新版本固件,也可手动下载在升级页面拖拽固件升级
+            使用功率计连接wifi后自动检查最新版本固件,也可手动下载后在升级页面拖拽固件升级
           EOF
           } > release_notes.md
 
@@ -96,6 +179,8 @@ jobs:
           files: |
             Wireless_power_meter_lite_app_v*.bin
             Wireless_power_meter_lite_merged_v*.bin
+            ${{ steps.distribution.outputs.config_path }}
+            ${{ steps.distribution.outputs.manifest_path }}
           body_path: release_notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

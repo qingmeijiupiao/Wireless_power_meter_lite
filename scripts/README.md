@@ -21,17 +21,10 @@ flowchart TD
 
 ### `pre_build.py`
 
-构建前会从顶层 `CMakeLists.txt` 读取 `VERSION_MAJOR` 和 `VERSION_MINOR`，
-按发布版本 `MAJOR.MINOR.0` 同步 `.github/workflows/config.toml`：
-
-- 更新 `firmware_images_url` 中的 Release 版本目录。
-- 更新 merged 固件文件名。
-- 保证 ESP Launchpad 芯片字段为 `esp32c6`。
-
-文件内容一致时不会重复写入。同步结果需要随正常代码提交进入 `main`，脚本不会
-自动执行 Git 提交。
-
 将 `components/assets/web_file/` 下的 HTML 和 CSS 源文件压缩为 `.gz` 文件。
+
+OTA Manifest 和 ESP Launchpad `config.toml` 不由本地预处理脚本维护，而是在
+推送版本标签后由 `.github/workflows/Release.yml` 根据实际构建产物生成。
 
 ```bash
 python3 scripts/pre_build.py

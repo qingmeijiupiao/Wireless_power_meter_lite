@@ -74,13 +74,13 @@
       flash_timeout: 'Flash 写入超时',
       receive_timeout: '上传接收超时',
       running_firmware_not_confirmed: '当前运行固件尚未确认，暂时不能再次升级',
-      config_download_failed: '无法获取远端版本配置',
-      config_version_invalid: '远端版本配置格式无效',
+      manifest_download_failed: '无法获取远端 OTA 清单',
+      manifest_invalid: '远端 OTA 清单格式无效',
       version_invalid: '固件版本号格式无效',
       time_not_synchronized: '系统时间尚未同步，请稍后重试',
       ota_busy: '已有本地 OTA 会话，请先完成或放弃当前固件',
       ESP_ERR_INVALID_VERSION: '远端没有更高版本',
-      ESP_FAIL: '全部固件下载地址均失败'
+      ESP_FAIL: '固件下载失败'
     }[reason] || reason || '未知错误');
     async function jsonRequest(url, options) {
       const res = await fetch(url, Object.assign({ cache: 'no-store' }, options || {}));
