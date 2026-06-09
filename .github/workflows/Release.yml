@@ -1,0 +1,101 @@
+name: 功率计 Lite Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          MAJOR="${TAG%%.*}"
+          MINOR="$(echo $TAG | cut -d. -f2)"
+          echo "major=${MAJOR}" >> $GITHUB_OUTPUT
+          echo "minor=${MINOR}" >> $GITHUB_OUTPUT
+          echo "full=${MAJOR}.${MINOR}.0" >> $GITHUB_OUTPUT
+
+      - name: Build with ESP-IDF
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v6.0
+          target: esp32c6
+          path: "./"
+          command: idf.py -DVERSION_MAJOR=${{ steps.version.outputs.major }} -DVERSION_MINOR=${{ steps.version.outputs.minor }} -DVERSION_PATCH=0 build
+
+      - name: Rename firmware for release
+        run: |
+          VERSION="${{ steps.version.outputs.full }}"
+          cp build/Wireless_power_meter_lite.bin "Wireless_power_meter_lite_app_v${VERSION}.bin"
+          cp Wireless_power_meter_lite_merged.bin "Wireless_power_meter_lite_merged_v${VERSION}.bin"
+
+      - name: Generate release notes
+        shell: bash
+        run: |
+          CURRENT_TAG="${GITHUB_REF_NAME}"
+          REPOSITORY_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          PREVIOUS_TAG="$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${CURRENT_TAG}^" 2>/dev/null || true)"
+
+          {
+            echo "## 无线功率计 Lite 固件 v${{ steps.version.outputs.full }}"
+            echo
+            echo "### 版本变更"
+            echo
+
+            if [ -n "${PREVIOUS_TAG}" ]; then
+              RANGE="${PREVIOUS_TAG}..${CURRENT_TAG}"
+              while IFS=$'\t' read -r SHA SHORT_SHA SUBJECT; do
+                printf -- '- [%s](%s/commit/%s) %s\n' \
+                  "${SHORT_SHA}" "${REPOSITORY_URL}" "${SHA}" "${SUBJECT}"
+              done < <(git log --no-merges --pretty=tformat:'%H%x09%h%x09%s' "${RANGE}")
+
+              echo
+              echo "[查看 ${PREVIOUS_TAG}...${CURRENT_TAG} 完整差异](${REPOSITORY_URL}/compare/${PREVIOUS_TAG}...${CURRENT_TAG})"
+            else
+              while IFS=$'\t' read -r SHA SHORT_SHA SUBJECT; do
+                printf -- '- [%s](%s/commit/%s) %s\n' \
+                  "${SHORT_SHA}" "${REPOSITORY_URL}" "${SHA}" "${SUBJECT}"
+              done < <(git log --no-merges --pretty=tformat:'%H%x09%h%x09%s' "${CURRENT_TAG}")
+            fi
+
+            cat <<'EOF'
+
+            ### 固件说明
+
+            | 文件 | 说明 |
+            |------|------|
+            | `*_merged_v*.bin` | **先烧后贴固件（推荐）**：包含 bootloader + 分区表 + APP，适用于全新烧录或 Flash 全擦除后烧录 |
+            | `*_app_v*.bin` | **APP 固件**：仅包含应用程序，适用于 OTA 升级 |
+
+            ### 烧录方式
+
+            **先烧后贴固件（merged）：**
+            [在线烧录](https://espressif.github.io/esp-launchpad/?flashConfigURL=https://raw.githubusercontent.com/qingmeijiupiao/Wireless_power_meter_lite/refs/heads/main/.github/workflows/config.toml)
+
+            **OTA固件：**
+            使用功率计连接wifi后自动检查最新版本固件,也可手动下载在升级页面拖拽固件升级
+          EOF
+          } > release_notes.md
+
+      - name: Create Release and Upload Bin
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            Wireless_power_meter_lite_app_v*.bin
+            Wireless_power_meter_lite_merged_v*.bin
+          body_path: release_notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
