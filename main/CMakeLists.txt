@@ -28,6 +28,7 @@ idf_component_register(
         can_callback
         power_output
         current_calibration
+        diagnostic_log
         web_backend
         ota_manager
         ota_service

@@ -18,13 +18,13 @@
 #include "esp_wifi.h"
 #include "espnow_link.h"
 #include "espnow_service.h"
+#include "diagnostic_log.h"
 #include "web_server.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "freertos/timers.h"
 #include "global_state.h"
-#include "blackbox_service.h"
 #include "time_service.h"
 
 namespace WifiService {
@@ -192,8 +192,9 @@ static void reconnect_task(void*) {
             update_global_state_flags();
             if (restored) {
                 IP_t ip = WiFiManager::instance().get_ip();
-                BlackboxService::append_event("wifi: sta_reconnected ip=%u.%u.%u.%u",
-                                              ip.octet1, ip.octet2, ip.octet3, ip.octet4);
+                DEVICE_STATE_I(TAG,
+                               "wifi: connection old=disconnected new=connected source=auto_reconnect ip=%u.%u.%u.%u",
+                               ip.octet1, ip.octet2, ip.octet3, ip.octet4);
             }
             continue;
         }
@@ -332,9 +333,9 @@ esp_err_t init() {
     }
     initialized = true;
     update_global_state_flags();
-    BlackboxService::append_text_event("wifi: init web_boot=%u saved_sta=%u",
-                                       is_web_enabled_on_boot() ? 1U : 0U,
-                                       has_saved_sta() ? 1U : 0U);
+    DEVICE_EVENT_I(TAG, "wifi: init web_boot=%u saved_sta=%u",
+                   is_web_enabled_on_boot() ? 1U : 0U,
+                   has_saved_sta() ? 1U : 0U);
     return ESP_OK;
 }
 
@@ -358,7 +359,8 @@ bool is_web_enabled_on_boot() {
 esp_err_t set_web_enabled_on_boot(bool enabled, const char* source) {
     ESP_RETURN_ON_ERROR(web_boot.set(enabled ? 1 : 0), TAG, "persist web boot setting failed");
     update_global_state_flags();
-    BlackboxService::append_text_event("wifi: config source=%s web_boot=%u", source_or_unknown(source), enabled ? 1U : 0U);
+    DEVICE_EVENT_I(TAG, "wifi: config source=%s web_boot=%u",
+                   source_or_unknown(source), enabled ? 1U : 0U);
     return ESP_OK;
 }
 
@@ -368,7 +370,8 @@ esp_err_t set_web_enabled_on_boot(bool enabled, const char* source) {
 esp_err_t clear_saved_sta(const char* source) {
     ESP_RETURN_ON_ERROR(persist_sta_credentials("", ""), TAG, "clear saved STA credentials failed");
     update_global_state_flags();
-    BlackboxService::append_text_event("wifi: config source=%s saved_sta_cleared", source_or_unknown(source));
+    DEVICE_EVENT_I(TAG, "wifi: config source=%s saved_sta_cleared=1",
+                   source_or_unknown(source));
     return ESP_OK;
 }
 
@@ -428,6 +431,7 @@ esp_err_t connect_sta(const char* ssid, const char* password, bool save, const c
     }
     if (ret == ESP_OK) {
         ESP_RETURN_ON_ERROR(require_espnow_active(), TAG, "ESP-NOW link inactive");
+        const Mode old_mode = mode;
         mode = Mode::STA;
         reconnect_enabled = true;
         update_global_state_flags();
@@ -440,25 +444,23 @@ esp_err_t connect_sta(const char* ssid, const char* password, bool save, const c
                                 "persist STA credentials failed");
         }
         IP_t ip = WiFiManager::instance().get_ip();
-        ESP_LOGI(TAG, "STA connected: %u.%u.%u.%u", ip.octet1, ip.octet2, ip.octet3, ip.octet4);
-        BlackboxService::append_event("wifi: sta_connected source=%s ssid=%s save=%u ip=%u.%u.%u.%u",
-                                      source_or_unknown(source),
-                                      ssid,
-                                      save ? 1U : 0U,
-                                      ip.octet1,
-                                      ip.octet2,
-                                      ip.octet3,
-                                      ip.octet4);
+        DEVICE_STATE_I(TAG,
+                       "wifi: mode old=%u new=%u source=%s result=ok ssid=%s save=%u ip=%u.%u.%u.%u",
+                       static_cast<unsigned>(old_mode),
+                       static_cast<unsigned>(mode),
+                       source_or_unknown(source),
+                       ssid,
+                       save ? 1U : 0U,
+                       ip.octet1,
+                       ip.octet2,
+                       ip.octet3,
+                       ip.octet4);
         return ESP_OK;
     }
 
     set_last_error(esp_err_to_name(ret));
-    ESP_LOGW(TAG, "STA connect failed: %s", esp_err_to_name(ret));
-    BlackboxService::append_event("wifi: sta_connect_failed source=%s ssid=%s save=%u err=%s",
-                                  source_or_unknown(source),
-                                  ssid,
-                                  save ? 1U : 0U,
-                                  esp_err_to_name(ret));
+    ESP_LOGW(TAG, "wifi: sta_connect source=%s ssid=%s save=%u result=failed err=%s",
+             source_or_unknown(source), ssid, save ? 1U : 0U, esp_err_to_name(ret));
     return ret;
 }
 
@@ -478,11 +480,15 @@ esp_err_t start_provision_ap(const char* source) {
     ESP_RETURN_ON_ERROR(require_espnow_active(), TAG, "ESP-NOW link inactive");
     ESP_RETURN_ON_ERROR(DNSServer::start(AP_IP_OCTET1, AP_IP_OCTET2, AP_IP_OCTET3, AP_IP_OCTET4), TAG, "start dns failed");
     WebServer::enable_captive_portal(true);
+    const Mode old_mode = mode;
     mode = Mode::AP_PROVISION;
     update_global_state_flags();
     set_last_error("none");
-    ESP_LOGI(TAG, "Provision AP active: %s", ap_ssid);
-    BlackboxService::append_event("wifi: provision_ap source=%s ssid=%s", source_or_unknown(source), ap_ssid);
+    DEVICE_STATE_I(TAG, "wifi: mode old=%u new=%u source=%s result=ok ssid=%s",
+                   static_cast<unsigned>(old_mode),
+                   static_cast<unsigned>(mode),
+                   source_or_unknown(source),
+                   ap_ssid);
     return ESP_OK;
 }
 
@@ -501,12 +507,15 @@ esp_err_t start_espnow_only(const char* source) {
                         TAG,
                         "start ESP-NOW-only radio failed");
     ESP_RETURN_ON_ERROR(require_espnow_active(), TAG, "ESP-NOW link inactive");
+    const Mode old_mode = mode;
     mode = Mode::ESPNOW_ONLY;
     update_global_state_flags();
     set_last_error("none");
-    BlackboxService::append_event("wifi: espnow_only source=%s channel=%u",
-                                  source_or_unknown(source),
-                                  static_cast<unsigned>(channel));
+    DEVICE_STATE_I(TAG, "wifi: mode old=%u new=%u source=%s result=ok channel=%u",
+                   static_cast<unsigned>(old_mode),
+                   static_cast<unsigned>(mode),
+                   source_or_unknown(source),
+                   static_cast<unsigned>(channel));
     return ESP_OK;
 }
 
@@ -591,8 +600,8 @@ esp_err_t start_default(const char* source) {
     ESP_RETURN_ON_ERROR(init(), TAG, "init failed");
 
     if (!is_web_enabled_on_boot()) {
-        ESP_LOGI(TAG, "Web startup disabled; keeping ESP-NOW radio active");
-        BlackboxService::append_event("wifi: startup_disabled source=%s", source_or_unknown(source));
+        DEVICE_EVENT_I(TAG, "wifi: startup source=%s web_enabled=0 fallback=espnow_only",
+                       source_or_unknown(source));
         return start_espnow_only(source);
     }
 
@@ -616,9 +625,10 @@ esp_err_t stop(const char* source) {
     DNSServer::stop();
     WebServer::enable_captive_portal(false);
     esp_err_t ret = start_espnow_only(source);
-    BlackboxService::append_event("wifi: web_stop source=%s espnow_result=%s",
-                                  source_or_unknown(source),
-                                  esp_err_to_name(ret));
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "wifi: web_stop source=%s fallback=espnow_only result=%s",
+                 source_or_unknown(source), esp_err_to_name(ret));
+    }
     return ret;
 }
 

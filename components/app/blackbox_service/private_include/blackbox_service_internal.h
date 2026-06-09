@@ -12,9 +12,21 @@
 namespace BlackboxService {
 namespace Internal {
 
+enum class PersistPolicy : uint8_t {
+    NONE,
+    TEXT,
+    TEXT_AND_SNAPSHOT,
+};
+
 struct LogEvent {
-    bool include_text;
+    PersistPolicy policy;
     char text[Blackbox::TEXT_BUFFER_SIZE];
+};
+
+struct CaptureDropStats {
+    uint32_t no_slot;
+    uint32_t ring_full;
+    uint32_t parse_failed;
 };
 
 /** @brief 从 NVS 恢复周期快照配置。 */
@@ -31,6 +43,9 @@ void install_log_capture();
 
 /** @brief 从日志捕获 RAM 环中弹出一条事件。 */
 bool pop_log_event(LogEvent* event);
+
+/** @brief 读取并清零 Hook 累计的丢失统计。 */
+CaptureDropStats take_capture_drop_stats();
 
 /** @brief 启动事件消费与周期快照后台任务。 */
 esp_err_t start_worker();

@@ -8,7 +8,6 @@
 #include "ui_manager.h"
 
 #include "esp_log.h"
-#include "blackbox_service.h"
 #include "freertos/task.h"
 #include "power_output.h"
 #include "st7735.h"
@@ -128,8 +127,6 @@ void UIManager::process_button_events() {
 void UIManager::handle_button(ButtonId button, ButtonEvent event) {
     Page* page = current_page();
     ESP_LOGI(TAG, "button page=%s button=%s event=%s", page->title(), button_to_str(button), event_to_str(event));
-    BlackboxService::append_text_event("ui: button page=%s button=%s event=%s",
-                                       page->title(), button_to_str(button), event_to_str(event));
 
     // 页面优先处理事件。比如无线页长按进入配网，设置页消费菜单内侧键。
     bool handled = page->handle_button(button, event);
@@ -182,7 +179,6 @@ void UIManager::next_page() {
     current_page_ = (current_page_ + 1) % static_cast<uint8_t>(PageId::Count);
     current_page()->on_enter();
     ESP_LOGI(TAG, "page %s -> %s", previous_title, current_page()->title());
-    BlackboxService::append_text_event("ui: page from=%s to=%s", previous_title, current_page()->title());
     full_redraw_ = true;
 }
 

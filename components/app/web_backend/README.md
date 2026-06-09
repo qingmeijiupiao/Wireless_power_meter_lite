@@ -285,6 +285,7 @@ sequenceDiagram
 工程内直接依赖：
 
 - [`blackbox_service`](../blackbox_service/README.md)（`app`）
+- [`diagnostic_log`](../../common/diagnostic_log/README.md)（`common`）
 - [`can_callback`](../can_callback/README.md)（`app`）
 - [`current_calibration`](../current_calibration/README.md)（`app`）
 - [`espnow_service`](../espnow_service/README.md)（`app`）

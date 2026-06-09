@@ -19,11 +19,19 @@ void blackbox_service_task(void*) {
     while (true) {
         LogEvent event;
         while (pop_log_event(&event)) {
-            if (event.include_text) {
+            if (event.policy == PersistPolicy::TEXT_AND_SNAPSHOT) {
                 append_event("%s", event.text);
-            } else {
-                append_snapshot();
+            } else if (event.policy == PersistPolicy::TEXT) {
+                append_text_event("%s", event.text);
             }
+        }
+
+        const CaptureDropStats dropped = take_capture_drop_stats();
+        if (dropped.no_slot != 0 || dropped.ring_full != 0 || dropped.parse_failed != 0) {
+            append_event("[W][BlackboxService] capture_drop no_slot=%lu ring_full=%lu parse_failed=%lu",
+                         static_cast<unsigned long>(dropped.no_slot),
+                         static_cast<unsigned long>(dropped.ring_full),
+                         static_cast<unsigned long>(dropped.parse_failed));
         }
 
         const uint32_t interval_s = read_snapshot_interval_s();

@@ -3,7 +3,7 @@ idf_component_register(
     INCLUDE_DIRS "include"
     REQUIRES
         app_update
-        blackbox_service
+        diagnostic_log
         esp_http_client
         mbedtls
         ota_manager

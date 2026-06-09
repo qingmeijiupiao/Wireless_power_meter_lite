@@ -7,8 +7,10 @@
 
 - **应用层策略集中管理**：middleware 只负责通用异步落盘，本组件决定何时保存快照和事件
 - **版本化快照协议**：`SnapshotV1` 首字节为版本号，字段变化时新增版本以保持历史日志可解析
-- **ESP_LOG 自动采集**：`INFO` 及以上日志触发快照，`WARN` 及以上日志额外保存文本
-- **轻量日志钩子**：vprintf 钩子复用静态缓冲并只写固定 RAM 环，后台任务负责向 Flash 队列提交记录
+- **ESP_LOG 自动采集**：普通 `WARN` / `ERROR` 保存文本，并且每一条都强制追加状态快照
+- **稳定事件标记**：业务组件通过 `diagnostic_log` 标记关键 `INFO`，无需依赖黑匣子接口
+- **轻量日志钩子**：vprintf Hook 使用固定捕获槽位和 RAM 事件环，后台任务负责向 Flash 队列提交记录
+- **丢失可观测**：捕获槽位不足、事件环已满或格式化失败会累计计数，由后台任务写入汇总事件
 - **周期快照**：后台任务按 NVS 配置周期采样，间隔为 `0` 时关闭
 - **结构化快照限流**：默认限制相邻快照至少间隔 `100ms`，关键事件可强制记录
 - **关键状态接口**：`append_event()` 优先保存事件文本，再尝试追加状态快照
@@ -29,10 +31,11 @@
 
 ```mermaid
 flowchart LR
-    Log["ESP_LOG vprintf 钩子"] --> Ring["固定 RAM 事件环"]
+    Log["ESP_LOG / DEVICE_*"] --> Hook["vprintf Hook<br/>解析稳定标记"]
+    Hook --> Ring["固定 RAM 事件环"]
     Ring --> Worker["blackbox_service 后台任务"]
     Timer["周期配置 bb_snap_s"] --> Worker
-    App["业务模块<br/>append_event() / append_snapshot()"] --> Snapshot
+    Boot["启动诊断<br/>直接同步接口"] --> Snapshot
     Worker --> Snapshot["采样 get_global_state()"]
     Snapshot --> Payload["SnapshotV1"]
     Payload --> MW["middleware/blackbox<br/>append_typed()"]
@@ -54,25 +57,31 @@ flowchart LR
 
 ## ESP_LOG 规则
 
-| ESP_LOG 级别 | 行为 |
-|-------------|------|
-| `INFO` | 保存一条全局快照 |
-| `WARN` / `ERROR` | 保存格式为 `[级别][TAG] 正文` 的文本，再尝试保存一条全局快照 |
+| 日志形式 | 黑匣子行为 |
+|----------|------------|
+| 普通 `ESP_LOGI` | 忽略，不写文本也不写快照 |
+| `DEVICE_EVENT_I` | 保存 `[I][TAG] 正文`，不追加快照 |
+| `DEVICE_STATE_I` | 保存 `[I][TAG] 正文`，并强制追加快照 |
+| 普通或标记的 `ESP_LOGW` / `ESP_LOGE` | 保存文本，并且每一条都无条件强制追加快照 |
 | `DEBUG` / `VERBOSE` | 忽略 |
 
-为避免 Flash 错误形成反馈循环，自动采集排除 `Blackbox`、`BlackBox` 和
-`CircularFlashBuffer` TAG。为避免 WiFi 驱动启动日志产生大量低价值快照，还会排除
-`wifi`、`wifi_init`、`phy_init`、`pp` 和 `net80211` TAG。应用层
-`WiFiManager` 与 `WifiService` 日志仍会正常记录。当前解析逻辑基于工程启用的 ESP-IDF Log V1；
-切换到 Log V2 时需要同步调整。
+为避免 Flash 错误形成反馈循环，自动采集只排除 `Blackbox`、`BlackBox` 和
+`CircularFlashBuffer` TAG。其余组件和 ESP-IDF 驱动的每一条 `WARN` / `ERROR` 都会
+保存文本并强制追加快照。当前解析逻辑基于工程启用的 ESP-IDF Log V1；切换到 Log V2
+时需要同步调整。
 
-Web 请求审计使用 `WebBackend` TAG 的 `ESP_LOGI`，会输出到串口并进入 Web RAM 实时日志。
-该 TAG 不触发自动快照，避免页面轮询持续写 Flash；非只读请求仍由 Web 中间件显式写入黑匣子事件。
+Hook 只接受消息正文开头的 `@DLOG1:T@` / `@DLOG1:S@` 版本化标记，并在串口输出前
+移除标记。不会通过 TAG 或正文关键词猜测关键事件。业务代码应使用
+[`diagnostic_log`](../../common/diagnostic_log/README.md) 宏，不要手写标记。
+
+捕获使用 4 个固定槽位和 32 项 RAM 环；拥堵时不阻塞业务日志输出。丢失计数由 Worker
+汇总为 `capture_drop` 事件，避免在 Hook 内打印日志形成递归。
 
 ## 集成与使用
 
 ```cpp
 #include "blackbox_service.h"
+#include "diagnostic_log.h"
 
 // Blackbox::init() 和 NVS 初始化完成后尽早调用
 BlackboxService::init();
@@ -83,11 +92,9 @@ BlackboxService::append_snapshot();
 // 关键状态变化忽略 100ms 最小间隔
 BlackboxService::append_snapshot(true);
 
-// 写入关键状态变化，并尝试追加当前快照
-BlackboxService::append_event("Output disabled: reason=%d", reason);
-
-// 配置、审计和启动诊断块只写文本，避免追加无必要快照
-BlackboxService::append_text_event("boot: flash_bytes=%lu", flash_size);
+// 普通业务关键事件只依赖 diagnostic_log
+DEVICE_EVENT_I(TAG, "config: changed source=web value=%u", value);
+DEVICE_STATE_I(TAG, "output: state old=0 new=1 source=web result=ok");
 
 // 设置周期快照，单位秒；0 表示关闭
 ESP_ERROR_CHECK(BlackboxService::set_snapshot_interval_s(10, "ShellCommand"));
@@ -100,15 +107,17 @@ ESP_ERROR_CHECK(BlackboxService::set_snapshot_interval_s(10, "ShellCommand"));
 | `init()` | 恢复 NVS 配置、创建后台任务并安装 ESP_LOG 捕获钩子 |
 | `append_snapshot(force=false)` | 采样当前 `GlobalState` 并写入 `STRUCTURED` 记录；默认受 `100ms` 最小间隔限制 |
 | `append_event(fmt, ...)` | 保存关键状态变化或故障文本，再尝试追加全局快照 |
-| `append_text_event(fmt, ...)` | 仅保存文本事件，不追加快照；配置、审计和操作记录默认使用该接口 |
+| `append_text_event(fmt, ...)` | 仅保存文本事件，不追加快照；保留给启动诊断、黑匣子管理和服务内部记录 |
 | `get_snapshot_interval_s()` | 获取周期快照间隔，`0` 表示关闭 |
 | `set_snapshot_interval_s(seconds, source)` | 设置周期快照间隔并持久化，返回 NVS 写入结果；调用方传入自身静态 TAG |
 
 ## 日志约定
 
 - `SnapshotV1` 二进制布局保持不变，时间使用记录头已有的毫秒时间戳。
-- 默认使用 `append_text_event()`；只有状态切换、故障现场等需要关联设备状态时才使用 `append_event()`。
-- 启动基础诊断块在其他功能启动前使用 `append_text_event()` 分行记录，并逐行同步落盘；关键初始化步骤前另写入阶段标记。
+- 普通业务组件使用 `DEVICE_EVENT_I` / `DEVICE_STATE_I`，不直接依赖 `blackbox_service`。
+- `ESP_LOGW` / `ESP_LOGE` 已由 Hook 自动持久化，禁止再追加相同黑匣子文本。
+- 直接 `append_event()` / `append_text_event()` 仅保留给启动诊断、黑匣子管理和结构化快照边界。
+- 启动基础诊断块使用直接接口分行记录并逐行同步落盘，保证重启早期路径完整。
 - 调用来源由业务组件传入自身编译期 `TAG` 或局部静态字符串，黑匣子组件不维护来源枚举。
 - 允许记录 SSID、IP 和 MAC；禁止记录 WiFi 密码和 HTTP 请求体。
 
@@ -132,6 +141,7 @@ ESP_ERROR_CHECK(BlackboxService::set_snapshot_interval_s(10, "ShellCommand"));
 - [`global_state`](../global_state/README.md)（`app`）
 - [`blackbox`](../../middleware/blackbox/README.md)（`middleware`）
 - [`HXC_NVS`](../../bsp/HXC_NVS/README.md)（`bsp`）
+- [`diagnostic_log`](../../common/diagnostic_log/README.md)（`common`）
 
 > 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
 <!-- dependency-links:end -->

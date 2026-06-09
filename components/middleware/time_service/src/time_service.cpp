@@ -10,6 +10,7 @@
 
 #include "esp_event.h"
 #include "esp_log.h"
+#include "diagnostic_log.h"
 #include "esp_netif.h"
 #include "esp_netif_sntp.h"
 #include "freertos/FreeRTOS.h"
@@ -47,11 +48,11 @@ portMUX_TYPE state_lock = portMUX_INITIALIZER_UNLOCKED;
  * @brief 非阻塞投递时间服务事件
  *
  * 回调运行在系统事件循环中，队列满时直接丢弃，避免阻塞网络事件处理。
- * 异常使用 INFO，防止离线期间通过应用日志钩子持续写入黑匣子。
+ * 队列溢出表示时间状态路径已丢失，使用 WARN 进入黑匣子。
  */
 void enqueue_event(const Event& event) {
     if (event_queue == nullptr || xQueueSend(event_queue, &event, 0) != pdTRUE) {
-        ESP_LOGI(TAG, "event queue full, dropping event type=%u",
+        ESP_LOGW(TAG, "time: event_queue result=dropped type=%u",
                  static_cast<unsigned>(event.type));
     }
 }
@@ -101,17 +102,13 @@ void log_sync_event(const struct timeval& synced_time) {
     last_sync = utc_seconds;
     portEXIT_CRITICAL(&state_lock);
 
-    // WARN 仅用于成功校时，使上层日志钩子能够自动归档这三条时间基准。
-    ESP_LOGW(TAG, "sync raw unix_s=%lld unix_us=%ld",
-             static_cast<long long>(utc_seconds),
-             static_cast<long>(synced_time.tv_usec));
-    ESP_LOGW(TAG, "sync utc unix_s=%lld iso=%s",
-             static_cast<long long>(utc_seconds),
-             utc_text);
-    ESP_LOGW(TAG, "sync local unix_s=%lld iso=%s timezone=%s",
-             static_cast<long long>(utc_seconds),
-             local_text,
-             TIMEZONE);
+    DEVICE_STATE_I(TAG, "time: sync old=unsynchronized new=synchronized unix_s=%lld unix_us=%ld",
+                   static_cast<long long>(utc_seconds),
+                   static_cast<long>(synced_time.tv_usec));
+    DEVICE_EVENT_I(TAG, "time: utc unix_s=%lld iso=%s",
+                   static_cast<long long>(utc_seconds), utc_text);
+    DEVICE_EVENT_I(TAG, "time: local unix_s=%lld iso=%s timezone=%s",
+                   static_cast<long long>(utc_seconds), local_text, TIMEZONE);
 }
 
 void time_service_task(void*) {
@@ -129,10 +126,10 @@ void time_service_task(void*) {
         // STA 恢复 IP 后主动重启请求，不等待下一次 lwIP 周期校时。
         const esp_err_t ret = esp_netif_sntp_start();
         if (ret != ESP_OK) {
-            ESP_LOGI(TAG, "SNTP restart after network recovery failed: %s",
+            ESP_LOGW(TAG, "time: sntp_restart source=network_recovery result=%s",
                      esp_err_to_name(ret));
         } else {
-            ESP_LOGI(TAG, "network ready, SNTP request restarted");
+            DEVICE_EVENT_I(TAG, "time: sntp_restart source=network_recovery result=ok");
         }
     }
 }
@@ -214,8 +211,8 @@ esp_err_t init() {
     }
 
     initialized = true;
-    ESP_LOGI(TAG, "initialized: timezone=%s ntp_servers=%u smooth_sync=1",
-             TIMEZONE, static_cast<unsigned>(NTP_SERVER_COUNT));
+    DEVICE_EVENT_I(TAG, "time: init timezone=%s ntp_servers=%u smooth_sync=1 result=ok",
+                   TIMEZONE, static_cast<unsigned>(NTP_SERVER_COUNT));
     return ESP_OK;
 }
 

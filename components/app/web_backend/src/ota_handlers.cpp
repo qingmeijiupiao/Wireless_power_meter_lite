@@ -10,7 +10,7 @@
 #include "esp_timer.h"
 #include "ota_manager.h"
 #include "ota_service.h"
-#include "blackbox_service.h"
+#include "diagnostic_log.h"
 
 namespace WebBackend {
 namespace {
@@ -52,17 +52,31 @@ const esp_partition_t* status_target_partition() {
 
 void append_ota_status_event(const char* phase, esp_err_t err = ESP_OK) {
     const OtaManager::Status status = OtaManager::get_status();
-    BlackboxService::append_text_event(
-        "ota: %s state=%s bytes=%u/%u slots(run=%u boot=%u target=%u) err=%s(0x%x)",
-        phase,
-        ota_state_to_str(status.state),
-        static_cast<unsigned>(status.bytes_written),
-        static_cast<unsigned>(status.image_size),
-        static_cast<unsigned>(ota_partition_slot(OtaManager::get_running_partition())),
-        static_cast<unsigned>(ota_partition_slot(OtaManager::get_boot_partition())),
-        static_cast<unsigned>(ota_partition_slot(status_target_partition())),
-        ota_error_to_str(err),
-        static_cast<unsigned>(err));
+    if (err == ESP_OK) {
+        DEVICE_STATE_I(
+            TAG,
+            "ota: phase=%s state=%s bytes=%u/%u slots_run=%u slots_boot=%u slots_target=%u result=ok",
+            phase,
+            ota_state_to_str(status.state),
+            static_cast<unsigned>(status.bytes_written),
+            static_cast<unsigned>(status.image_size),
+            static_cast<unsigned>(ota_partition_slot(OtaManager::get_running_partition())),
+            static_cast<unsigned>(ota_partition_slot(OtaManager::get_boot_partition())),
+            static_cast<unsigned>(ota_partition_slot(status_target_partition())));
+    } else {
+        DEVICE_STATE_W(
+            TAG,
+            "ota: phase=%s state=%s bytes=%u/%u slots_run=%u slots_boot=%u slots_target=%u err=%s(0x%x)",
+            phase,
+            ota_state_to_str(status.state),
+            static_cast<unsigned>(status.bytes_written),
+            static_cast<unsigned>(status.image_size),
+            static_cast<unsigned>(ota_partition_slot(OtaManager::get_running_partition())),
+            static_cast<unsigned>(ota_partition_slot(OtaManager::get_boot_partition())),
+            static_cast<unsigned>(ota_partition_slot(status_target_partition())),
+            ota_error_to_str(err),
+            static_cast<unsigned>(err));
+    }
 }
 
 void append_partition_json(char* out, size_t out_size, const esp_partition_t* partition) {
@@ -177,7 +191,7 @@ esp_err_t ota_status_handler(WebServer::Request* request) {
 esp_err_t ota_upload_handler(WebServer::Request* request) {
     const size_t image_size = request->raw->content_len;
     if (image_size == 0) {
-        BlackboxService::append_text_event("ota: upload_rejected reason=empty_image");
+        ESP_LOGW(TAG, "ota: upload result=rejected reason=empty_image");
         return WebServer::send(request, 400, "application/json",
             "{\"ok\":false,\"reason\":\"empty_image\"}\n",
             strlen("{\"ok\":false,\"reason\":\"empty_image\"}\n"));
@@ -185,10 +199,10 @@ esp_err_t ota_upload_handler(WebServer::Request* request) {
 
     esp_err_t err = OtaManager::begin(image_size);
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "OTA begin failed: %s", ota_error_to_str(err));
         const OtaManager::Status status = OtaManager::get_status();
-        BlackboxService::append_text_event(
-            "ota: begin_failed request=%u state=%s slots(run=%u boot=%u target=%u) err=%s(0x%x)",
+        DEVICE_STATE_W(
+            TAG,
+            "ota: begin request=%u state=%s slots_run=%u slots_boot=%u slots_target=%u result=failed err=%s(0x%x)",
             static_cast<unsigned>(image_size),
             ota_state_to_str(status.state),
             static_cast<unsigned>(ota_partition_slot(OtaManager::get_running_partition())),
@@ -214,7 +228,8 @@ esp_err_t ota_upload_handler(WebServer::Request* request) {
             const OtaManager::Status status = OtaManager::get_status();
             while (next_progress_percent <= 75 &&
                    status.bytes_written * 100 >= image_size * next_progress_percent) {
-                BlackboxService::append_text_event(
+                DEVICE_EVENT_I(
+                    TAG,
                     "ota: upload_progress percent=%u bytes=%u/%u target=%u",
                     static_cast<unsigned>(next_progress_percent),
                     static_cast<unsigned>(status.bytes_written),
@@ -225,11 +240,11 @@ esp_err_t ota_upload_handler(WebServer::Request* request) {
             return ESP_OK;
         });
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "OTA upload interrupted: %s", ota_error_to_str(err));
         const OtaManager::Status status = OtaManager::get_status();
         const esp_err_t abort_err = OtaManager::abort();
-        BlackboxService::append_text_event(
-            "ota: upload_interrupted state=%s bytes=%u/%u target=%u err=%s(0x%x) abort=%s(0x%x)",
+        DEVICE_STATE_W(
+            TAG,
+            "ota: upload state=%s bytes=%u/%u target=%u result=interrupted err=%s(0x%x) abort=%s(0x%x)",
             ota_state_to_str(status.state),
             static_cast<unsigned>(status.bytes_written),
             static_cast<unsigned>(status.image_size),
@@ -247,13 +262,13 @@ esp_err_t ota_upload_handler(WebServer::Request* request) {
     const OtaManager::Status received_status = OtaManager::get_status();
     err = OtaManager::finish();
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "OTA validation failed: %s", ota_error_to_str(err));
-        BlackboxService::append_text_event("ota: validation_failed bytes=%u/%u target=%u err=%s(0x%x)",
-                                           static_cast<unsigned>(received_status.bytes_written),
-                                           static_cast<unsigned>(received_status.image_size),
-                                           static_cast<unsigned>(ota_partition_slot(received_status.target_partition)),
-                                           ota_error_to_str(err),
-                                           static_cast<unsigned>(err));
+        DEVICE_STATE_W(TAG,
+                       "ota: validation bytes=%u/%u target=%u result=failed err=%s(0x%x)",
+                       static_cast<unsigned>(received_status.bytes_written),
+                       static_cast<unsigned>(received_status.image_size),
+                       static_cast<unsigned>(ota_partition_slot(received_status.target_partition)),
+                       ota_error_to_str(err),
+                       static_cast<unsigned>(err));
         snprintf(response_buffer, sizeof(response_buffer),
             "{\"ok\":false,\"reason\":\"%s\"}\n", ota_error_to_str(err));
         return WebServer::send(request, 400, "application/json", response_buffer, strlen(response_buffer));
@@ -262,11 +277,11 @@ esp_err_t ota_upload_handler(WebServer::Request* request) {
     esp_app_desc_t target_desc = {};
     err = OtaManager::get_target_app_description(&target_desc);
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "OTA APP description unavailable: %s", ota_error_to_str(err));
         const OtaManager::Status status = OtaManager::get_status();
         const esp_err_t abort_err = OtaManager::abort();
-        BlackboxService::append_text_event(
-            "ota: app_desc_failed state=%s bytes=%u/%u target=%u err=%s(0x%x) abort=%s(0x%x)",
+        DEVICE_STATE_W(
+            TAG,
+            "ota: app_desc state=%s bytes=%u/%u target=%u result=failed err=%s(0x%x) abort=%s(0x%x)",
             ota_state_to_str(status.state),
             static_cast<unsigned>(status.bytes_written),
             static_cast<unsigned>(status.image_size),
@@ -280,11 +295,10 @@ esp_err_t ota_upload_handler(WebServer::Request* request) {
             strlen("{\"ok\":false,\"reason\":\"app_description_unavailable\"}\n"));
     }
 
-    ESP_LOGI(TAG, "OTA image verified, waiting for activation");
-    BlackboxService::append_text_event("ota: verified version=%s bytes=%u target=%u",
-                                       target_desc.version,
-                                       static_cast<unsigned>(image_size),
-                                       static_cast<unsigned>(ota_partition_slot(OtaManager::get_target_partition())));
+    DEVICE_STATE_I(TAG, "ota: image state=verified version=%s bytes=%u target=%u",
+                   target_desc.version,
+                   static_cast<unsigned>(image_size),
+                   static_cast<unsigned>(ota_partition_slot(OtaManager::get_target_partition())));
     return send_ota_status(request, true, "verified");
 }
 
@@ -292,7 +306,6 @@ esp_err_t ota_upload_handler(WebServer::Request* request) {
 esp_err_t ota_activate_handler(WebServer::Request* request) {
     esp_err_t err = OtaManager::activate();
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "OTA activate failed: %s", ota_error_to_str(err));
         append_ota_status_event("activate_failed", err);
         snprintf(response_buffer, sizeof(response_buffer),
             "{\"ok\":false,\"reason\":\"%s\"}\n", ota_error_to_str(err));
@@ -301,15 +314,13 @@ esp_err_t ota_activate_handler(WebServer::Request* request) {
 
     err = schedule_ota_reboot();
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "OTA reboot scheduling failed: %s", ota_error_to_str(err));
         append_ota_status_event("reboot_schedule_failed", err);
         snprintf(response_buffer, sizeof(response_buffer),
             "{\"ok\":false,\"reason\":\"%s\"}\n", ota_error_to_str(err));
         return WebServer::send(request, 500, "application/json", response_buffer, strlen(response_buffer));
     }
 
-    ESP_LOGW(TAG, "OTA activated, restarting in 1 second");
-    append_ota_status_event("activated_reboot_in_1000ms");
+    DEVICE_STATE_W(TAG, "ota: phase=activated state=ready_to_reboot restart_delay_ms=1000");
     return send_ota_status(request, true, "restarting");
 }
 
@@ -318,21 +329,21 @@ esp_err_t ota_abort_handler(WebServer::Request* request) {
     const OtaManager::Status status = OtaManager::get_status();
     esp_err_t err = OtaManager::abort();
     if (err != ESP_OK) {
-        BlackboxService::append_text_event("ota: abort_failed state=%s bytes=%u/%u err=%s(0x%x)",
-                                           ota_state_to_str(status.state),
-                                           static_cast<unsigned>(status.bytes_written),
-                                           static_cast<unsigned>(status.image_size),
-                                           ota_error_to_str(err),
-                                           static_cast<unsigned>(err));
+        DEVICE_STATE_W(TAG, "ota: abort state=%s bytes=%u/%u result=failed err=%s(0x%x)",
+                       ota_state_to_str(status.state),
+                       static_cast<unsigned>(status.bytes_written),
+                       static_cast<unsigned>(status.image_size),
+                       ota_error_to_str(err),
+                       static_cast<unsigned>(err));
         snprintf(response_buffer, sizeof(response_buffer),
             "{\"ok\":false,\"reason\":\"%s\"}\n", ota_error_to_str(err));
         return WebServer::send(request, 409, "application/json", response_buffer, strlen(response_buffer));
     }
-    BlackboxService::append_text_event("ota: aborted previous_state=%s bytes=%u/%u target=%u",
-                                       ota_state_to_str(status.state),
-                                       static_cast<unsigned>(status.bytes_written),
-                                       static_cast<unsigned>(status.image_size),
-                                       static_cast<unsigned>(ota_partition_slot(status.target_partition)));
+    DEVICE_STATE_I(TAG, "ota: abort old=%s new=idle bytes=%u/%u target=%u result=ok",
+                   ota_state_to_str(status.state),
+                   static_cast<unsigned>(status.bytes_written),
+                   static_cast<unsigned>(status.image_size),
+                   static_cast<unsigned>(ota_partition_slot(status.target_partition)));
     return send_ota_status(request, true, "aborted");
 }
 
@@ -357,7 +368,7 @@ esp_err_t ota_remote_download_handler(WebServer::Request* request) {
         return WebServer::send(request, err == ESP_ERR_INVALID_STATE ? 409 : 500,
                                "application/json", response_buffer, strlen(response_buffer));
     }
-    BlackboxService::append_text_event("ota: remote_upgrade_requested source=web");
+    DEVICE_EVENT_I(TAG, "ota: remote_upgrade source=web result=requested");
     return send_ota_status(request, true, "upgrade_started");
 }
 

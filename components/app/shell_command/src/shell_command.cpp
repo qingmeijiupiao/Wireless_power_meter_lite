@@ -8,6 +8,7 @@
 #include "can_callback.h"
 #include "blackbox.h"
 #include "blackbox_service.h"
+#include "diagnostic_log.h"
 #include "current_calibration.h"
 #include "energy_meter.h"
 #include "global_state.h"
@@ -89,7 +90,7 @@ esp_err_t init() {
      */
     shell.register_command(ShellCommand_t("reboot", "Reboot the device", "",
         [](int argc, char** argv) -> int {
-            BlackboxService::append_text_event("system: reboot source=%s", TAG);
+            DEVICE_STATE_W(TAG, "system: reboot source=shell delay_ms=0");
             printf("Rebooting...\n");
             esp_restart();
             return 0;
@@ -264,8 +265,7 @@ esp_err_t init() {
                 printf("Failed to set backlight\n");
                 return 1;
             }
-            ESP_LOGI(TAG, "backlight=%d", brightness);
-            BlackboxService::append_text_event("ui: config source=%s backlight=%d", TAG, brightness);
+            DEVICE_EVENT_I(TAG, "ui: config source=shell backlight=%d", brightness);
             printf("Backlight set to %d\n", brightness);
             return 0;
         }));
@@ -292,8 +292,8 @@ esp_err_t init() {
                 printf("Error: failed to persist CAN baudrate: %s\n", esp_err_to_name(err));
                 return 1;
             }
-            BlackboxService::append_text_event("can: config baud=%lu source=shell reboot_required=1",
-                                               static_cast<unsigned long>(baudrate));
+            DEVICE_EVENT_I(TAG, "can: config baud=%lu source=shell reboot_required=1",
+                           static_cast<unsigned long>(baudrate));
             printf("CAN baudrate set to %lu\n", baudrate);
             return 0;
         }));
@@ -317,8 +317,8 @@ esp_err_t init() {
                 printf("Error: failed to persist CAN ID: %s\n", esp_err_to_name(err));
                 return 1;
             }
-            BlackboxService::append_text_event("can: config id=0x%lx source=shell reboot_required=1",
-                                               static_cast<unsigned long>(id));
+            DEVICE_EVENT_I(TAG, "can: config id=0x%lx source=shell reboot_required=1",
+                           static_cast<unsigned long>(id));
             printf("CAN ID set to %lu (0x%lX)\n", id, id);
             return 0;
         }));
@@ -342,7 +342,7 @@ esp_err_t init() {
         [](int argc, char** argv) -> int {
             if (argc >= 2 && strcmp(argv[1], "reset") == 0) {
                 EnergyMeter::reset();
-                BlackboxService::append_text_event("meter: reset source=shell");
+                DEVICE_EVENT_I(TAG, "meter: reset source=shell");
                 printf("Shared meter session reset\n");
             } else if (argc >= 2 && strcmp(argv[1], "status") != 0) {
                 printf("Usage: meter [status|reset]\n");
@@ -407,8 +407,8 @@ esp_err_t init() {
                 printf("Error: failed to persist startup logo duration: %s\n", esp_err_to_name(err));
                 return 1;
             }
-            BlackboxService::append_text_event("ui: config source=%s start_logo_ms=%lu reboot_required=1",
-                                               TAG, duration_ms);
+            DEVICE_EVENT_I(TAG, "ui: config source=shell start_logo_ms=%lu reboot_required=1",
+                           duration_ms);
             printf("Startup logo duration set to %lu ms, restart required\n", duration_ms);
             return 0;
         }));
@@ -455,7 +455,7 @@ esp_err_t init() {
                         text[pos++] = (ch == '\r' || ch == '\n' || ch == '\t') ? ' ' : ch;
                     }
                 }
-                BlackboxService::append_text_event("mark: source=%s text=%s", TAG, text);
+                DEVICE_EVENT_I(TAG, "mark: source=shell text=%s", text);
                 printf("Blackbox mark added: %s\n", text);
                 return 0;
             }
@@ -879,7 +879,7 @@ esp_err_t init() {
                 printf("Error: failed to persist calibration: %s\n", esp_err_to_name(err));
                 return 1;
             }
-            BlackboxService::append_text_event("calib: base_k=%d reboot_required=1", basek);
+            DEVICE_EVENT_I(TAG, "calib: base_k=%d source=shell reboot_required=1", basek);
             printf("Calibration basek set to %d restart required\n", basek);
             return 0;
         });
@@ -899,7 +899,8 @@ esp_err_t init() {
                 printf("Error: failed to persist calibration: %s\n", esp_err_to_name(err));
                 return 1;
             }
-            BlackboxService::append_text_event("calib: temperature_k=%d reboot_required=1", temperatureK);
+            DEVICE_EVENT_I(TAG, "calib: temperature_k=%d source=shell reboot_required=1",
+                           temperatureK);
             printf("Calibration temperatureK set to %d restart required\n", temperatureK);
             return 0;
         });
@@ -926,10 +927,11 @@ esp_err_t init() {
                 printf("Error: failed to persist calibration: %s\n", esp_err_to_name(err));
                 return 1;
             }
-            BlackboxService::append_text_event("calib: point=%d reg=%d offset_100ua=%d reboot_required=1",
-                                               point_index,
-                                               register_value,
-                                               new_offset_current_100uA);
+            DEVICE_EVENT_I(TAG,
+                           "calib: point=%d reg=%d offset_100ua=%d source=shell reboot_required=1",
+                           point_index,
+                           register_value,
+                           new_offset_current_100uA);
             printf("Calibration current points set to %d, %d(uA) restart required\n", register_value, atoi(argv[3]));
             return 0;
         });
@@ -946,8 +948,8 @@ esp_err_t init() {
                 printf("Error: failed to persist calibration: %s\n", esp_err_to_name(err));
                 return 1;
             }
-            BlackboxService::append_text_event("calib: cleared base_k=%u reboot_required=1",
-                                               static_cast<unsigned>(base_k));
+            DEVICE_EVENT_I(TAG, "calib: cleared base_k=%u source=shell reboot_required=1",
+                           static_cast<unsigned>(base_k));
             printf("Calibration params cleared (base_K=%d preserved)\n", base_k);
             return 0;
         });
@@ -964,7 +966,7 @@ esp_err_t init() {
             return 0;
         }));
 
-    ESP_LOGI(TAG, "Shell commands registered");
+    DEVICE_EVENT_I(TAG, "shell: commands state=registered result=ok");
     return ESP_OK;
 }
 

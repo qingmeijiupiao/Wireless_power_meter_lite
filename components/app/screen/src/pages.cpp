@@ -11,6 +11,7 @@
 #include <cstdio>
 
 #include "blackbox.h"
+#include "diagnostic_log.h"
 #include "DENGB12.h"
 #include "DENGB16.h"
 #include "DENGB20.h"
@@ -264,7 +265,7 @@ bool BatteryPage::handle_button(ButtonId button, ButtonEvent event) {
     }
 
     EnergyMeter::reset();
-    BlackboxService::append_text_event("meter: reset source=screen");
+    DEVICE_EVENT_I(TAG, "meter: reset source=screen");
     return true;
 }
 
@@ -834,13 +835,15 @@ bool SettingsPage::run_action_item(uint8_t item) {
     esp_err_t ret = ESP_OK;
     if (EspNowLink::is_pairing()) {
         EspNowLink::leave_pairing_mode();
-        ESP_LOGI(TAG, "ESP-NOW pairing stopped source=screen");
-        BlackboxService::append_text_event("espnow: pair_stop source=screen");
+        DEVICE_EVENT_I(TAG, "espnow: pairing source=screen action=stop result=ok");
     } else {
         ret = EspNowLink::enter_pairing_mode(0);
-        ESP_LOGI(TAG, "ESP-NOW pairing start source=screen result=%s", esp_err_to_name(ret));
-        BlackboxService::append_text_event("espnow: pair_start source=screen unlimited=1 result=%s",
-                                           esp_err_to_name(ret));
+        if (ret == ESP_OK) {
+            DEVICE_EVENT_I(TAG, "espnow: pairing source=screen action=start unlimited=1 result=ok");
+        } else {
+            ESP_LOGW(TAG, "espnow: pairing source=screen target=active result=%s",
+                     esp_err_to_name(ret));
+        }
     }
     return true;
 }
@@ -980,8 +983,8 @@ void SettingsPage::adjust_selected_item() {
                 break;
             }
             ST7735::set_rotation(rotation_180_ ? ST7735::Rotation::HorizontalMirror : ST7735::Rotation::Horizontal);
-            ESP_LOGI(TAG, "setting rotate_180=%u", rotation_180_ ? 1U : 0U);
-            BlackboxService::append_text_event("ui: config source=%s rotate_180=%u", TAG, rotation_180_ ? 1U : 0U);
+            DEVICE_EVENT_I(TAG, "ui: config source=screen rotate_180=%u",
+                           rotation_180_ ? 1U : 0U);
             break;
         case Backlight:
             backlight_level_++;
@@ -994,9 +997,8 @@ void SettingsPage::adjust_selected_item() {
                 break;
             }
             ST7735::set_backlight(backlight_value_from_level(backlight_level_));
-            ESP_LOGI(TAG, "setting backlight_level=%u", static_cast<unsigned>(backlight_level_));
-            BlackboxService::append_text_event("ui: config source=%s backlight_level=%u",
-                                               TAG, static_cast<unsigned>(backlight_level_));
+            DEVICE_EVENT_I(TAG, "ui: config source=screen backlight_level=%u",
+                           static_cast<unsigned>(backlight_level_));
             break;
         case WebBoot: {
             bool enabled = !WifiService::is_web_enabled_on_boot();
@@ -1033,17 +1035,18 @@ void SettingsPage::adjust_selected_item() {
                 ESP_LOGE(TAG, "failed to persist CAN baudrate");
                 break;
             }
-            BlackboxService::append_text_event("can: config baud=%lu source=screen reboot_required=1",
-                                               static_cast<unsigned long>(next));
+            DEVICE_EVENT_I(TAG, "can: config baud=%lu source=screen reboot_required=1",
+                           static_cast<unsigned long>(next));
             break;
         }
         case CanTerm: {
             const esp_err_t ret = CanResistor::instance().toggle();
-            ESP_LOGI(TAG, "setting can_resistor=%u result=%s",
-                     CanResistor::instance().get() ? 1U : 0U, esp_err_to_name(ret));
-            BlackboxService::append_text_event("can: set_resistor source=screen state=%u result=%s",
-                                               CanResistor::instance().get() ? 1U : 0U,
-                                               esp_err_to_name(ret));
+            if (ret == ESP_OK) {
+                DEVICE_STATE_I(TAG, "can: resistor source=screen state=%u result=ok",
+                               CanResistor::instance().get() ? 1U : 0U);
+            } else {
+                ESP_LOGE(TAG, "can: resistor source=screen result=%s", esp_err_to_name(ret));
+            }
             break;
         }
         default:

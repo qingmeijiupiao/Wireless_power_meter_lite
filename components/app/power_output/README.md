@@ -232,11 +232,11 @@ PowerOutput::add_policy(&max_on_policy);
 
 工程内直接依赖：
 
-- [`blackbox_service`](../blackbox_service/README.md)（`app`）
 - [`global_state`](../global_state/README.md)（`app`）
 - [`protect`](../protect/README.md)（`app`）
 - [`cpp_gpio_driver`](../../bsp/cpp_gpio_driver/README.md)（`bsp`）
 - [`hardware`](../../bsp/hardware/README.md)（`bsp`）
+- [`diagnostic_log`](../../common/diagnostic_log/README.md)（`common`）
 
 > 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
 <!-- dependency-links:end -->

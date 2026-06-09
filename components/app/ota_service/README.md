@@ -20,8 +20,9 @@
 2. `gh-proxy.com`
 3. `ghproxy.net`
 
-每次尝试及其结果都会写入 ESP 日志和黑匣子。三个地址全部失败后进入
-`failed` 状态，不自动重试；用户可从 Web 或屏幕重新发起。
+每次尝试及其结果都通过 `diagnostic_log` 写入 ESP 日志，并由全局 Hook 自动持久化。
+状态迁移附带快照，失败使用 `WARN` / `ERROR`。三个地址全部失败后进入 `failed`
+状态，不自动重试；用户可从 Web 或屏幕重新发起。
 
 下载使用 ESP-IDF HTTP Client 自动处理重定向，通过证书 Bundle 校验 TLS。
 响应数据按块写入备用 OTA 分区，不在 RAM 中缓存完整固件。下载、校验和激活
@@ -37,8 +38,8 @@
 
 工程内直接依赖：
 
-- [`blackbox_service`](../blackbox_service/README.md)（`app`）
 - [`ota_manager`](../../middleware/ota_manager/README.md)（`middleware`）
+- [`diagnostic_log`](../../common/diagnostic_log/README.md)（`common`）
 
 > 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
 <!-- dependency-links:end -->

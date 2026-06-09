@@ -5,7 +5,7 @@
 #include <ctime>
 #include <new>
 
-#include "blackbox_service.h"
+#include "diagnostic_log.h"
 #include "esp_app_desc.h"
 #include "esp_check.h"
 #include "esp_crt_bundle.h"
@@ -54,9 +54,22 @@ void unlock_status() {
 
 void set_state(State state, const char* error = "") {
     lock_status();
+    const State old_state = status.state;
     status.state = state;
     snprintf(status.last_error, sizeof(status.last_error), "%s", error == nullptr ? "" : error);
     unlock_status();
+    if (old_state == state && (error == nullptr || error[0] == '\0')) {
+        return;
+    }
+    if (state == State::FAILED) {
+        DEVICE_STATE_W(TAG, "ota: state old=%s new=%s reason=%s",
+                       state_to_string(old_state),
+                       state_to_string(state),
+                       error == nullptr || error[0] == '\0' ? "unknown" : error);
+    } else {
+        DEVICE_STATE_I(TAG, "ota: state old=%s new=%s result=ok",
+                       state_to_string(old_state), state_to_string(state));
+    }
 }
 
 void set_active_source(const char* source) {
@@ -146,14 +159,12 @@ void close_http(esp_http_client_handle_t client) {
 
 esp_err_t fetch_config(char* output, size_t output_size) {
     set_active_source("jsdelivr");
-    ESP_LOGI(TAG, "remote config attempt source=jsdelivr url=%s", CONFIG_URL);
-    BlackboxService::append_text_event("ota: remote_config_attempt source=jsdelivr");
+    DEVICE_EVENT_I(TAG, "ota: remote_config_attempt source=jsdelivr url=%s", CONFIG_URL);
 
     int64_t content_length = 0;
     esp_http_client_handle_t client = open_http(CONFIG_URL, &content_length);
     if (client == nullptr) {
-        ESP_LOGW(TAG, "remote config source=jsdelivr failed to open");
-        BlackboxService::append_text_event("ota: remote_config_failed source=jsdelivr reason=http_open");
+        ESP_LOGW(TAG, "ota: remote_config source=jsdelivr result=failed reason=http_open");
         return ESP_FAIL;
     }
     if (content_length >= static_cast<int64_t>(output_size)) {
@@ -179,9 +190,8 @@ esp_err_t fetch_config(char* output, size_t output_size) {
     if (total == 0) {
         return ESP_ERR_INVALID_RESPONSE;
     }
-    ESP_LOGI(TAG, "remote config source=jsdelivr success bytes=%u", static_cast<unsigned>(total));
-    BlackboxService::append_text_event("ota: remote_config_success source=jsdelivr bytes=%u",
-                                       static_cast<unsigned>(total));
+    DEVICE_EVENT_I(TAG, "ota: remote_config source=jsdelivr result=ok bytes=%u",
+                   static_cast<unsigned>(total));
     return ESP_OK;
 }
 
@@ -229,7 +239,6 @@ esp_err_t check_latest_version() {
     constexpr time_t MIN_VALID_TLS_TIME = 1704067200; // 2024-01-01 UTC
     if (time(nullptr) < MIN_VALID_TLS_TIME) {
         set_state(State::FAILED, "time_not_synchronized");
-        BlackboxService::append_text_event("ota: remote_check_failed reason=time_not_synchronized");
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -243,7 +252,6 @@ esp_err_t check_latest_version() {
     if (!extract_latest_version(config_buffer, latest, sizeof(latest))) {
         ESP_LOGW(TAG, "remote config version parse failed");
         set_state(State::FAILED, "config_version_invalid");
-        BlackboxService::append_text_event("ota: remote_check_failed reason=config_version_invalid");
         return ESP_ERR_INVALID_RESPONSE;
     }
     ESP_LOGI(TAG, "remote config parsed latest=%s", latest);
@@ -258,6 +266,7 @@ esp_err_t check_latest_version() {
     }
 
     lock_status();
+    const State previous_state = status.state;
     snprintf(status.current_version, sizeof(status.current_version), "%s", running->version);
     snprintf(status.latest_version, sizeof(status.latest_version), "%s", latest);
     status.active_source[0] = '\0';
@@ -268,10 +277,10 @@ esp_err_t check_latest_version() {
     const State result_state = status.state;
     unlock_status();
 
-    ESP_LOGI(TAG, "remote check current=%s latest=%s result=%s",
-             running->version, latest, state_to_string(result_state));
-    BlackboxService::append_text_event("ota: remote_check current=%s latest=%s result=%s",
-                                       running->version, latest, state_to_string(result_state));
+    DEVICE_STATE_I(TAG, "ota: state old=%s new=%s result=ok",
+                   state_to_string(previous_state), state_to_string(result_state));
+    DEVICE_EVENT_I(TAG, "ota: remote_check current=%s latest=%s result=%s",
+                   running->version, latest, state_to_string(result_state));
     return ESP_OK;
 }
 
@@ -335,9 +344,8 @@ esp_err_t download_from_source(size_t source_index, const char* version) {
     char url[320] = {};
     build_firmware_url(source_index, version, url, sizeof(url));
     const Status before = get_status();
-    ESP_LOGI(TAG, "firmware attempt source=%s url=%s", before.active_source, url);
-    BlackboxService::append_text_event("ota: firmware_attempt source=%s version=%s",
-                                       before.active_source, version);
+    DEVICE_EVENT_I(TAG, "ota: firmware_attempt source=%s version=%s url=%s",
+                   before.active_source, version, url);
 
     DownloadContext context = {
         .error = ESP_OK,
@@ -357,9 +365,8 @@ esp_err_t download_from_source(size_t source_index, const char* version) {
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (client == nullptr) {
-        ESP_LOGW(TAG, "firmware source=%s client init failed", before.active_source);
-        BlackboxService::append_text_event("ota: firmware_failed source=%s reason=http_init",
-                                           before.active_source);
+        ESP_LOGW(TAG, "ota: firmware source=%s result=failed reason=http_init",
+                 before.active_source);
         return ESP_ERR_NO_MEM;
     }
 
@@ -383,12 +390,11 @@ esp_err_t download_from_source(size_t source_index, const char* version) {
         if (context.ota_started) {
             OtaManager::abort();
         }
-        BlackboxService::append_text_event(
-            "ota: firmware_failed source=%s bytes=%u/%u err=%s",
-            before.active_source,
-            static_cast<unsigned>(context.total),
-            static_cast<unsigned>(context.image_size),
-            esp_err_to_name(err));
+        ESP_LOGW(TAG, "ota: firmware source=%s result=failed bytes=%u/%u err=%s",
+                 before.active_source,
+                 static_cast<unsigned>(context.total),
+                 static_cast<unsigned>(context.image_size),
+                 esp_err_to_name(err));
         return err;
     }
 
@@ -402,22 +408,19 @@ esp_err_t download_from_source(size_t source_index, const char* version) {
         if (OtaManager::get_status().state == OtaManager::State::VERIFIED) {
             OtaManager::abort();
         }
-        BlackboxService::append_text_event("ota: firmware_verify_failed source=%s err=%s",
-                                           before.active_source, esp_err_to_name(err));
+        ESP_LOGE(TAG, "ota: firmware_verify source=%s result=failed err=%s",
+                 before.active_source, esp_err_to_name(err));
         return err;
     }
 
-    ESP_LOGI(TAG, "firmware source=%s verified and activated", before.active_source);
-    BlackboxService::append_text_event("ota: firmware_success source=%s version=%s bytes=%u",
-                                       before.active_source, version,
-                                       static_cast<unsigned>(context.total));
+    DEVICE_STATE_I(TAG, "ota: firmware source=%s result=activated version=%s bytes=%u",
+                   before.active_source, version, static_cast<unsigned>(context.total));
     return ESP_OK;
 }
 
 esp_err_t perform_upgrade() {
     if (OtaManager::get_status().state != OtaManager::State::IDLE) {
         set_state(State::FAILED, "ota_busy");
-        BlackboxService::append_text_event("ota: remote_upgrade_failed reason=ota_busy");
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -438,7 +441,7 @@ esp_err_t perform_upgrade() {
         last_error = download_from_source(source, snapshot.latest_version);
         if (last_error == ESP_OK) {
             set_state(State::RESTARTING);
-            BlackboxService::append_text_event("ota: remote_restart_in_2000ms");
+            DEVICE_EVENT_I(TAG, "ota: restart delay_ms=2000 reason=upgrade_complete");
             vTaskDelay(pdMS_TO_TICKS(2000));
             esp_restart();
         }
@@ -447,8 +450,6 @@ esp_err_t perform_upgrade() {
     set_state(State::FAILED, esp_err_to_name(last_error));
     set_active_source("");
     ESP_LOGE(TAG, "all firmware sources failed: %s", esp_err_to_name(last_error));
-    BlackboxService::append_text_event("ota: all_firmware_sources_failed err=%s",
-                                       esp_err_to_name(last_error));
     return last_error;
 }
 

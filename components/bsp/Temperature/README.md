@@ -114,6 +114,7 @@ float chip_temp = chip_sensor.getTemperature(); // 摄氏度
 工程内直接依赖：
 
 - [`ADC`](../ADC/README.md)（`bsp`）
+- [`diagnostic_log`](../../common/diagnostic_log/README.md)（`common`）
 
 > 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
 <!-- dependency-links:end -->

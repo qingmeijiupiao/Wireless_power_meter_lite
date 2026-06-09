@@ -30,7 +30,7 @@
 #include "wifi_service.h"
 #include "espnow_link.h"
 #include "espnow_service.h"
-#include "blackbox_service.h"
+#include "diagnostic_log.h"
 
 namespace WebBackend {
 
@@ -157,8 +157,7 @@ esp_err_t state_handler(WebServer::Request* request) {
 /** @brief POST /api/meter/reset, reset the shared UI/Web metering session. */
 esp_err_t meter_reset_handler(WebServer::Request* request) {
     EnergyMeter::reset();
-    ESP_LOGI(TAG, "meter session reset");
-    BlackboxService::append_text_event("meter: reset source=web");
+    DEVICE_EVENT_I(TAG, "meter: reset source=web");
     return WebServer::send_json(request, "{\"ok\":true}\n");
 }
 
@@ -219,8 +218,7 @@ esp_err_t reboot_handler(WebServer::Request* request) {
     }
     esp_timer_stop(reboot_timer);
     esp_timer_start_once(reboot_timer, 300000);
-    ESP_LOGW(TAG, "reboot requested, restarting in 300 ms");
-    BlackboxService::append_text_event("system: reboot source=%s delay_ms=300 ip=%s", TAG, request->peer_ip);
+    DEVICE_STATE_W(TAG, "system: reboot source=web delay_ms=300 ip=%s", request->peer_ip);
     return WebServer::send_json(request, "{\"ok\":true,\"reason\":\"rebooting\"}\n");
 }
 
@@ -276,9 +274,8 @@ esp_err_t backlight_handler(WebServer::Request* request) {
         }
         ret = ST7735::set_backlight(static_cast<uint8_t>(brightness));
         if (ret == ESP_OK) {
-            ESP_LOGI(TAG, "backlight updated: brightness=%lu", brightness);
-            BlackboxService::append_text_event("ui: config source=%s backlight=%lu ip=%s",
-                                               TAG, static_cast<unsigned long>(brightness), request->peer_ip);
+            DEVICE_EVENT_I(TAG, "ui: config source=web backlight=%lu ip=%s",
+                           static_cast<unsigned long>(brightness), request->peer_ip);
         } else {
             ESP_LOGW(TAG, "backlight update failed: brightness=%lu reason=%s", brightness, esp_err_to_name(ret));
         }
@@ -315,9 +312,9 @@ esp_err_t start_logo_handler(WebServer::Request* request) {
                      "{\"ok\":false,\"reason\":\"%s\"}\n", esp_err_to_name(ret));
             return WebServer::send(request, 500, "application/json", response_buffer, strlen(response_buffer));
         }
-        ESP_LOGI(TAG, "startup logo config updated: duration_ms=%lu", static_cast<unsigned long>(duration_ms));
-        BlackboxService::append_text_event("ui: config source=%s start_logo_ms=%lu reboot_required=1 ip=%s",
-                                           TAG, static_cast<unsigned long>(duration_ms), request->peer_ip);
+        DEVICE_EVENT_I(TAG,
+                       "ui: config source=web start_logo_ms=%lu reboot_required=1 ip=%s",
+                       static_cast<unsigned long>(duration_ms), request->peer_ip);
     }
 
     const uint32_t duration_ms = SCREEN::get_start_logo_duration_ms();
@@ -476,10 +473,9 @@ esp_err_t can_handler(WebServer::Request* request) {
     uint32_t can_id = CanCallback::CAN_ID;
     uint32_t baudrate = CanCallback::CAN_BAUDRATE;
     if (is_post) {
-        ESP_LOGI(TAG, "CAN config updated: baudrate=%lu id=0x%lX", baudrate, can_id);
-        BlackboxService::append_text_event("can: config baud=%lu id=0x%lx source=web reboot_required=1",
-                                           static_cast<unsigned long>(baudrate),
-                                           static_cast<unsigned long>(can_id));
+        DEVICE_EVENT_I(TAG, "can: config baud=%lu id=0x%lx source=web reboot_required=1",
+                       static_cast<unsigned long>(baudrate),
+                       static_cast<unsigned long>(can_id));
     }
     snprintf(response_buffer, sizeof(response_buffer),
         "{\"ok\":true,\"baudrate\":%lu,\"id\":%lu,\"id_hex\":\"0x%lX\",\"note\":\"changed values may require CAN reinitialization or reboot\"}\n",
@@ -901,8 +897,8 @@ esp_err_t espnow_pair_handler(WebServer::Request* request) {
 
     ret = EspNowLink::enter_pairing_mode(0);
     if (ret == ESP_OK) {
-        ESP_LOGI(TAG, "ESP-NOW single-device pairing started without timeout");
-        BlackboxService::append_text_event("espnow: pair_start source=web unlimited=1");
+        DEVICE_EVENT_I(TAG,
+                       "espnow: pairing source=web action=start unlimited=1 result=ok");
     } else {
         ESP_LOGW(TAG, "ESP-NOW pairing start failed: reason=%s", esp_err_to_name(ret));
     }
@@ -918,8 +914,7 @@ esp_err_t espnow_pair_handler(WebServer::Request* request) {
 /** @brief POST /api/espnow/pair/stop，手动关闭当前配对窗口。 */
 esp_err_t espnow_pair_stop_handler(WebServer::Request* request) {
     EspNowLink::leave_pairing_mode();
-    ESP_LOGI(TAG, "ESP-NOW pairing stopped");
-    BlackboxService::append_text_event("espnow: pair_stop source=web");
+    DEVICE_EVENT_I(TAG, "espnow: pairing source=web action=stop result=ok");
     snprintf(response_buffer, sizeof(response_buffer),
         "{\"ok\":true,\"pairing\":false,\"peer_count\":%u}\n",
         static_cast<unsigned>(EspNowLink::get_saved_peer_count()));
@@ -931,8 +926,7 @@ esp_err_t espnow_pair_clear_handler(WebServer::Request* request) {
     EspNowLink::leave_pairing_mode();
     const esp_err_t ret = EspNowLink::clear_saved_peers();
     if (ret == ESP_OK) {
-        ESP_LOGW(TAG, "all ESP-NOW paired peers cleared");
-        BlackboxService::append_text_event("espnow: pair_clear source=web");
+        DEVICE_EVENT_I(TAG, "espnow: peers source=web action=clear result=ok");
     } else {
         ESP_LOGW(TAG, "clear ESP-NOW paired peers failed: reason=%s", esp_err_to_name(ret));
     }

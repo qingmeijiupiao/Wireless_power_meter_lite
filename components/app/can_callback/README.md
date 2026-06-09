@@ -9,7 +9,7 @@
 - 集中注册设备 CAN 命令，避免业务回调散落在不同模块。
 - 使用 NVS 保存设备 ID 和波特率。
 - 将输出控制、终端电阻控制和状态查询连接到对应业务组件。
-- 每秒检查 CAN 错误计数，变化时写入黑匣子。
+- 每秒检查 CAN 错误计数，变化时输出 `WARN` 诊断事件并强制记录状态快照。
 
 ## 架构
 
@@ -26,8 +26,8 @@ flowchart TD
     Callbacks --> GS["global_state"]
     Callbacks --> Output["power_output"]
     Callbacks --> CR["can_resistor"]
-    Callbacks --> BB["blackbox_service"]
-    Diag --> BB
+    Callbacks --> Log["diagnostic_log<br/>ESP_LOG Hook 自动持久化"]
+    Diag --> Log
 ```
 
 回调执行过程已经在下方协议表中逐条列出，因此这里不再展开每个回调的时序图。
@@ -55,8 +55,8 @@ flowchart TD
 |---------|----------|----------|------|
 | `CAN_ID + 0x00` | 任意 | 调用 `send(msg)` 原样回传 | 与请求相同 |
 | `CAN_ID + 0x01` | 无要求 | 读取 `global_state` 和终端电阻状态 | `CALLBACK_GET_STATE_DATA_t` |
-| `CAN_ID + 0x02` | `data[0] == 0x01` 表示开启，其他值表示关闭 | 调用 `PowerOutput::on()` 或 `off()`，并写黑匣子 | 无 |
-| `CAN_ID + 0x03` | `data[0] == 0x01` 表示开启，其他值表示关闭 | 调用 `CanResistor::set()`，并写黑匣子 | 无 |
+| `CAN_ID + 0x02` | `data[0] == 0x01` 表示开启，其他值表示关闭 | 调用 `PowerOutput::on()` 或 `off()`，并输出持久化诊断事件 | 无 |
+| `CAN_ID + 0x03` | `data[0] == 0x01` 表示开启，其他值表示关闭 | 调用 `CanResistor::set()`，并输出持久化诊断事件 | 无 |
 | `-1` | 任意 | 调试 Catch-All：打印所有收到的帧 | 无 |
 
 > Catch-All 会打印每条 CAN 帧。总线流量较大或准备发布时，应评估是否保留。
@@ -120,7 +120,6 @@ if (CanCallback::is_available()) {
 
 工程内直接依赖：
 
-- [`blackbox_service`](../blackbox_service/README.md)（`app`）
 - [`global_state`](../global_state/README.md)（`app`）
 - [`power_output`](../power_output/README.md)（`app`）
 - [`protect`](../protect/README.md)（`app`）
@@ -128,6 +127,7 @@ if (CanCallback::is_available()) {
 - [`hardware`](../../bsp/hardware/README.md)（`bsp`）
 - [`HXC_NVS`](../../bsp/HXC_NVS/README.md)（`bsp`）
 - [`HXC_TWAI`](../../bsp/HXC_TWAI/README.md)（`bsp`）
+- [`diagnostic_log`](../../common/diagnostic_log/README.md)（`common`）
 
 > 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
 <!-- dependency-links:end -->

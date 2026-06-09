@@ -9,7 +9,7 @@
 
 #include <cstdio>
 
-#include "blackbox_service.h"
+#include "diagnostic_log.h"
 #include "energy_meter.h"
 #include "esp_log.h"
 #include "esp_random.h"
@@ -142,12 +142,8 @@ void on_switch_request(const EspNowLink::Message& message, void*) {
              message.source.bytes[2], message.source.bytes[3],
              message.source.bytes[4], message.source.bytes[5]);
     const int64_t elapsed_us = esp_timer_get_time() - started_us;
-    ESP_LOGI(TAG, "switch peer=%s action=%u result=%u output=%u process_us=%lld",
-             mac, static_cast<unsigned>(action),
-             static_cast<unsigned>(response.result),
-             response.output_on ? 1U : 0U,
-             static_cast<long long>(elapsed_us));
-    BlackboxService::append_event(
+    DEVICE_EVENT_I(
+        TAG,
         "espnow: switch peer=%s action=%u result=%u output=%u process_us=%lld",
         mac, static_cast<unsigned>(action),
         static_cast<unsigned>(response.result),
@@ -236,12 +232,6 @@ void on_data_request(const EspNowLink::Message& message, void*) {
              mac, response.data.voltage_mv,
              static_cast<long>(response.data.current_ua),
              static_cast<long long>(elapsed_us));
-    BlackboxService::append_text_event(
-        "espnow: data peer=%s voltage_mv=%u current_ua=%ld process_us=%lld",
-        mac, response.data.voltage_mv,
-        static_cast<long>(response.data.current_ua),
-        static_cast<long long>(elapsed_us));
-
     // 即使未来数据暂不可用，也应发送 available=false 的同格式响应，而不是静默超时。
     uint8_t payload[40] = {};
     const size_t size = encode_data_message(response, payload, sizeof(payload));

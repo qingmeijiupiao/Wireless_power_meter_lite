@@ -2,7 +2,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "global_state.h"
-#include "blackbox_service.h"
+#include "diagnostic_log.h"
 #include "HXC_NVS.h"
 #include <cmath>
 #include <vector>
@@ -94,21 +94,37 @@ static void check_mos_fault() {
  * 日志同时保留当前值、主要阈值、旁路状态、输出状态和 INA226 原始值，
  * 用于离线定位保护触发原因。
  */
-static void append_state_change_event(const char* channel, ProtectState_t last_state, ProtectState_t new_state,
-                                      float value, const protect_threshold_t& threshold) {
+static void log_state_change_event(const char* channel, ProtectState_t last_state, ProtectState_t new_state,
+                                   float value, const protect_threshold_t& threshold) {
     const int current_raw = glb_states.current_register_raw;
     const unsigned voltage_raw = glb_states.voltage_register_raw;
-    BlackboxService::append_event("protect: channel=%s state=%u->%u value_milli=%ld warn=%ld protect=%ld bypass=%u output=%u raw_i=%d raw_v=%u",
-                                  channel,
-                                  static_cast<unsigned>(last_state),
-                                  static_cast<unsigned>(new_state),
-                                  static_cast<long>(to_milli(value)),
-                                  static_cast<long>(to_milli(threshold.warning_threshold)),
-                                  static_cast<long>(to_milli(threshold.protect_threshold)),
-                                  protect_is_bypassed() ? 1U : 0U,
-                                  glb_states.flags.bits.output_enabled ? 1U : 0U,
-                                  current_raw,
-                                  voltage_raw);
+    if (new_state == PROTECT_STATE_NORMAL) {
+        DEVICE_STATE_I(PROTECT_LOG_TAG,
+                       "protect: state channel=%s old=%u new=%u value_milli=%ld warn=%ld protect=%ld bypass=%u output=%u raw_i=%d raw_v=%u",
+                       channel,
+                       static_cast<unsigned>(last_state),
+                       static_cast<unsigned>(new_state),
+                       static_cast<long>(to_milli(value)),
+                       static_cast<long>(to_milli(threshold.warning_threshold)),
+                       static_cast<long>(to_milli(threshold.protect_threshold)),
+                       protect_is_bypassed() ? 1U : 0U,
+                       glb_states.flags.bits.output_enabled ? 1U : 0U,
+                       current_raw,
+                       voltage_raw);
+    } else {
+        DEVICE_STATE_W(PROTECT_LOG_TAG,
+                       "protect: state channel=%s old=%u new=%u value_milli=%ld warn=%ld protect=%ld bypass=%u output=%u raw_i=%d raw_v=%u",
+                       channel,
+                       static_cast<unsigned>(last_state),
+                       static_cast<unsigned>(new_state),
+                       static_cast<long>(to_milli(value)),
+                       static_cast<long>(to_milli(threshold.warning_threshold)),
+                       static_cast<long>(to_milli(threshold.protect_threshold)),
+                       protect_is_bypassed() ? 1U : 0U,
+                       glb_states.flags.bits.output_enabled ? 1U : 0U,
+                       current_raw,
+                       voltage_raw);
+    }
 }
 
 // 以下运行期阈值会在首次访问时由 NVS 配置覆盖；声明值与默认配置保持一致。
@@ -258,22 +274,16 @@ static void ensure_protect_config_loaded() {
 
 /** @brief 分行输出并持久化记录单个通道的阈值，避免单条日志过长。 */
 static void log_threshold_values(const char* channel, const protect_threshold_t& threshold) {
-    PROTECT_LOGI("threshold channel=%s warn_milli=%ld warn_rec_milli=%ld",
-                 channel,
-                 static_cast<long>(to_milli(threshold.warning_threshold)),
-                 static_cast<long>(to_milli(threshold.warning_recovery_threshold)));
-    PROTECT_LOGI("threshold channel=%s protect_milli=%ld protect_rec_milli=%ld",
-                 channel,
-                 static_cast<long>(to_milli(threshold.protect_threshold)),
-                 static_cast<long>(to_milli(threshold.protect_recovery_threshold)));
-    BlackboxService::append_text_event("protect: threshold channel=%s warn_milli=%ld warn_rec_milli=%ld",
-                                       channel,
-                                       static_cast<long>(to_milli(threshold.warning_threshold)),
-                                       static_cast<long>(to_milli(threshold.warning_recovery_threshold)));
-    BlackboxService::append_text_event("protect: threshold channel=%s protect_milli=%ld protect_rec_milli=%ld",
-                                       channel,
-                                       static_cast<long>(to_milli(threshold.protect_threshold)),
-                                       static_cast<long>(to_milli(threshold.protect_recovery_threshold)));
+    DEVICE_EVENT_I(PROTECT_LOG_TAG,
+                   "protect: threshold channel=%s warn_milli=%ld warn_rec_milli=%ld",
+                   channel,
+                   static_cast<long>(to_milli(threshold.warning_threshold)),
+                   static_cast<long>(to_milli(threshold.warning_recovery_threshold)));
+    DEVICE_EVENT_I(PROTECT_LOG_TAG,
+                   "protect: threshold channel=%s protect_milli=%ld protect_rec_milli=%ld",
+                   channel,
+                   static_cast<long>(to_milli(threshold.protect_threshold)),
+                   static_cast<long>(to_milli(threshold.protect_recovery_threshold)));
 }
 
 /** @brief 输出并持久化记录保护模块启动时实际使用的阈值。 */
@@ -416,12 +426,13 @@ void protect_set_bypassed(bool bypassed, const char* source){
         return;
     }
     glb_states.flags.bits.protect_bypassed = bypassed;
-    PROTECT_LOGW("bypass source=%s state=%u", source, bypassed ? 1U : 0U);
-    BlackboxService::append_event("protect: bypass source=%s state=%u active_fault=%u output=%u",
-                                  source,
-                                  bypassed ? 1U : 0U,
-                                  protect_has_active_fault() ? 1U : 0U,
-                                  glb_states.flags.bits.output_enabled ? 1U : 0U);
+    DEVICE_STATE_W(PROTECT_LOG_TAG,
+                   "protect: bypass source=%s old=%u new=%u active_fault=%u output=%u",
+                   source,
+                   bypassed ? 0U : 1U,
+                   bypassed ? 1U : 0U,
+                   protect_has_active_fault() ? 1U : 0U,
+                   glb_states.flags.bits.output_enabled ? 1U : 0U);
 }
 
 bool protect_is_bypassed(){
@@ -518,8 +529,8 @@ esp_err_t protect_set_channel_threshold(uint8_t index, const protect_threshold_t
     }
     apply_protect_config(config);
     source = source == nullptr ? "unknown" : source;
-    PROTECT_LOGI("threshold updated source=%s channel=%s", source, info.name);
-    BlackboxService::append_text_event("protect: threshold_updated source=%s channel=%s", source, info.name);
+    DEVICE_EVENT_I(PROTECT_LOG_TAG, "protect: threshold_updated source=%s channel=%s",
+                   source, info.name);
     log_threshold_values(info.name, threshold);
     return ESP_OK;
 }
@@ -547,7 +558,7 @@ void protect_task(void* pvParameters){
         if(temp_state != global_state_protects.temperature_protect_state){
             last_state = global_state_protects.temperature_protect_state;
             global_state_protects.temperature_protect_state = temp_state;
-            append_state_change_event("OTP", last_state, temp_state, glb_states.board_temperature / 100.0f, temperature_threshold);
+            log_state_change_event("OTP", last_state, temp_state, glb_states.board_temperature / 100.0f, temperature_threshold);
             for(auto& cb : protect_change_callbacks){
                 cb(last_state, temp_state);
             }
@@ -559,7 +570,7 @@ void protect_task(void* pvParameters){
         if(temp_state != global_state_protects.high_voltage_protect_state){
             last_state = global_state_protects.high_voltage_protect_state;
             global_state_protects.high_voltage_protect_state = temp_state;
-            append_state_change_event("OVP", last_state, temp_state, glb_states.voltage_mV / 1e3, high_voltage_threshold);
+            log_state_change_event("OVP", last_state, temp_state, glb_states.voltage_mV / 1e3, high_voltage_threshold);
             for(auto& cb : protect_change_callbacks){
                 cb(last_state, temp_state);
             }
@@ -571,7 +582,7 @@ void protect_task(void* pvParameters){
         if(temp_state != global_state_protects.low_voltage_protect_state){
             last_state = global_state_protects.low_voltage_protect_state;
             global_state_protects.low_voltage_protect_state = temp_state;
-            append_state_change_event("UVP", last_state, temp_state, glb_states.voltage_mV / 1e3, low_voltage_threshold);
+            log_state_change_event("UVP", last_state, temp_state, glb_states.voltage_mV / 1e3, low_voltage_threshold);
             for(auto& cb : protect_change_callbacks){
                 cb(last_state, temp_state);
             }
@@ -583,7 +594,7 @@ void protect_task(void* pvParameters){
         if(temp_state != global_state_protects.current_protect_state){
             last_state = global_state_protects.current_protect_state;
             global_state_protects.current_protect_state = temp_state;
-            append_state_change_event("OCP", last_state, temp_state, std::abs(glb_states.current_uA) / 1e6, current_threshold);
+            log_state_change_event("OCP", last_state, temp_state, std::abs(glb_states.current_uA) / 1e6, current_threshold);
             for(auto& cb : protect_change_callbacks){
                 cb(last_state, temp_state);
             }
@@ -596,8 +607,8 @@ void protect_task(void* pvParameters){
             first_check = false;
             _protect_init_ok = true;
             glb_states.flags.bits.protect_initialized = true;
-            ESP_LOGI(PROTECT_LOG_TAG, "protect first check complete");
-            BlackboxService::append_event("protect: first_check_complete");
+            DEVICE_STATE_I(PROTECT_LOG_TAG,
+                           "protect: lifecycle old=starting new=ready result=ok");
         }
 
         xTaskDelayUntil(&ticks, configTICK_RATE_HZ / protect_check_HZ);
@@ -631,7 +642,8 @@ esp_err_t protect_deinit(){
         glb_states.flags.bits.protect_initialized = false;
         vTaskDelete(protect_task_handle);
         protect_task_handle = nullptr;
-        BlackboxService::append_event("protect: deinit");
+        DEVICE_STATE_I(PROTECT_LOG_TAG,
+                       "protect: lifecycle old=ready new=stopped result=ok");
     }else{
         ESP_LOGW(PROTECT_LOG_TAG, "protect task not running");
     }

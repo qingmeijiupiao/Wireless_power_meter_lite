@@ -162,6 +162,7 @@ shell.register_command(ShellCommand_t("echo", "Echo input text", "<text>",
 - [`web_backend`](../web_backend/README.md)（`app`）
 - [`wifi_service`](../wifi_service/README.md)（`app`）
 - [`blackbox`](../../middleware/blackbox/README.md)（`middleware`）
+- [`diagnostic_log`](../../common/diagnostic_log/README.md)（`common`）
 - [`energy_meter`](../../middleware/energy_meter/README.md)（`middleware`）
 - [`espnow_link`](../../middleware/espnow_link/README.md)（`middleware`）
 - [`hardware`](../../bsp/hardware/README.md)（`bsp`）

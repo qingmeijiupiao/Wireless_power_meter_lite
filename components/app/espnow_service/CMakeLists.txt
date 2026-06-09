@@ -9,6 +9,6 @@ idf_component_register(
         power_output
         energy_meter
         global_state
-        blackbox_service
+        diagnostic_log
     PRIV_REQUIRES freertos log esp_system esp_timer
 )

@@ -17,7 +17,7 @@
 #include "soc/lp_clkrst_struct.h"
 #include "current_calibration.h"
 #include "global_state.h"
-#include "blackbox_service.h"
+#include "diagnostic_log.h"
 #include <stddef.h>
 const char *LPTAG = "LP_CORE";
 
@@ -122,17 +122,16 @@ void load_current_calib_params(bool need_flag = true){
         reinterpret_cast<ULP_CORE_STATE*>(&ulp_ulp_state)->ulp_state_bits.ulp_reload_calib_params = true;
     }
     ulp_lp_core_exit_critical(rtc_shared_lock);
-    BlackboxService::append_text_event("lp: calib_loaded base_k=%u temperature_k=%d reload=%u",
-                                       static_cast<unsigned>(params.current_base_K),
-                                       params.temperature_K,
-                                       need_flag ? 1U : 0U);
+    DEVICE_EVENT_I(LPTAG, "lp: calib_loaded base_k=%u temperature_k=%d reload=%u",
+                   static_cast<unsigned>(params.current_base_K),
+                   params.temperature_K,
+                   need_flag ? 1U : 0U);
 }
 
 
 esp_err_t LP_Core_Load(void){
-    ESP_LOGI(LPTAG, "main core start init lp core...");
-    BlackboxService::append_text_event("lp: init_start i2c_hz=%lu",
-                                       static_cast<unsigned long>(i2c_cfg.i2c_timing_cfg.clk_speed_hz));
+    DEVICE_EVENT_I(LPTAG, "lp: init_start i2c_hz=%lu",
+                   static_cast<unsigned long>(i2c_cfg.i2c_timing_cfg.clk_speed_hz));
     LP_CLKRST.lp_clk_conf.fast_clk_sel = 1; //IDF 6.0版本默认是内部RC时钟(17.5MHz)，且没有API可以切换到外部时钟源，需要手动操作寄存器切换到外部时钟源(20MHz)
 
     ESP_LOGI(LPTAG, "main core start init i2c...");
@@ -175,24 +174,21 @@ esp_err_t LP_Core_Load(void){
     LP_Core_Snapshot snapshot = {};
     LP_Core_GetSnapshot(&snapshot);
     if(snapshot.state.ulp_state_bits.ulp_i2c_init_err){
-        ESP_LOGE(LPTAG, "INA226 unavailable: communication failed");
-        BlackboxService::append_event("lp: ina226_unavailable reason=communication_failed manufacturer=0x%04x",
-                                      static_cast<unsigned>(snapshot.ina226_manufacturer_id));
+        ESP_LOGE(LPTAG, "lp: ina226 result=unavailable reason=communication_failed manufacturer=0x%04x",
+                 static_cast<unsigned>(snapshot.ina226_manufacturer_id));
     }else{
         ESP_LOGI(LPTAG, "lp core i2c init success...");
     }
 
     if(timeout <= 0){
         ESP_LOGE(LPTAG, "lp core run timeout");
-        BlackboxService::append_event("lp: run_timeout");
         return ESP_ERR_TIMEOUT;
     }else{
         ESP_LOGI(LPTAG, "lp core run success...");
         LP_Core_GetSnapshot(&snapshot);
-        ESP_LOGI(LPTAG, "first read value: voltageuV=%d currentuA=%d", snapshot.voltage_uv, snapshot.current_uA);
-        BlackboxService::append_text_event("lp: run_ok voltage_uv=%ld current_ua=%ld",
-                                           static_cast<long>(snapshot.voltage_uv),
-                                           static_cast<long>(snapshot.current_uA));
+        DEVICE_STATE_I(LPTAG, "lp: lifecycle old=starting new=running voltage_uv=%ld current_ua=%ld",
+                       static_cast<long>(snapshot.voltage_uv),
+                       static_cast<long>(snapshot.current_uA));
     }
 
     xTaskCreate(print_lp_core_log_task, "print_lp_core_log", 2048, NULL, 4, NULL);

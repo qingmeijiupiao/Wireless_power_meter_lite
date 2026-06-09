@@ -12,23 +12,24 @@
   与非 leap-smear 时间源。
 - 使用平滑校时模式。首次偏差超过 SDK 阈值时，ESP-IDF 会自动立即校准。
 - lwIP 每小时自动校时；STA 获取 IP 后主动重启一次 SNTP 请求。
-- 事件回调只投递轻量队列，后台任务负责格式化时间和写黑匣子。
+- 事件回调只投递轻量队列，后台任务负责格式化时间并输出持久化诊断事件。
 - 未完成首次同步时，查询接口不会把系统初始时间误报为有效本地时间。
 
 ## 黑匣子事件
 
-每次成功校时输出三条短 `ESP_LOGW`，由应用层 `blackbox_service` 安装的全局日志钩子
-自动归档。三条日志使用相同的 `unix_s` 作为 CSV 对齐键，分别保存原始 Unix 时间戳、
+每次成功校时通过 `diagnostic_log` 输出三条 `INFO` 事件，由应用层全局日志 Hook 自动归档。
+第一条状态事件附加快照，后两条只保存文本。三条日志使用相同的 `unix_s` 作为对齐键，
+分别保存原始 Unix 时间戳、
 UTC+0 和 UTC+8：
 
 ```text
-[W][TimeService] sync raw unix_s=1780389000 unix_us=123456
-[W][TimeService] sync utc unix_s=1780389000 iso=2026-06-02T08:30:00Z
-[W][TimeService] sync local unix_s=1780389000 iso=2026-06-02T16:30:00+08:00 timezone=CST-8
+[I][TimeService] time: sync old=unsynchronized new=synchronized unix_s=1780389000 unix_us=123456
+[I][TimeService] time: utc unix_s=1780389000 iso=2026-06-02T08:30:00Z
+[I][TimeService] time: local unix_s=1780389000 iso=2026-06-02T16:30:00+08:00 timezone=CST-8
 ```
 
-失败只输出 `ESP_LOGI`，不触发黑匣子归档。底层黑匣子记录头仍保留原有 uptime
-时间戳语义，历史格式不迁移。
+失败和队列溢出使用 `WARN` / `ERROR`，由 Hook 自动保存文本并强制追加快照。底层黑匣子
+记录头仍保留原有 uptime 时间戳语义。
 
 ## API
 
@@ -51,7 +52,9 @@ UTC+0 和 UTC+8：
 <!-- dependency-links:start -->
 ## 依赖导航
 
-无工程内组件依赖；仅依赖 ESP-IDF 组件或 C/C++ 标准库。
+工程内直接依赖：
+
+- [`diagnostic_log`](../../common/diagnostic_log/README.md)（`common`）
 
 > 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
 <!-- dependency-links:end -->

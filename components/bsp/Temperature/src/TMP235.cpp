@@ -6,6 +6,7 @@
  * @LastEditTime: 2026-04-29 01:22:58
  */
 #include "TMP235.h"
+#include "diagnostic_log.h"
 #include "esp_log.h"
 TMP235_t& TMP235_t::instance() {
     static TMP235_t inst;
@@ -52,7 +53,9 @@ int16_t TMP235_t::getTemperature() {
         return avg_buf_count == 0 ? 0 : avg_sum / avg_buf_count;
     }
     if (fault_reported) {
-        ESP_LOGI("TMP235", "sensor reading recovered: %d mV", adc_value_mv);
+        DEVICE_STATE_I("TMP235",
+                       "temperature: sensor=board old=fault new=ready result=recovered voltage_mv=%d",
+                       adc_value_mv);
         fault_reported = false;
     }
     int16_t raw_temp;

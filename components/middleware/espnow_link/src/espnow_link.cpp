@@ -5,6 +5,7 @@
 
 #include "esp_check.h"
 #include "esp_log.h"
+#include "diagnostic_log.h"
 #include "esp_now.h"
 #include "esp_random.h"
 #include "espnow_link_internal.h"
@@ -143,7 +144,7 @@ esp_err_t activate() {
     }
 
     active = true;
-    ESP_LOGI(TAG, "ESP-NOW active");
+    DEVICE_STATE_I(TAG, "espnow: link old=inactive new=active result=ok");
     return ESP_OK;
 }
 
@@ -157,7 +158,7 @@ void deactivate() {
     esp_now_deinit();
     active = false;
     pending = {};
-    ESP_LOGI(TAG, "ESP-NOW inactive");
+    DEVICE_STATE_I(TAG, "espnow: link old=active new=inactive result=ok");
 }
 
 static void radio_event_handler(WiFiManager::RadioEvent event, void*) {

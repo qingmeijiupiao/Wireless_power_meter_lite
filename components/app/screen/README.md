@@ -216,6 +216,7 @@ ESP_ERROR_CHECK(SCREEN::init_buttons());
 - [`protect`](../protect/README.md)（`app`）
 - [`wifi_service`](../wifi_service/README.md)（`app`）
 - [`blackbox`](../../middleware/blackbox/README.md)（`middleware`）
+- [`diagnostic_log`](../../common/diagnostic_log/README.md)（`common`）
 - [`Button`](../../middleware/Button/README.md)（`middleware`）
 - [`can_resistor`](../../middleware/can_resistor/README.md)（`middleware`）
 - [`energy_meter`](../../middleware/energy_meter/README.md)（`middleware`）

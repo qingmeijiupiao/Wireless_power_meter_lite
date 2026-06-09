@@ -4,6 +4,7 @@
 
 #include "esp_check.h"
 #include "esp_log.h"
+#include "diagnostic_log.h"
 #include "esp_now.h"
 #include "esp_random.h"
 #include "esp_wifi.h"
@@ -240,7 +241,8 @@ void handle_pair_confirm(const PairEvent& event) {
     peer.channel = pending_channel;
     peer.encrypted = true;
     if (save_peer(peer, pending_channel) == ESP_OK) {
-        ESP_LOGI(TAG, "peer paired");
+        DEVICE_STATE_I(TAG, "espnow: peer action=paired role=responder channel=%u result=ok",
+                       static_cast<unsigned>(pending_channel));
         pair_transaction_active = false;
         leave_pairing_mode();
     }
@@ -360,7 +362,8 @@ void run_channel_recovery(const MacAddress& peer) {
             update_peer_channel(peer, channel);
             channel_recovery_result = ESP_OK;
             channel_recovering = false;
-            ESP_LOGI(TAG, "peer channel recovered: %u", channel);
+            DEVICE_STATE_I(TAG, "espnow: peer_channel state=recovered channel=%u result=ok",
+                           static_cast<unsigned>(channel));
             return;
         }
     }
@@ -550,7 +553,8 @@ void pairing_task(void*) {
                     save_peer(peer, pending_channel);
                     initiating_pairing = false;
                     unregister_initiator_handlers();
-                    ESP_LOGI(TAG, "peer paired");
+                    DEVICE_STATE_I(TAG, "espnow: peer action=paired role=initiator channel=%u result=ok",
+                                   static_cast<unsigned>(pending_channel));
                 } else {
                     EspNowLink::remove_peer(pending_peer);
                     initiating_pairing = false;
@@ -626,6 +630,8 @@ esp_err_t enter_pairing_mode(uint32_t timeout_ms) {
     pair_transaction_active = false;
     pending_peer = {};
     memset(pending_lmk, 0, sizeof(pending_lmk));
+    DEVICE_STATE_I(TAG, "espnow: pairing old=stopped new=active timeout_ms=%lu result=ok",
+                   static_cast<unsigned long>(timeout_ms));
     return ESP_OK;
 }
 
@@ -642,6 +648,7 @@ void leave_pairing_mode() {
         restore_peers();
         pair_transaction_active = false;
     }
+    DEVICE_STATE_I(TAG, "espnow: pairing old=active new=stopped result=ok");
 }
 
 bool is_pairing() {
@@ -701,6 +708,7 @@ esp_err_t remove_saved_peer(const EspNowLink::MacAddress& address) {
 }
 
 esp_err_t clear_saved_peers() {
+    const size_t previous_count = Internal::saved_peer_count();
     for (size_t i = 0; i < Internal::MAX_SAVED_PEERS; ++i) {
         SavedPeer peer = {};
         if (Internal::read_saved_peer(0, &peer) != ESP_OK) {
@@ -709,6 +717,8 @@ esp_err_t clear_saved_peers() {
         EspNowLink::remove_peer(peer.address);
         Internal::erase_peer(peer.address);
     }
+    DEVICE_STATE_W(Internal::TAG, "espnow: peers action=clear old_count=%u new_count=0 result=ok",
+                   static_cast<unsigned>(previous_count));
     return ESP_OK;
 }
 

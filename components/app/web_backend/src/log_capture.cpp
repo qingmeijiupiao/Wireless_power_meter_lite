@@ -13,7 +13,7 @@
 
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
-#include "blackbox_service.h"
+#include "diagnostic_log.h"
 
 namespace WebBackend {
 
@@ -166,8 +166,8 @@ esp_err_t log_middleware(WebServer::Request* request) {
     if (request->method != WebServer::Method::GET &&
         request->method != WebServer::Method::HEAD &&
         request->method != WebServer::Method::OPTIONS) {
-        BlackboxService::append_text_event("web: action ip=%s method=%s uri=%s",
-                                           request->peer_ip, method, request->uri);
+        DEVICE_EVENT_I("WebBackend", "web: action ip=%s method=%s uri=%s",
+                       request->peer_ip, method, request->uri);
     }
     return ESP_OK;
 }

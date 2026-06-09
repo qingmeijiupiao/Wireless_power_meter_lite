@@ -63,7 +63,8 @@ flowchart TB
     App --> BSP["bsp<br/>芯片与板级驱动"]
     App --> Assets["assets<br/>字体 / 图片 / Web 资源"]
     Middleware --> BSP
-    BSP --> Common["common<br/>无设备业务语义的算法"]
+    Middleware --> Common["common<br/>通用算法与日志契约"]
+    BSP --> Common
     Assets --> BSP
 ```
 
@@ -114,7 +115,7 @@ flowchart TB
 
 | 层级 | 模块 |
 |------|------|
-| `common` | [Interp](components/common/Interp/README.md) |
+| `common` | [diagnostic_log](components/common/diagnostic_log/README.md) · [Interp](components/common/Interp/README.md) |
 | `assets` | [Fonts](components/assets/Fonts/README.md) · [ui_resources](components/assets/ui_resources/README.md) · [web_file](components/assets/web_file/README.md) |
 
 ## Web 后端概览

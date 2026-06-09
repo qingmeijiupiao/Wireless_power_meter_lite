@@ -11,6 +11,7 @@
 #include <cstring>
 
 #include "esp_log.h"
+#include "diagnostic_log.h"
 #include "esp_system.h"
 #include "global_state.h"
 #include "web_file.h"
@@ -163,6 +164,7 @@ esp_err_t start() {
     if (ret == ESP_OK) {
         running = true;
         get_global_state().flags.bits.web_backend_running = true;
+        DEVICE_STATE_I(TAG, "web: lifecycle old=stopped new=running port=80 result=ok");
     }
     return ret;
 }
@@ -198,7 +200,8 @@ esp_err_t start_with_wifi_service() {
     }
 
     IP_t ip = WifiService::get_ip();
-    ESP_LOGI(TAG, "Web active, open http://%u.%u.%u.%u/", ip.octet1, ip.octet2, ip.octet3, ip.octet4);
+    DEVICE_EVENT_I(TAG, "web: endpoint ip=%u.%u.%u.%u port=80",
+                   ip.octet1, ip.octet2, ip.octet3, ip.octet4);
 
     if (web_ret != ESP_OK) {
         return web_ret;
@@ -208,9 +211,14 @@ esp_err_t start_with_wifi_service() {
 
 /** @brief 停止 HTTP 服务并更新运行标志。 */
 esp_err_t stop() {
+    const bool was_running = running;
     running = false;
     get_global_state().flags.bits.web_backend_running = false;
-    return WebServer::stop();
+    const esp_err_t ret = WebServer::stop();
+    if (was_running && ret == ESP_OK) {
+        DEVICE_STATE_I(TAG, "web: lifecycle old=running new=stopped result=ok");
+    }
+    return ret;
 }
 
 /** @brief 查询 Web 后端运行状态。 */

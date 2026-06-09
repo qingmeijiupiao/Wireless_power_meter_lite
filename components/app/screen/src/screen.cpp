@@ -8,6 +8,7 @@
 #include "screen.h"
 
 #include "esp_log.h"
+#include "diagnostic_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "HXC_NVS.h"
@@ -93,7 +94,7 @@ esp_err_t init_buttons() {
         ESP_LOGE(TAG, "side button init failed: %s", esp_err_to_name(ret));
         return ret;
     }
-    ESP_LOGI(TAG, "buttons initialized");
+    DEVICE_EVENT_I(TAG, "ui: buttons state=initialized result=ok");
     return ESP_OK;
 }
 
@@ -133,7 +134,7 @@ void screen_task(void* arg) {
 
     get_global_state().flags.bits.screen_initialized = true;
 
-    ESP_LOGI(TAG, "Screen task started");
+    DEVICE_STATE_I(TAG, "ui: lifecycle old=starting new=running result=ok");
     while (true) {
         UIManager::instance().loop_once();
     }

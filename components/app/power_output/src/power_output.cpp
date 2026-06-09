@@ -12,7 +12,7 @@
 #include "global_state.h"
 #include "protect.h"
 #include "esp_log.h"
-#include "blackbox_service.h"
+#include "diagnostic_log.h"
 #include <array>
 
 namespace PowerOutput {
@@ -116,22 +116,23 @@ esp_err_t init(gpio_num_t output_gpio_num) {
     add_on_protect_change_callback([](ProtectState_t last_state, ProtectState_t new_state) {
         if (new_state == PROTECT_STATE_PROTECT) {
             if (protect_should_block_output()) {
-                ESP_LOGW(TAG, "protect triggered, force disable output");
+                const bool old_output_state = get_state();
                 apply_state(false);
                 notify_policies_applied(OutputOperation::OFF, false);
-                BlackboxService::append_event("output: forced_off reason=protect");
+                DEVICE_STATE_W(TAG, "output: state old=%u new=0 source=protect result=forced_off",
+                               old_output_state ? 1U : 0U);
             } else {
-                ESP_LOGW(TAG, "protect triggered but bypassed, output kept unchanged");
+                DEVICE_STATE_W(TAG, "output: state source=protect result=kept reason=bypassed state=%u",
+                               get_state() ? 1U : 0U);
             }
         }
     });
 
     _initialized = true;
-    ESP_LOGI(TAG, "initialized on GPIO %d, on_cooldown %lu ms, off_cooldown %lu ms", output_gpio_num, (unsigned long)OUTPUT_ON_COOLDOWN_MS, (unsigned long)OUTPUT_OFF_COOLDOWN_MS);
-    BlackboxService::append_text_event("output: init gpio=%d on_cd_ms=%lu off_cd_ms=%lu",
-                                       output_gpio_num,
-                                       static_cast<unsigned long>(OUTPUT_ON_COOLDOWN_MS),
-                                       static_cast<unsigned long>(OUTPUT_OFF_COOLDOWN_MS));
+    DEVICE_EVENT_I(TAG, "output: init gpio=%d on_cd_ms=%lu off_cd_ms=%lu",
+                   output_gpio_num,
+                   static_cast<unsigned long>(OUTPUT_ON_COOLDOWN_MS),
+                   static_cast<unsigned long>(OUTPUT_OFF_COOLDOWN_MS));
     return ESP_OK;
 }
 
@@ -144,7 +145,7 @@ esp_err_t deinit() {
     _initialized = false;
     _callback_count = 0;
     _policy_count = 0;
-    BlackboxService::append_text_event("output: deinit");
+    DEVICE_STATE_I(TAG, "output: lifecycle old=initialized new=stopped state=0");
     return ESP_OK;
 }
 
@@ -157,20 +158,16 @@ OutputResult on(const char* source) {
     source = source_or_unknown(source);
     if (!_initialized) {
         ESP_LOGE(TAG, "request source=%s op=on result=not_initialized", source);
-        BlackboxService::append_event("output: request source=%s op=on result=not_initialized", source);
         return OutputResult::FAIL_NOT_INIT;
     }
     OutputResult result = check_policies(OutputOperation::ON);
     if (result != OutputResult::OK) {
         ESP_LOGW(TAG, "request source=%s op=on result=%s state=%u", source, result_to_str(result), get_state() ? 1U : 0U);
-        BlackboxService::append_event("output: request source=%s op=on result=%s state=%u",
-                                      source, result_to_str(result), get_state() ? 1U : 0U);
         return result;
     }
     apply_state(true);
     notify_policies_applied(OutputOperation::ON, true);
-    ESP_LOGI(TAG, "request source=%s op=on result=ok state=1", source);
-    BlackboxService::append_event("output: request source=%s op=on result=ok state=1", source);
+    DEVICE_STATE_I(TAG, "output: state source=%s op=on old=0 new=1 result=ok", source);
     return OutputResult::OK;
 }
 
@@ -178,20 +175,16 @@ OutputResult off(const char* source) {
     source = source_or_unknown(source);
     if (!_initialized) {
         ESP_LOGE(TAG, "request source=%s op=off result=not_initialized", source);
-        BlackboxService::append_event("output: request source=%s op=off result=not_initialized", source);
         return OutputResult::FAIL_NOT_INIT;
     }
     OutputResult result = check_policies(OutputOperation::OFF);
     if (result != OutputResult::OK) {
         ESP_LOGW(TAG, "request source=%s op=off result=%s state=%u", source, result_to_str(result), get_state() ? 1U : 0U);
-        BlackboxService::append_event("output: request source=%s op=off result=%s state=%u",
-                                      source, result_to_str(result), get_state() ? 1U : 0U);
         return result;
     }
     apply_state(false);
     notify_policies_applied(OutputOperation::OFF, false);
-    ESP_LOGI(TAG, "request source=%s op=off result=ok state=0", source);
-    BlackboxService::append_event("output: request source=%s op=off result=ok state=0", source);
+    DEVICE_STATE_I(TAG, "output: state source=%s op=off old=1 new=0 result=ok", source);
     return OutputResult::OK;
 }
 
@@ -199,7 +192,6 @@ OutputResult toggle(const char* source) {
     source = source_or_unknown(source);
     if (!_initialized) {
         ESP_LOGE(TAG, "request source=%s op=toggle result=not_initialized", source);
-        BlackboxService::append_event("output: request source=%s op=toggle result=not_initialized", source);
         return OutputResult::FAIL_NOT_INIT;
     }
     OutputOperation op = get_state() ? OutputOperation::OFF : OutputOperation::ON;
@@ -207,18 +199,13 @@ OutputResult toggle(const char* source) {
     if (result != OutputResult::OK) {
         ESP_LOGW(TAG, "request source=%s op=toggle target=%u result=%s state=%u",
                  source, op == OutputOperation::ON ? 1U : 0U, result_to_str(result), get_state() ? 1U : 0U);
-        BlackboxService::append_event("output: request source=%s op=toggle target=%u result=%s state=%u",
-                                      source,
-                                      op == OutputOperation::ON ? 1U : 0U,
-                                      result_to_str(result),
-                                      get_state() ? 1U : 0U);
         return result;
     }
     bool new_state = (op == OutputOperation::ON);
     apply_state(new_state);
     notify_policies_applied(op, new_state);
-    ESP_LOGI(TAG, "request source=%s op=toggle result=ok state=%u", source, new_state ? 1U : 0U);
-    BlackboxService::append_event("output: request source=%s op=toggle result=ok state=%u", source, new_state ? 1U : 0U);
+    DEVICE_STATE_I(TAG, "output: state source=%s op=toggle old=%u new=%u result=ok",
+                   source, new_state ? 0U : 1U, new_state ? 1U : 0U);
     return OutputResult::OK;
 }
 

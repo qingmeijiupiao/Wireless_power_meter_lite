@@ -54,7 +54,8 @@ esp_err_t append_event(const char* fmt, ...);
 /**
  * @brief 仅写入文本事件，不追加状态快照。
  *
- * 用于配置、审计、操作记录和启动诊断块等低频信息，避免写入无必要快照。
+ * 仅用于启动诊断、黑匣子管理和服务内部记录。普通业务事件应使用
+ * diagnostic_log 的 DEVICE_EVENT_I / DEVICE_STATE_I。
  */
 esp_err_t append_text_event(const char* fmt, ...);
 

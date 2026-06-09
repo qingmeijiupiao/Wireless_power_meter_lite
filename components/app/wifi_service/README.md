@@ -149,7 +149,6 @@ wifi clear
 
 工程内直接依赖：
 
-- [`blackbox_service`](../blackbox_service/README.md)（`app`）
 - [`espnow_service`](../espnow_service/README.md)（`app`）
 - [`global_state`](../global_state/README.md)（`app`）
 - [`DNSServer`](../../middleware/DNSServer/README.md)（`middleware`）
@@ -158,6 +157,7 @@ wifi clear
 - [`WebServer`](../../middleware/WebServer/README.md)（`middleware`）
 - [`HXC_NVS`](../../bsp/HXC_NVS/README.md)（`bsp`）
 - [`wifi_manager`](../../bsp/wifi_manager/README.md)（`bsp`）
+- [`diagnostic_log`](../../common/diagnostic_log/README.md)（`common`）
 
 > 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
 <!-- dependency-links:end -->

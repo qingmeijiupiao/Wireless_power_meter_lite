@@ -6,6 +6,7 @@
  * @LastEditTime: 2026-06-01 18:27:10
  */
 #include "ESPChipTemperatureSensor.h"
+#include "diagnostic_log.h"
 constexpr char* TAG = "ESPTemp";
 
 ESPChipTemperatureSensor_t& ESPChipTemperatureSensor_t::instance() {
@@ -58,7 +59,7 @@ float ESPChipTemperatureSensor_t::getTemperature() {
         return temp_data;
     }
     if (fault_reported) {
-        ESP_LOGI(TAG, "sensor reading recovered");
+        DEVICE_STATE_I(TAG, "temperature: sensor=chip old=fault new=ready result=recovered");
         fault_reported = false;
     }
 
