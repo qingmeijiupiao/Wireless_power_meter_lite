@@ -3,7 +3,6 @@
 #include "HXC_NVS.h"
 #include "cpp_gpio_driver.hpp"
 #include "esp_log.h"
-#include "global_state.h"
 
 namespace {
 
@@ -12,9 +11,6 @@ constexpr const char* TAG = "CanResistor";
 CppGpioDriver<GPIO_NUM_NC, GpioMode::OUTPUT> resistor_gpio;
 HXC::NVS_DATA<uint8_t> saved_state("can_term", 0);
 
-void update_global_state(bool enabled) {
-    get_global_state().flags.bits.can_resistor_enabled = enabled;
-}
 
 } // namespace
 
@@ -35,7 +31,6 @@ esp_err_t CanResistor::init(gpio_num_t gpio_num) {
         return err;
     }
 
-    resistor_gpio.set_on_change_callback(update_global_state);
     err = resistor_gpio.set(saved_state.read() != 0);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "failed to restore saved state: %s", esp_err_to_name(err));
@@ -77,4 +72,9 @@ esp_err_t CanResistor::toggle() {
 
 bool CanResistor::get() const {
     return resistor_gpio.get();
+}
+
+esp_err_t CanResistor::add_on_change_callback(std::function<void(bool)> callback) {
+    resistor_gpio.set_on_change_callback(callback);
+    return ESP_OK;
 }

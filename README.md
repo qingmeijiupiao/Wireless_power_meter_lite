@@ -68,11 +68,6 @@ flowchart TB
     Assets --> BSP
 ```
 
-当前已知边界例外：[`can_resistor`](components/middleware/can_resistor/README.md)
-会同步写入 [`global_state`](components/app/global_state/README.md)，因此形成
-`middleware -> app` 反向依赖。该组件包含设备业务状态，后续调整目录或状态发布
-机制时再收口；其余中间件不依赖应用层。
-
 组件若需要私有头文件，统一放在 `private_include/` 并通过
 `PRIV_INCLUDE_DIRS` 引入；跨组件公开接口放在 `include/`。
 

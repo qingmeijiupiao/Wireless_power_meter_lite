@@ -3,11 +3,11 @@
  * @Author: qingmeijiupiao
  * @version: 2.0.0
  * @Date: 2024-09-06 18:38:48
- * @LastEditTime: 2026-06-01 18:27:10
+ * @LastEditTime: 2026-06-09 20:10:43
  */
 #include "ESPChipTemperatureSensor.h"
 #include "diagnostic_log.h"
-constexpr char* TAG = "ESPTemp";
+constexpr const char* TAG = "ESPTemp";
 
 ESPChipTemperatureSensor_t& ESPChipTemperatureSensor_t::instance() {
     static ESPChipTemperatureSensor_t inst;

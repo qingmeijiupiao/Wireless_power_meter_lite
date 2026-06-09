@@ -3,14 +3,14 @@
  * @LastEditors: qingmeijiupiao
  * @Description: CAN 终端电阻控制
  * @author: qingmeijiupiao
- * @LastEditTime: 2026-06-01 18:37:11
+ * @LastEditTime: 2026-06-09 20:02:55
  */
 #ifndef CAN_RESISTOR_H
 #define CAN_RESISTOR_H
 
 #include "driver/gpio.h"
 #include "esp_err.h"
-
+#include <functional>
 class CanResistor {
 public:
     /**
@@ -45,11 +45,16 @@ public:
      */
     bool get() const;
 
+    /**
+     * @brief 添加终端电阻状态改变回调函数。
+     * @param callback 回调函数，参数为当前终端电阻状态。
+     * @return ESP_OK 成功，其他值表示参数无效。
+     */
+    esp_err_t add_on_change_callback(std::function<void(bool)> callback);
 private:
     CanResistor() = default;
     CanResistor(const CanResistor&) = delete;
     CanResistor& operator=(const CanResistor&) = delete;
-
     bool initialized_ = false;
 };
 

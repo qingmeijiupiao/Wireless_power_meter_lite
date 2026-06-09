@@ -60,7 +60,12 @@ bool is_available() {
 esp_err_t init() {
     auto& hw = get_hardware_config();
     auto& can_resistor = CanResistor::instance();
-
+    can_resistor.add_on_change_callback([](bool enabled) {
+        auto& state = get_global_state();
+        state.flags.bits.can_resistor_enabled = enabled;
+        ESP_LOGW(TAG, "CAN resistor changed to %s", enabled ? "ON" : "OFF");
+    });
+       
     esp_err_t ret = can_resistor.init(hw.CAN_RESISTOR_ENABLE);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "CAN resistor init failed on GPIO %d: %s",
@@ -137,6 +142,7 @@ esp_err_t init() {
                        msg->data[0] == 0x01 ? 1U : 0U,
                        static_cast<unsigned>(result));
     });
+    
     /**
      * @brief  设置终端电阻 回调
      * @action 设置终端电阻 回调，根据终端电阻状态设置终端电阻引脚
