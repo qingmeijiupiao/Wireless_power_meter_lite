@@ -287,7 +287,11 @@ esp_err_t init() {
                 printf("Error: invalid baudrate\n");
                 return 1;
             }
-            CanCallback::CAN_BAUDRATE = baudrate;
+            const esp_err_t err = CanCallback::CAN_BAUDRATE.set(baudrate);
+            if (err != ESP_OK) {
+                printf("Error: failed to persist CAN baudrate: %s\n", esp_err_to_name(err));
+                return 1;
+            }
             BlackboxService::append_text_event("can: config baud=%lu source=shell reboot_required=1",
                                                static_cast<unsigned long>(baudrate));
             printf("CAN baudrate set to %lu\n", baudrate);
@@ -308,7 +312,11 @@ esp_err_t init() {
                 return 0;
             }
             uint32_t id = (uint32_t)strtoul(argv[1], nullptr, 0);
-            CanCallback::CAN_ID = id;
+            const esp_err_t err = CanCallback::CAN_ID.set(id);
+            if (err != ESP_OK) {
+                printf("Error: failed to persist CAN ID: %s\n", esp_err_to_name(err));
+                return 1;
+            }
             BlackboxService::append_text_event("can: config id=0x%lx source=shell reboot_required=1",
                                                static_cast<unsigned long>(id));
             printf("CAN ID set to %lu (0x%lX)\n", id, id);
@@ -394,7 +402,11 @@ esp_err_t init() {
                 return 1;
             }
 
-            SCREEN::set_start_logo_duration_ms(static_cast<uint32_t>(duration_ms));
+            const esp_err_t err = SCREEN::set_start_logo_duration_ms(static_cast<uint32_t>(duration_ms));
+            if (err != ESP_OK) {
+                printf("Error: failed to persist startup logo duration: %s\n", esp_err_to_name(err));
+                return 1;
+            }
             BlackboxService::append_text_event("ui: config source=%s start_logo_ms=%lu reboot_required=1",
                                                TAG, duration_ms);
             printf("Startup logo duration set to %lu ms, restart required\n", duration_ms);
@@ -862,7 +874,11 @@ esp_err_t init() {
             auto params = CurrentCalib::params_data.read();
             int basek = atoi(argv[1]);
             params.current_base_K = basek;
-            CurrentCalib::params_data = params;
+            const esp_err_t err = CurrentCalib::params_data.set(params);
+            if (err != ESP_OK) {
+                printf("Error: failed to persist calibration: %s\n", esp_err_to_name(err));
+                return 1;
+            }
             BlackboxService::append_text_event("calib: base_k=%d reboot_required=1", basek);
             printf("Calibration basek set to %d restart required\n", basek);
             return 0;
@@ -878,7 +894,11 @@ esp_err_t init() {
             auto params = CurrentCalib::params_data.read();
             int temperatureK = atoi(argv[1]);
             params.temperature_K = temperatureK;
-            CurrentCalib::params_data = params;
+            const esp_err_t err = CurrentCalib::params_data.set(params);
+            if (err != ESP_OK) {
+                printf("Error: failed to persist calibration: %s\n", esp_err_to_name(err));
+                return 1;
+            }
             BlackboxService::append_text_event("calib: temperature_k=%d reboot_required=1", temperatureK);
             printf("Calibration temperatureK set to %d restart required\n", temperatureK);
             return 0;
@@ -901,7 +921,11 @@ esp_err_t init() {
             int new_offset_current_100uA = atoi(argv[3])/100;
             params.points[point_index].register_value = register_value;
             params.points[point_index].offset_current_100uA = new_offset_current_100uA;
-            CurrentCalib::params_data = params;
+            const esp_err_t err = CurrentCalib::params_data.set(params);
+            if (err != ESP_OK) {
+                printf("Error: failed to persist calibration: %s\n", esp_err_to_name(err));
+                return 1;
+            }
             BlackboxService::append_text_event("calib: point=%d reg=%d offset_100ua=%d reboot_required=1",
                                                point_index,
                                                register_value,
@@ -917,7 +941,11 @@ esp_err_t init() {
             memset(params.points, 0, sizeof(params.points));
             params.temperature_K = 0;
             params.current_base_K = base_k;
-            CurrentCalib::params_data = params;
+            const esp_err_t err = CurrentCalib::params_data.set(params);
+            if (err != ESP_OK) {
+                printf("Error: failed to persist calibration: %s\n", esp_err_to_name(err));
+                return 1;
+            }
             BlackboxService::append_text_event("calib: cleared base_k=%u reboot_required=1",
                                                static_cast<unsigned>(base_k));
             printf("Calibration params cleared (base_K=%d preserved)\n", base_k);

@@ -24,7 +24,7 @@ void load_config();
 uint32_t read_snapshot_interval_s();
 
 /** @brief 更新运行期配置并持久化到 NVS。 */
-void write_snapshot_interval_s(uint32_t seconds);
+esp_err_t write_snapshot_interval_s(uint32_t seconds);
 
 /** @brief 安装 ESP_LOG vprintf 钩子。 */
 void install_log_capture();

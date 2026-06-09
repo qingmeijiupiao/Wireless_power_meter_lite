@@ -2,7 +2,6 @@
 
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
-#include "global_state.h"
 
 namespace EnergyMeter {
 namespace {

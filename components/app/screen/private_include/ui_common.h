@@ -79,7 +79,7 @@ bool ui_config_get_rotation_180();
  * @brief 保存 180 度旋转配置
  * @param enabled true 表示 180 度旋转
  */
-void ui_config_set_rotation_180(bool enabled);
+esp_err_t ui_config_set_rotation_180(bool enabled);
 
 /**
  * @brief 获取已保存的背光档位
@@ -91,7 +91,7 @@ uint8_t ui_config_get_backlight_level();
  * @brief 保存背光档位
  * @param level 背光档位，范围 1-5
  */
-void ui_config_set_backlight_level(uint8_t level);
+esp_err_t ui_config_set_backlight_level(uint8_t level);
 
 /**
  * @brief 获取 WiFi 模式显示文本

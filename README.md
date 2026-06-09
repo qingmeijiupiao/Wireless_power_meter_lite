@@ -50,53 +50,72 @@
 └── .devcontainer/              # VS Code Dev Container
 ```
 
-## 模块文档
+## 架构与模块文档
 
-模块内部设计、API、命令、阈值、路由等细节统一维护在对应模块 README 中，主 README 只保留导航。
+依赖方向原则为 `app -> middleware -> bsp/common`，资源组件由使用方按需引用。
+应用层组件之间允许按业务协作互相依赖，但 BSP 和通用中间件不应依赖应用层。
+每个组件 README 末尾都有按当前 CMake 生成的直接依赖链接。
 
-组件若需要私有头文件，统一放在对应组件的 `private_include/` 并通过 `PRIV_INCLUDE_DIRS` 引入；跨组件公开接口仍放在 `include/`。例如 `web_backend` 的内部 handler 声明位于 `components/app/web_backend/private_include/`，外部只应包含 `web_backend.h`。
+```mermaid
+flowchart TB
+    Main["main<br/>启动编排 / LP Core 加载"] --> App["app<br/>业务服务与设备功能"]
+    App --> Middleware["middleware<br/>可复用服务与协议"]
+    App --> BSP["bsp<br/>芯片与板级驱动"]
+    App --> Assets["assets<br/>字体 / 图片 / Web 资源"]
+    Middleware --> BSP
+    BSP --> Common["common<br/>无设备业务语义的算法"]
+    Assets --> BSP
+```
 
-| 模块 | 文档 |
+当前已知边界例外：[`can_resistor`](components/middleware/can_resistor/README.md)
+会同步写入 [`global_state`](components/app/global_state/README.md)，因此形成
+`middleware -> app` 反向依赖。该组件包含设备业务状态，后续调整目录或状态发布
+机制时再收口；其余中间件不依赖应用层。
+
+组件若需要私有头文件，统一放在 `private_include/` 并通过
+`PRIV_INCLUDE_DIRS` 引入；跨组件公开接口放在 `include/`。
+
+### 启动与工具
+
+| 模块 | 职责 |
 |------|------|
-| 构建与资源脚本 | [scripts/README.md](scripts/README.md) |
-| 主入口与 LP 核加载 | [main/ulp_loader/README.md](main/ulp_loader/README.md) |
-| LP 核采样程序 | [main/ulp_app/README.md](main/ulp_app/README.md) |
-| 全局状态 | [components/app/global_state/README.md](components/app/global_state/README.md) |
-| 保护逻辑 | [components/app/protect/README.md](components/app/protect/README.md) |
-| 输出控制 | [components/app/power_output/README.md](components/app/power_output/README.md) |
-| 屏幕显示 | [components/app/screen/README.md](components/app/screen/README.md) |
-| Shell 命令 | [components/app/shell_command/README.md](components/app/shell_command/README.md) |
-| CAN 回调 | [components/app/can_callback/README.md](components/app/can_callback/README.md) |
-| 电流校准 | [components/app/current_calibration/README.md](components/app/current_calibration/README.md) |
-| Web 后端 | [components/app/web_backend/README.md](components/app/web_backend/README.md) |
-| WiFi 服务 | [components/app/wifi_service/README.md](components/app/wifi_service/README.md) |
-| ESP-NOW 服务 | [components/app/espnow_service/README.md](components/app/espnow_service/README.md) |
-| 时间同步服务 | [components/middleware/time_service/README.md](components/middleware/time_service/README.md) |
-| 黑匣子服务 | [components/app/blackbox_service/README.md](components/app/blackbox_service/README.md) |
-| 硬件配置 | [components/bsp/hardware/README.md](components/bsp/hardware/README.md) |
-| ST7735 驱动 | [components/bsp/st7735_driver/README.md](components/bsp/st7735_driver/README.md) |
-| CAN/TWAI 驱动 | [components/bsp/HXC_TWAI/README.md](components/bsp/HXC_TWAI/README.md) |
-| WiFi 管理 | [components/bsp/wifi_manager/README.md](components/bsp/wifi_manager/README.md) |
-| ESP-NOW 链路 | [components/middleware/espnow_link/README.md](components/middleware/espnow_link/README.md) |
-| NVS 封装 | [components/bsp/HXC_NVS/README.md](components/bsp/HXC_NVS/README.md) |
-| Shell 底层 | [components/bsp/shell/README.md](components/bsp/shell/README.md) |
-| ADC 采样 | [components/bsp/ADC/README.md](components/bsp/ADC/README.md) |
-| PWM 输出 | [components/bsp/PWM/README.md](components/bsp/PWM/README.md) |
-| 温度采样 | [components/bsp/Temperature/README.md](components/bsp/Temperature/README.md) |
-| GPIO 封装 | [components/bsp/cpp_gpio_driver/README.md](components/bsp/cpp_gpio_driver/README.md) |
-| Flash 循环缓冲 | [components/bsp/circular_flash_buffer/README.md](components/bsp/circular_flash_buffer/README.md) |
-| 黑匣子日志引擎 | [components/middleware/blackbox/README.md](components/middleware/blackbox/README.md) |
-| 按键中间件 | [components/middleware/Button/README.md](components/middleware/Button/README.md) |
-| WebServer 中间件 | [components/middleware/WebServer/README.md](components/middleware/WebServer/README.md) |
-| DNS Server 中间件 | [components/middleware/DNSServer/README.md](components/middleware/DNSServer/README.md) |
-| 共享电量计量 | [components/middleware/energy_meter/README.md](components/middleware/energy_meter/README.md) |
-| CAN 终端电阻控制 | [components/middleware/can_resistor/README.md](components/middleware/can_resistor/README.md) |
-| OTA 固件切换 | [components/middleware/ota_manager/README.md](components/middleware/ota_manager/README.md) |
-| 在线 OTA 服务 | [components/app/ota_service/README.md](components/app/ota_service/README.md) |
-| 插值工具 | [components/common/Interp/README.md](components/common/Interp/README.md) |
-| 字体资源 | [components/assets/Fonts/README.md](components/assets/Fonts/README.md) |
-| UI 资源 | [components/assets/ui_resources/README.md](components/assets/ui_resources/README.md) |
-| Web 页面资源 | [components/assets/web_file/README.md](components/assets/web_file/README.md) |
+| [LP 核加载](main/ulp_loader/README.md) | HP 核加载 LP 固件、共享快照与校准参数 |
+| [LP 核采样](main/ulp_app/README.md) | INA226 采样、累计计量与跨核状态 |
+| [构建脚本](scripts/README.md) | Web 压缩、资源生成、固件合并与日志分析 |
+
+### 应用层 `components/app`
+
+| 业务域 | 模块 |
+|--------|------|
+| 状态与诊断 | [global_state](components/app/global_state/README.md) · [boot_diagnostics](components/app/boot_diagnostics/README.md) · [blackbox_service](components/app/blackbox_service/README.md) |
+| 安全与输出 | [protect](components/app/protect/README.md) · [power_output](components/app/power_output/README.md) · [current_calibration](components/app/current_calibration/README.md) |
+| 本地交互 | [screen](components/app/screen/README.md) · [shell_command](components/app/shell_command/README.md) · [can_callback](components/app/can_callback/README.md) |
+| 无线与 Web | [wifi_service](components/app/wifi_service/README.md) · [espnow_service](components/app/espnow_service/README.md) · [web_backend](components/app/web_backend/README.md) |
+| 升级 | [ota_service](components/app/ota_service/README.md) |
+
+### 中间件 `components/middleware`
+
+| 领域 | 模块 |
+|------|------|
+| 网络协议 | [WebServer](components/middleware/WebServer/README.md) · [DNSServer](components/middleware/DNSServer/README.md) · [espnow_link](components/middleware/espnow_link/README.md) · [time_service](components/middleware/time_service/README.md) |
+| 数据与升级 | [blackbox](components/middleware/blackbox/README.md) · [energy_meter](components/middleware/energy_meter/README.md) · [ota_manager](components/middleware/ota_manager/README.md) |
+| 设备交互 | [Button](components/middleware/Button/README.md) · [can_resistor](components/middleware/can_resistor/README.md) |
+
+### 板级支持 `components/bsp`
+
+| 领域 | 模块 |
+|------|------|
+| 模拟与温度 | [ADC](components/bsp/ADC/README.md) · [Temperature](components/bsp/Temperature/README.md) |
+| 总线与无线 | [HXC_TWAI](components/bsp/HXC_TWAI/README.md) · [wifi_manager](components/bsp/wifi_manager/README.md) |
+| GPIO 与显示 | [cpp_gpio_driver](components/bsp/cpp_gpio_driver/README.md) · [PWM](components/bsp/PWM/README.md) · [st7735_driver](components/bsp/st7735_driver/README.md) |
+| 存储与平台 | [HXC_NVS](components/bsp/HXC_NVS/README.md) · [circular_flash_buffer](components/bsp/circular_flash_buffer/README.md) · [hardware](components/bsp/hardware/README.md) · [shell](components/bsp/shell/README.md) |
+
+### 通用库与资源
+
+| 层级 | 模块 |
+|------|------|
+| `common` | [Interp](components/common/Interp/README.md) |
+| `assets` | [Fonts](components/assets/Fonts/README.md) · [ui_resources](components/assets/ui_resources/README.md) · [web_file](components/assets/web_file/README.md) |
 
 ## Web 后端概览
 

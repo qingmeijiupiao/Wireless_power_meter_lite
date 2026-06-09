@@ -44,16 +44,16 @@ bool ui_config_get_rotation_180() {
     return ui_rotation_180.read() != 0;
 }
 
-void ui_config_set_rotation_180(bool enabled) {
-    ui_rotation_180 = enabled ? 1 : 0;
+esp_err_t ui_config_set_rotation_180(bool enabled) {
+    return ui_rotation_180.set(enabled ? 1 : 0);
 }
 
 uint8_t ui_config_get_backlight_level() {
     return normalize_backlight_level(ui_backlight_level.read());
 }
 
-void ui_config_set_backlight_level(uint8_t level) {
-    ui_backlight_level = normalize_backlight_level(level);
+esp_err_t ui_config_set_backlight_level(uint8_t level) {
+    return ui_backlight_level.set(normalize_backlight_level(level));
 }
 
 const char* wifi_mode_text(WifiService::Mode mode) {

@@ -105,4 +105,11 @@ CircularFlashBuffer::erase_all();
 |------|------|
 | 框架 | ESP-IDF v6.0+ |
 | 硬件 | ESP32 系列，需在分区表中预留 DATA 分区 |
-| 组件依赖 | `esp_partition`, `spi_flash`, `freertos`, `log` |
+
+<!-- dependency-links:start -->
+## 依赖导航
+
+无工程内组件依赖；仅依赖 ESP-IDF 组件或 C/C++ 标准库。
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

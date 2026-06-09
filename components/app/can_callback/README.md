@@ -113,5 +113,21 @@ if (CanCallback::is_available()) {
 ## 环境与依赖
 
 - ESP-IDF v6.0+
-- C++11
-- 组件依赖：`HXC_TWAI`、`HXC_NVS`、`can_resistor`、`hardware`、`protect`、`global_state`、`power_output`、`blackbox_service`
+- C++20
+
+<!-- dependency-links:start -->
+## 依赖导航
+
+工程内直接依赖：
+
+- [`blackbox_service`](../blackbox_service/README.md)（`app`）
+- [`global_state`](../global_state/README.md)（`app`）
+- [`power_output`](../power_output/README.md)（`app`）
+- [`protect`](../protect/README.md)（`app`）
+- [`can_resistor`](../../middleware/can_resistor/README.md)（`middleware`）
+- [`hardware`](../../bsp/hardware/README.md)（`bsp`）
+- [`HXC_NVS`](../../bsp/HXC_NVS/README.md)（`bsp`）
+- [`HXC_TWAI`](../../bsp/HXC_TWAI/README.md)（`bsp`）
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

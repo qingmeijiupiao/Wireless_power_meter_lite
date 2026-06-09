@@ -52,7 +52,7 @@ void update_main_state(TimerHandle_t xTimer){
 extern "C" void app_main(void){
     ESP_ERROR_CHECK(Blackbox::init());
     global_state.flags.bits.blackbox_enabled = Blackbox::is_enabled();
-    HXC::NVS_Base::setup();
+    ESP_ERROR_CHECK(HXC::NVS_Base::setup());
     ESP_ERROR_CHECK(BlackboxService::init());
     ESP_ERROR_CHECK(OtaService::init());
 

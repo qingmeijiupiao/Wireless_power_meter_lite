@@ -145,5 +145,28 @@ shell.register_command(ShellCommand_t("echo", "Echo input text", "<text>",
 
 ## 环境与依赖
 
-- **软件**：ESP-IDF v6.0+、C++11
-- **组件依赖**：`shell`、`hardware`、`st7735_driver`、`can_callback`、`current_calibration`、`global_state`、`energy_meter`、`power_output`、`protect`、`wifi_service`、`espnow_link`、`espnow_service`、`web_backend`、`blackbox`、`esp_app_desc`
+- **软件**：ESP-IDF v6.0+、C++20
+
+<!-- dependency-links:start -->
+## 依赖导航
+
+工程内直接依赖：
+
+- [`blackbox_service`](../blackbox_service/README.md)（`app`）
+- [`can_callback`](../can_callback/README.md)（`app`）
+- [`current_calibration`](../current_calibration/README.md)（`app`）
+- [`espnow_service`](../espnow_service/README.md)（`app`）
+- [`global_state`](../global_state/README.md)（`app`）
+- [`power_output`](../power_output/README.md)（`app`）
+- [`screen`](../screen/README.md)（`app`）
+- [`web_backend`](../web_backend/README.md)（`app`）
+- [`wifi_service`](../wifi_service/README.md)（`app`）
+- [`blackbox`](../../middleware/blackbox/README.md)（`middleware`）
+- [`energy_meter`](../../middleware/energy_meter/README.md)（`middleware`）
+- [`espnow_link`](../../middleware/espnow_link/README.md)（`middleware`）
+- [`hardware`](../../bsp/hardware/README.md)（`bsp`）
+- [`shell`](../../bsp/shell/README.md)（`bsp`）
+- [`st7735_driver`](../../bsp/st7735_driver/README.md)（`bsp`）
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

@@ -46,10 +46,16 @@ ESP_ERROR_CHECK(EspNowLink::init());
 ESP_ERROR_CHECK(EspNowService::init());
 ```
 
-## 依赖
+<!-- dependency-links:start -->
+## 依赖导航
 
-- `espnow_link`
-- `power_output`
-- `energy_meter`
-- `global_state`
-- `blackbox_service`
+工程内直接依赖：
+
+- [`blackbox_service`](../blackbox_service/README.md)（`app`）
+- [`global_state`](../global_state/README.md)（`app`）
+- [`power_output`](../power_output/README.md)（`app`）
+- [`energy_meter`](../../middleware/energy_meter/README.md)（`middleware`）
+- [`espnow_link`](../../middleware/espnow_link/README.md)（`middleware`）
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

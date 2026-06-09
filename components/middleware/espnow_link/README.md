@@ -612,3 +612,14 @@ espnow_link/
 - `wifi_manager`
 - `HXC_NVS`
 - FreeRTOS
+
+<!-- dependency-links:start -->
+## 依赖导航
+
+工程内直接依赖：
+
+- [`HXC_NVS`](../../bsp/HXC_NVS/README.md)（`bsp`）
+- [`wifi_manager`](../../bsp/wifi_manager/README.md)（`bsp`）
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

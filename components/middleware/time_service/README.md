@@ -48,6 +48,10 @@ UTC+0 和 UTC+8：
 | `CONFIG_LWIP_SNTP_UPDATE_DELAY` | `3600000` | 每小时自动校时 |
 | `CONFIG_NEWLIB_TIME_SYSCALL_USE_RTC_HRT` | `y` | 断网期间由 RTC 与高精度计时维持系统时间 |
 
-## 依赖
+<!-- dependency-links:start -->
+## 依赖导航
 
-`esp_netif`、`esp_event`、`freertos`、`log`
+无工程内组件依赖；仅依赖 ESP-IDF 组件或 C/C++ 标准库。
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

@@ -201,3 +201,31 @@ ESP_ERROR_CHECK(SCREEN::init_buttons());
 | BSP/驱动 | `st7735_driver`, `hardware`, `Button`, `HXC_NVS`, `blackbox_service` |
 | 应用组件 | `global_state`, `protect`, `wifi_service`, `power_output`, `can_callback` |
 | 中间件 | `energy_meter`, `can_resistor` |
+
+<!-- dependency-links:start -->
+## 依赖导航
+
+工程内直接依赖：
+
+- [`blackbox_service`](../blackbox_service/README.md)（`app`）
+- [`can_callback`](../can_callback/README.md)（`app`）
+- [`current_calibration`](../current_calibration/README.md)（`app`）
+- [`global_state`](../global_state/README.md)（`app`）
+- [`ota_service`](../ota_service/README.md)（`app`）
+- [`power_output`](../power_output/README.md)（`app`）
+- [`protect`](../protect/README.md)（`app`）
+- [`wifi_service`](../wifi_service/README.md)（`app`）
+- [`blackbox`](../../middleware/blackbox/README.md)（`middleware`）
+- [`Button`](../../middleware/Button/README.md)（`middleware`）
+- [`can_resistor`](../../middleware/can_resistor/README.md)（`middleware`）
+- [`energy_meter`](../../middleware/energy_meter/README.md)（`middleware`）
+- [`espnow_link`](../../middleware/espnow_link/README.md)（`middleware`）
+- [`hardware`](../../bsp/hardware/README.md)（`bsp`）
+- [`HXC_NVS`](../../bsp/HXC_NVS/README.md)（`bsp`）
+- [`st7735_driver`](../../bsp/st7735_driver/README.md)（`bsp`）
+- [`wifi_manager`](../../bsp/wifi_manager/README.md)（`bsp`）
+- [`Fonts`](../../assets/Fonts/README.md)（`assets`）
+- [`ui_resources`](../../assets/ui_resources/README.md)（`assets`）
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

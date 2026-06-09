@@ -53,14 +53,22 @@ esp_err_t CanResistor::set(bool enabled) {
         return ESP_ERR_INVALID_STATE;
     }
 
+    const bool previous = resistor_gpio.get();
     esp_err_t err = resistor_gpio.set(enabled);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "GPIO write failed: %s", esp_err_to_name(err));
         return err;
     }
 
-    saved_state = enabled ? 1 : 0;
-    return ESP_OK;
+    err = saved_state.set(enabled ? 1 : 0);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "failed to persist state: %s", esp_err_to_name(err));
+        const esp_err_t rollback_err = resistor_gpio.set(previous);
+        if (rollback_err != ESP_OK) {
+            ESP_LOGE(TAG, "failed to rollback GPIO state: %s", esp_err_to_name(rollback_err));
+        }
+    }
+    return err;
 }
 
 esp_err_t CanResistor::toggle() {

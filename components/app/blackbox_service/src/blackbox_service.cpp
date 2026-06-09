@@ -64,11 +64,15 @@ uint32_t get_snapshot_interval_s() {
     return Internal::read_snapshot_interval_s();
 }
 
-void set_snapshot_interval_s(uint32_t seconds, const char* source) {
-    Internal::write_snapshot_interval_s(seconds);
+esp_err_t set_snapshot_interval_s(uint32_t seconds, const char* source) {
+    const esp_err_t err = Internal::write_snapshot_interval_s(seconds);
+    if (err != ESP_OK) {
+        return err;
+    }
     append_text_event("blackbox: config source=%s snapshot_interval_s=%lu",
                       source == nullptr ? "unknown" : source,
                       static_cast<unsigned long>(seconds));
+    return ESP_OK;
 }
 
 } // namespace BlackboxService

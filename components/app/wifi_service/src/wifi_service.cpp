@@ -64,6 +64,37 @@ static TaskHandle_t reconnect_task_handle = nullptr;
 static bool reconnect_enabled = false;
 static uint8_t reconnect_attempt = 0;
 
+static esp_err_t persist_sta_credentials(const char* ssid, const char* password) {
+    char previous_ssid[WIFI_SSID_MAX_LEN + 1] = {};
+    char previous_password[WIFI_PASSWORD_MAX_LEN + 1] = {};
+    char* cached_ssid = sta_ssid.read();
+    char* cached_password = sta_pass.read();
+    if (cached_ssid != nullptr) {
+        strncpy(previous_ssid, cached_ssid, sizeof(previous_ssid) - 1);
+    }
+    if (cached_password != nullptr) {
+        strncpy(previous_password, cached_password, sizeof(previous_password) - 1);
+    }
+
+    esp_err_t err = sta_ssid.set(ssid);
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = sta_pass.set(password);
+    if (err == ESP_OK) {
+        return ESP_OK;
+    }
+
+    const esp_err_t password_rollback_err = sta_pass.set(previous_password);
+    const esp_err_t ssid_rollback_err = sta_ssid.set(previous_ssid);
+    if (password_rollback_err != ESP_OK || ssid_rollback_err != ESP_OK) {
+        ESP_LOGE(TAG, "failed to rollback STA credentials: password=%s ssid=%s",
+                 esp_err_to_name(password_rollback_err),
+                 esp_err_to_name(ssid_rollback_err));
+    }
+    return err;
+}
+
 static void update_global_state_flags() {
     auto& state = get_global_state();
     state.flags.bits.wifi_service_initialized = initialized;
@@ -245,7 +276,7 @@ esp_err_t init() {
     if (initialized) {
         return ESP_OK;
     }
-    HXC::NVS_Base::setup();
+    ESP_RETURN_ON_ERROR(HXC::NVS_Base::setup(), TAG, "NVS init failed");
     ESP_RETURN_ON_ERROR(WiFiManager::instance().init(), TAG, "wifi manager init failed");
     ESP_RETURN_ON_ERROR(EspNowService::init(), TAG, "ESP-NOW service init failed");
     ESP_RETURN_ON_ERROR(TimeService::init(), TAG, "time service init failed");
@@ -325,7 +356,7 @@ bool is_web_enabled_on_boot() {
  * @brief 写入启动启用开关
  */
 esp_err_t set_web_enabled_on_boot(bool enabled, const char* source) {
-    web_boot = enabled ? 1 : 0;
+    ESP_RETURN_ON_ERROR(web_boot.set(enabled ? 1 : 0), TAG, "persist web boot setting failed");
     update_global_state_flags();
     BlackboxService::append_text_event("wifi: config source=%s web_boot=%u", source_or_unknown(source), enabled ? 1U : 0U);
     return ESP_OK;
@@ -335,8 +366,7 @@ esp_err_t set_web_enabled_on_boot(bool enabled, const char* source) {
  * @brief 清除已保存 STA 凭据
  */
 esp_err_t clear_saved_sta(const char* source) {
-    sta_ssid = "";
-    sta_pass = "";
+    ESP_RETURN_ON_ERROR(persist_sta_credentials("", ""), TAG, "clear saved STA credentials failed");
     update_global_state_flags();
     BlackboxService::append_text_event("wifi: config source=%s saved_sta_cleared", source_or_unknown(source));
     return ESP_OK;
@@ -405,8 +435,9 @@ esp_err_t connect_sta(const char* ssid, const char* password, bool save, const c
 
         // 只有业务层明确要求保存时才写入 NVS，启动自动连接不会重复写 Flash。
         if (save) {
-            sta_ssid = ssid;
-            sta_pass = password;
+            ESP_RETURN_ON_ERROR(persist_sta_credentials(ssid, password),
+                                TAG,
+                                "persist STA credentials failed");
         }
         IP_t ip = WiFiManager::instance().get_ip();
         ESP_LOGI(TAG, "STA connected: %u.%u.%u.%u", ip.octet1, ip.octet2, ip.octet3, ip.octet4);
@@ -464,7 +495,7 @@ esp_err_t start_espnow_only(const char* source) {
     uint8_t channel = espnow_channel.read();
     if (channel == 0 || channel > 14) {
         channel = 1;
-        espnow_channel = channel;
+        ESP_RETURN_ON_ERROR(espnow_channel.set(channel), TAG, "persist default ESP-NOW channel failed");
     }
     ESP_RETURN_ON_ERROR(WiFiManager::instance().start_sta_radio(channel),
                         TAG,
@@ -685,7 +716,7 @@ esp_err_t set_espnow_channel(uint8_t channel) {
     if (channel == 0 || channel > 14) {
         return ESP_ERR_INVALID_ARG;
     }
-    espnow_channel = channel;
+    ESP_RETURN_ON_ERROR(espnow_channel.set(channel), TAG, "persist ESP-NOW channel failed");
     if (mode == Mode::ESPNOW_ONLY) {
         return WiFiManager::instance().set_channel(channel);
     }

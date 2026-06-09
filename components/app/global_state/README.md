@@ -9,7 +9,7 @@
 - 让应用层模块读取同一份实时状态，避免重复采样和多份缓存。
 - 用明确的单位保存整数，减少嵌入式代码中的浮点运算。
 - 用 32 位位域集中保存开关量和诊断状态。
-- 保持结构体固定为 24 字节，便于快照记录。
+- 保持结构体固定为 28 字节，便于快照记录。
 
 ## 数据流
 
@@ -44,6 +44,8 @@ classDiagram
         +float meter_mwh
         +int16_t board_temperature
         +int16_t chip_temperature
+        +int16_t current_register_raw
+        +uint16_t voltage_register_raw
     }
     class GlobalStateFlags {
         +uint32_t raw
@@ -66,8 +68,10 @@ classDiagram
 | `meter_mwh` | `float` | mWh | LP 核累计能量的展示值 |
 | `board_temperature` | `int16_t` | 0.01 摄氏度 | TMP235 板载传感器 |
 | `chip_temperature` | `int16_t` | 0.01 摄氏度 | ESP 芯片内部传感器 |
+| `current_register_raw` | `int16_t` | 原始值 | INA226 分流电压寄存器 |
+| `voltage_register_raw` | `uint16_t` | 原始值 | INA226 总线电压寄存器 |
 
-`static_assert(sizeof(GlobalState) == 24)` 会在编译期检查结构大小。修改字段时不要只改 README，也要确认对齐和黑匣子快照是否仍然符合预期。
+`static_assert(sizeof(GlobalState) == 28)` 会在编译期检查结构大小。修改字段时不要只改 README，也要确认对齐和黑匣子快照是否仍然符合预期。
 
 ## Flags 明细
 
@@ -121,5 +125,14 @@ state.flags.bits.screen_initialized = true;
 ## 环境与依赖
 
 - ESP-IDF v6.0+
-- C++11
-- 组件依赖：`protect`
+- C++20
+
+<!-- dependency-links:start -->
+## 依赖导航
+
+工程内直接依赖：
+
+- [`protect`](../protect/README.md)（`app`）
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

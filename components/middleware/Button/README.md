@@ -18,8 +18,7 @@
 | 框架 | ESP-IDF v6.0+ |
 | RTOS | FreeRTOS（需支持 `xTimerCreate` / `xQueueCreate` / `xTaskCreate`） |
 | 硬件 | ESP32 系列，至少 1 个可用 GPIO 输入引脚 |
-| C++ 标准 | C++11 及以上（`std::function`、`constexpr`） |
-| 组件依赖 | `esp_driver_gpio` |
+| C++ 标准 | C++20 及以上（`std::function`、`constexpr`） |
 
 ## 架构与原理
 
@@ -150,3 +149,11 @@ btn.setup(GPIO_NUM_0);
 | `BTN_SUPER_LONG_MS` | 3000 | 超长按判定阈值 |
 | `BTN_DOUBLE_CLICK_MS` | 250 | 双击间隔判定阈值 |
 | `BTN_SCAN_TICK_MS` | 10 | 定时器轮询周期 |
+
+<!-- dependency-links:start -->
+## 依赖导航
+
+无工程内组件依赖；仅依赖 ESP-IDF 组件或 C/C++ 标准库。
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

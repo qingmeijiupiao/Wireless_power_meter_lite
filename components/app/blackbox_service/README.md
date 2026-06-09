@@ -90,7 +90,7 @@ BlackboxService::append_event("Output disabled: reason=%d", reason);
 BlackboxService::append_text_event("boot: flash_bytes=%lu", flash_size);
 
 // 设置周期快照，单位秒；0 表示关闭
-BlackboxService::set_snapshot_interval_s(10, "ShellCommand");
+ESP_ERROR_CHECK(BlackboxService::set_snapshot_interval_s(10, "ShellCommand"));
 ```
 
 ## API
@@ -102,7 +102,7 @@ BlackboxService::set_snapshot_interval_s(10, "ShellCommand");
 | `append_event(fmt, ...)` | 保存关键状态变化或故障文本，再尝试追加全局快照 |
 | `append_text_event(fmt, ...)` | 仅保存文本事件，不追加快照；配置、审计和操作记录默认使用该接口 |
 | `get_snapshot_interval_s()` | 获取周期快照间隔，`0` 表示关闭 |
-| `set_snapshot_interval_s(seconds, source)` | 设置周期快照间隔并持久化；调用方传入自身静态 TAG |
+| `set_snapshot_interval_s(seconds, source)` | 设置周期快照间隔并持久化，返回 NVS 写入结果；调用方传入自身静态 TAG |
 
 ## 日志约定
 
@@ -123,4 +123,15 @@ BlackboxService::set_snapshot_interval_s(10, "ShellCommand");
 | 类别 | 要求 |
 |------|------|
 | 框架 | ESP-IDF v6.0+ |
-| 组件依赖 | `blackbox`, `global_state`, `HXC_NVS`, `esp_timer`, `log`, `freertos` |
+
+<!-- dependency-links:start -->
+## 依赖导航
+
+工程内直接依赖：
+
+- [`global_state`](../global_state/README.md)（`app`）
+- [`blackbox`](../../middleware/blackbox/README.md)（`middleware`）
+- [`HXC_NVS`](../../bsp/HXC_NVS/README.md)（`bsp`）
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

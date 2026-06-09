@@ -447,3 +447,13 @@ current_calibration/
 | `main/ulp_app/ulp_Interp.hpp` | 非等间距分段线性插值模板类 |
 | `main/ulp_loader/ulp_loader.cpp` | HP 核心 → LP 核心的校准参数加载器 |
 | `components/app/shell_command/src/shell_command.cpp` | 工厂校准串口命令 |
+
+<!-- dependency-links:start -->
+## 依赖导航
+
+工程内直接依赖：
+
+- [`HXC_NVS`](../../bsp/HXC_NVS/README.md)（`bsp`）
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

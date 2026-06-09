@@ -13,3 +13,21 @@
 | `append_runtime()` | 记录网络状态和 INA226 原始值 |
 
 该组件只负责诊断记录。初始化顺序仍由 `main/app_main.cpp` 编排。
+
+<!-- dependency-links:start -->
+## 依赖导航
+
+工程内直接依赖：
+
+- [`blackbox_service`](../blackbox_service/README.md)（`app`）
+- [`can_callback`](../can_callback/README.md)（`app`）
+- [`current_calibration`](../current_calibration/README.md)（`app`）
+- [`global_state`](../global_state/README.md)（`app`）
+- [`protect`](../protect/README.md)（`app`）
+- [`wifi_service`](../wifi_service/README.md)（`app`）
+- [`blackbox`](../../middleware/blackbox/README.md)（`middleware`）
+- [`can_resistor`](../../middleware/can_resistor/README.md)（`middleware`）
+- [`hardware`](../../bsp/hardware/README.md)（`bsp`）
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

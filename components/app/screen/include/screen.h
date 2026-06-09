@@ -49,7 +49,7 @@ uint32_t get_start_logo_duration_ms();
  * @brief Persist the startup logo display duration.
  * @param duration_ms Duration in milliseconds. Zero disables the startup logo.
  */
-void set_start_logo_duration_ms(uint32_t duration_ms);
+esp_err_t set_start_logo_duration_ms(uint32_t duration_ms);
 
 /**
  * @brief 向屏幕任务投递按键事件

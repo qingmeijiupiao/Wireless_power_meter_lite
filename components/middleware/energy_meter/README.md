@@ -28,8 +28,14 @@ flowchart LR
     Meter --> Shell["shell_command"]
 ```
 
-## 依赖
+`EnergyMeter` 只接收 `app_main` 推送的 LP Core 精确累计值，不直接读取
+`global_state`，从而保持中间件到应用层的单向依赖。
 
-- `global_state`
-- `esp_timer`
-- `freertos`
+
+<!-- dependency-links:start -->
+## 依赖导航
+
+无工程内组件依赖；仅依赖 ESP-IDF 组件或 C/C++ 标准库。
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

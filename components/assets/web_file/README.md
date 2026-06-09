@@ -91,4 +91,11 @@ struct EmbeddedFile {
 
 - ESP-IDF v6.0+
 - Python 3
-- 组件依赖：无
+
+<!-- dependency-links:start -->
+## 依赖导航
+
+无工程内组件依赖；仅依赖 ESP-IDF 组件或 C/C++ 标准库。
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

@@ -31,11 +31,15 @@ uint32_t read_snapshot_interval_s() {
     return result;
 }
 
-void write_snapshot_interval_s(uint32_t seconds) {
-    snapshot_interval_nvs = seconds;
+esp_err_t write_snapshot_interval_s(uint32_t seconds) {
+    const esp_err_t err = snapshot_interval_nvs.set(seconds);
+    if (err != ESP_OK) {
+        return err;
+    }
     portENTER_CRITICAL(&config_lock);
     snapshot_interval_s = seconds;
     portEXIT_CRITICAL(&config_lock);
+    return ESP_OK;
 }
 
 } // namespace Internal

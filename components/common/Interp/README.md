@@ -277,3 +277,11 @@ NonEquidistantInterp<int, float> adc_converter(adc_calibration);
 int raw_value = read_adc();
 float physical_value = adc_converter.interpolate(raw_value);
 ```
+
+<!-- dependency-links:start -->
+## 依赖导航
+
+无工程内组件依赖；仅依赖 ESP-IDF 组件或 C/C++ 标准库。
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

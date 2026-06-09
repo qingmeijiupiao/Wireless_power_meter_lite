@@ -112,6 +112,10 @@ OtaManager::begin(OtaManager::IMAGE_SIZE_UNKNOWN);
 | `app0` | `app, ota_0` | APP 固件槽位 A |
 | `app1` | `app, ota_1` | APP 固件槽位 B |
 
-## 依赖
+<!-- dependency-links:start -->
+## 依赖导航
 
-- ESP-IDF `app_update`
+无工程内组件依赖；仅依赖 ESP-IDF 组件或 C/C++ 标准库。
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

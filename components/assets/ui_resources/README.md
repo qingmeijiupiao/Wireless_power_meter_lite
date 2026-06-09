@@ -80,5 +80,12 @@ python scripts/image_converter.py -n ErrorRectangle assets/error_rect.png includ
 
 ## 环境与依赖
 
-- **组件依赖**：无。该组件仅导出编译期 RGB565 数组。
 - **使用方**：`screen` 通过 `st7735_driver::draw_image()` 绘制资源。
+
+<!-- dependency-links:start -->
+## 依赖导航
+
+无工程内组件依赖；仅依赖 ESP-IDF 组件或 C/C++ 标准库。
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

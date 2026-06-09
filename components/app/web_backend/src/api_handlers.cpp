@@ -309,7 +309,12 @@ esp_err_t start_logo_handler(WebServer::Request* request) {
             return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"invalid_duration_ms\"}\n", strlen("{\"ok\":false,\"reason\":\"invalid_duration_ms\"}\n"));
         }
 
-        SCREEN::set_start_logo_duration_ms(duration_ms);
+        ret = SCREEN::set_start_logo_duration_ms(duration_ms);
+        if (ret != ESP_OK) {
+            snprintf(response_buffer, sizeof(response_buffer),
+                     "{\"ok\":false,\"reason\":\"%s\"}\n", esp_err_to_name(ret));
+            return WebServer::send(request, 500, "application/json", response_buffer, strlen(response_buffer));
+        }
         ESP_LOGI(TAG, "startup logo config updated: duration_ms=%lu", static_cast<unsigned long>(duration_ms));
         BlackboxService::append_text_event("ui: config source=%s start_logo_ms=%lu reboot_required=1 ip=%s",
                                            TAG, static_cast<unsigned long>(duration_ms), request->peer_ip);
@@ -447,14 +452,24 @@ esp_err_t can_handler(WebServer::Request* request) {
         }
         uint32_t baudrate = 0;
         uint32_t id = 0;
+        const uint32_t previous_baudrate = CanCallback::CAN_BAUDRATE.read();
         if (json_get_uint32(request->body, "baudrate", &baudrate)) {
             if (baudrate == 0) {
                 return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"invalid_baudrate\"}\n", strlen("{\"ok\":false,\"reason\":\"invalid_baudrate\"}\n"));
             }
-            CanCallback::CAN_BAUDRATE = baudrate;
+            ret = CanCallback::CAN_BAUDRATE.set(baudrate);
+            if (ret != ESP_OK) {
+                return WebServer::send(request, 500, "application/json", "{\"ok\":false,\"reason\":\"persist_failed\"}\n", strlen("{\"ok\":false,\"reason\":\"persist_failed\"}\n"));
+            }
         }
         if (json_get_uint32(request->body, "id", &id)) {
-            CanCallback::CAN_ID = id;
+            ret = CanCallback::CAN_ID.set(id);
+            if (ret != ESP_OK) {
+                if (baudrate != 0) {
+                    CanCallback::CAN_BAUDRATE.set(previous_baudrate);
+                }
+                return WebServer::send(request, 500, "application/json", "{\"ok\":false,\"reason\":\"persist_failed\"}\n", strlen("{\"ok\":false,\"reason\":\"persist_failed\"}\n"));
+            }
         }
     }
 

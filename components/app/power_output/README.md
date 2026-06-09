@@ -226,4 +226,17 @@ PowerOutput::add_policy(&max_on_policy);
 |------|------|
 | 框架 | ESP-IDF v6.0+ |
 | RTOS | FreeRTOS |
-| 组件依赖 | `cpp_gpio_driver`, `hardware`, `global_state`, `protect`, `esp_timer`, `log`, `freertos` |
+
+<!-- dependency-links:start -->
+## 依赖导航
+
+工程内直接依赖：
+
+- [`blackbox_service`](../blackbox_service/README.md)（`app`）
+- [`global_state`](../global_state/README.md)（`app`）
+- [`protect`](../protect/README.md)（`app`）
+- [`cpp_gpio_driver`](../../bsp/cpp_gpio_driver/README.md)（`bsp`）
+- [`hardware`](../../bsp/hardware/README.md)（`bsp`）
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

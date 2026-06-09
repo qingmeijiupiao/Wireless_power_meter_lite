@@ -241,3 +241,11 @@ if (drops > 0) {
 还可以通过 `get_tx_failed_count()`、`get_bus_off_count()`、`get_bus_error_count()` 和
 `get_info()` 查询发送失败、bus-off、总线错误累计值与驱动状态。应用层 `can_callback`
 会在累计值变化时将聚合诊断事件写入黑匣子。
+
+<!-- dependency-links:start -->
+## 依赖导航
+
+无工程内组件依赖；仅依赖 ESP-IDF 组件或 C/C++ 标准库。
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

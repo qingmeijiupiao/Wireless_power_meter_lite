@@ -6,7 +6,7 @@
 
 ## 模块特点
 
-- **NVS 持久化配置**：保存 STA SSID、密码和启动时是否启用 WiFi/Web 的开关。
+- **NVS 持久化配置**：保存 STA SSID、密码、启动开关和 ESP-NOW 默认信道；写入失败会返回错误，凭据成对更新失败时尝试恢复上一组配置。
 - **自动启动策略**：启动时优先尝试连接已保存 STA，失败或未配置时自动进入 AP 配网模式。
 - **断线自动恢复**：STA 运行期意外断线后按 `1s`、`2s`、`4s`、`8s`、`16s`、`30s`
   指数退避自动重连，恢复 IP 后重置退避状态。
@@ -144,12 +144,20 @@ wifi boot <0|1>
 wifi clear
 ```
 
-## 依赖
+<!-- dependency-links:start -->
+## 依赖导航
 
-| 组件 | 用途 |
-|------|------|
-| `wifi_manager` | 底层 STA/AP WiFi 驱动封装 |
-| `HXC_NVS` | 配置持久化 |
-| `DNSServer` | AP 配网模式 DNS 劫持 |
-| `WebServer` | Captive Portal 开关 |
-| `esp_wifi` | WiFi 接口类型和 MAC 查询 |
+工程内直接依赖：
+
+- [`blackbox_service`](../blackbox_service/README.md)（`app`）
+- [`espnow_service`](../espnow_service/README.md)（`app`）
+- [`global_state`](../global_state/README.md)（`app`）
+- [`DNSServer`](../../middleware/DNSServer/README.md)（`middleware`）
+- [`espnow_link`](../../middleware/espnow_link/README.md)（`middleware`）
+- [`time_service`](../../middleware/time_service/README.md)（`middleware`）
+- [`WebServer`](../../middleware/WebServer/README.md)（`middleware`）
+- [`HXC_NVS`](../../bsp/HXC_NVS/README.md)（`bsp`）
+- [`wifi_manager`](../../bsp/wifi_manager/README.md)（`bsp`）
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

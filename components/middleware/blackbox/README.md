@@ -339,4 +339,13 @@ for (uint32_t index = 0; index < Blackbox::count();) {
 |------|------|
 | 框架 | ESP-IDF v6.0+ |
 | RTOS | FreeRTOS |
-| 组件依赖 | `circular_flash_buffer`, `esp_timer`, `log` |
+
+<!-- dependency-links:start -->
+## 依赖导航
+
+工程内直接依赖：
+
+- [`circular_flash_buffer`](../../bsp/circular_flash_buffer/README.md)（`bsp`）
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

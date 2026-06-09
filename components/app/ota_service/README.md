@@ -32,6 +32,13 @@
 `idle`、`checking`、`update_available`、`up_to_date`、`downloading`、
 `verifying`、`restarting`、`failed`。
 
-## 依赖
+<!-- dependency-links:start -->
+## 依赖导航
 
-`esp_http_client`、`mbedtls`、`ota_manager`、`blackbox_service`
+工程内直接依赖：
+
+- [`blackbox_service`](../blackbox_service/README.md)（`app`）
+- [`ota_manager`](../../middleware/ota_manager/README.md)（`middleware`）
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

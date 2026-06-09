@@ -974,7 +974,11 @@ void SettingsPage::adjust_selected_item() {
     switch (selected_) {
         case Rotate180:
             rotation_180_ = !rotation_180_;
-            ui_config_set_rotation_180(rotation_180_);
+            if (ui_config_set_rotation_180(rotation_180_) != ESP_OK) {
+                rotation_180_ = !rotation_180_;
+                ESP_LOGE(TAG, "failed to persist rotation setting");
+                break;
+            }
             ST7735::set_rotation(rotation_180_ ? ST7735::Rotation::HorizontalMirror : ST7735::Rotation::Horizontal);
             ESP_LOGI(TAG, "setting rotate_180=%u", rotation_180_ ? 1U : 0U);
             BlackboxService::append_text_event("ui: config source=%s rotate_180=%u", TAG, rotation_180_ ? 1U : 0U);
@@ -984,7 +988,11 @@ void SettingsPage::adjust_selected_item() {
             if (backlight_level_ > BACKLIGHT_LEVEL_COUNT) {
                 backlight_level_ = 1;
             }
-            ui_config_set_backlight_level(backlight_level_);
+            if (ui_config_set_backlight_level(backlight_level_) != ESP_OK) {
+                ESP_LOGE(TAG, "failed to persist backlight setting");
+                backlight_level_ = ui_config_get_backlight_level();
+                break;
+            }
             ST7735::set_backlight(backlight_value_from_level(backlight_level_));
             ESP_LOGI(TAG, "setting backlight_level=%u", static_cast<unsigned>(backlight_level_));
             BlackboxService::append_text_event("ui: config source=%s backlight_level=%u",
@@ -1007,7 +1015,9 @@ void SettingsPage::adjust_selected_item() {
                     break;
                 }
             }
-            BlackboxService::set_snapshot_interval_s(next, TAG);
+            if (BlackboxService::set_snapshot_interval_s(next, TAG) != ESP_OK) {
+                ESP_LOGE(TAG, "failed to persist blackbox snapshot interval");
+            }
             break;
         }
         case CanBaudrate: {
@@ -1019,7 +1029,10 @@ void SettingsPage::adjust_selected_item() {
                     break;
                 }
             }
-            CanCallback::CAN_BAUDRATE = next;
+            if (CanCallback::CAN_BAUDRATE.set(next) != ESP_OK) {
+                ESP_LOGE(TAG, "failed to persist CAN baudrate");
+                break;
+            }
             BlackboxService::append_text_event("can: config baud=%lu source=screen reboot_required=1",
                                                static_cast<unsigned long>(next));
             break;

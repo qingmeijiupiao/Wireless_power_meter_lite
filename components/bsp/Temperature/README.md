@@ -107,4 +107,13 @@ float chip_temp = chip_sensor.getTemperature(); // 摄氏度
 
 - 硬件：TMP235 连接 ADC 通道；ESP32-C6 片内温度传感器
 - ESP-IDF v6.0+
-- 组件依赖：`ADC`、`esp_driver_tsens`、`esp_hal_ana_conv`
+
+<!-- dependency-links:start -->
+## 依赖导航
+
+工程内直接依赖：
+
+- [`ADC`](../ADC/README.md)（`bsp`）
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

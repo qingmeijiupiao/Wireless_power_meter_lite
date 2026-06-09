@@ -28,7 +28,7 @@
 | `src/api_handlers.cpp` | 业务 REST API handler，调用 `PowerOutput`、`WifiService`、`protect` 等应用模块 |
 | `src/log_capture.cpp` | ESP 日志捕获、RAM 环形缓冲和请求日志中间件 |
 | `src/request_json.cpp` | 请求 JSON 字段读取，基于 jsmn token 接口 |
-| `src/ota_handlers.cpp` | OTA 状态、固件流式上传、二次确认激活和远端更新占位接口 |
+| `src/ota_handlers.cpp` | OTA 状态、固件流式上传、二次确认激活、远端版本检查与在线升级接口 |
 
 `private_include` 只通过 `PRIV_INCLUDE_DIRS` 加入本组件编译，不作为跨组件公共头文件使用。其他组件应只包含 `web_backend.h`。
 
@@ -279,24 +279,28 @@ sequenceDiagram
 - OTA 上传使用原始二进制请求体，不使用 `multipart/form-data`；浏览器文件选择体验不受影响。
 - OTA 上传完成后只校验固件，必须由用户通过 `/api/ota/activate` 二次确认后才切换启动分区。
 
-## 依赖
+<!-- dependency-links:start -->
+## 依赖导航
 
-| 组件 | 用途 |
-|------|------|
-| `WebServer` | HTTP 路由、中间件、请求和响应封装 |
-| `web_file` | 固件内嵌 HTML 页面资源 |
-| `wifi_service` | WiFi 状态、AP 配网和 NVS 凭据管理 |
-| `jsmn` | 请求 JSON token 解析 |
-| `global_state` | 设备测量状态 |
-| `energy_meter` | 屏幕、Web 和 Shell 共用的相对电量计量会话 |
-| `power_output` | 输出控制策略链 |
-| `protect` | 保护状态查询 |
-| `st7735_driver` | 背光亮度查询和设置 |
-| `can_callback` | CAN 波特率和设备 ID 配置 |
-| `current_calibration` | 电流校准参数查询 |
-| `hardware` | 硬件版本信息 |
-| `esp_app_format` | 固件版本信息 |
-| `esp_timer` | 运行时间 |
-| `esp_http_server` | HTTP header/CORS 底层接口 |
-| `ota_manager` | APP 固件校验、OTA 分区选择和启动分区切换 |
-| `ota_service` | HTTPS 版本检查、多源固件下载和在线升级状态 |
+工程内直接依赖：
+
+- [`blackbox_service`](../blackbox_service/README.md)（`app`）
+- [`can_callback`](../can_callback/README.md)（`app`）
+- [`current_calibration`](../current_calibration/README.md)（`app`）
+- [`espnow_service`](../espnow_service/README.md)（`app`）
+- [`global_state`](../global_state/README.md)（`app`）
+- [`ota_service`](../ota_service/README.md)（`app`）
+- [`power_output`](../power_output/README.md)（`app`）
+- [`protect`](../protect/README.md)（`app`）
+- [`screen`](../screen/README.md)（`app`）
+- [`wifi_service`](../wifi_service/README.md)（`app`）
+- [`energy_meter`](../../middleware/energy_meter/README.md)（`middleware`）
+- [`espnow_link`](../../middleware/espnow_link/README.md)（`middleware`）
+- [`ota_manager`](../../middleware/ota_manager/README.md)（`middleware`）
+- [`WebServer`](../../middleware/WebServer/README.md)（`middleware`）
+- [`hardware`](../../bsp/hardware/README.md)（`bsp`）
+- [`st7735_driver`](../../bsp/st7735_driver/README.md)（`bsp`）
+- [`web_file`](../../assets/web_file/README.md)（`assets`）
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->

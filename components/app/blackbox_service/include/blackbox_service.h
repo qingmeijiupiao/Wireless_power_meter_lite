@@ -62,7 +62,7 @@ esp_err_t append_text_event(const char* fmt, ...);
 uint32_t get_snapshot_interval_s();
 
 /** @brief 设置并持久化周期快照间隔，0 表示关闭。 */
-void set_snapshot_interval_s(uint32_t seconds, const char* source);
+esp_err_t set_snapshot_interval_s(uint32_t seconds, const char* source);
 
 } // namespace BlackboxService
 

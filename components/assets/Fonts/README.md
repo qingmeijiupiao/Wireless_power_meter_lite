@@ -89,4 +89,12 @@ DENGB16/
 
 ## 环境与依赖
 
-- **组件依赖**：`st7735_driver`（提供 `Font_t` 类型定义）
+<!-- dependency-links:start -->
+## 依赖导航
+
+工程内直接依赖：
+
+- [`st7735_driver`](../../bsp/st7735_driver/README.md)（`bsp`）
+
+> 本节按当前 `CMakeLists.txt` 的 `REQUIRES` / `PRIV_REQUIRES` 维护。
+<!-- dependency-links:end -->
