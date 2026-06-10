@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "version": "0.5.0",
+  "published_at": "2026-06-10T06:28:00Z",
+  "firmware": {
+    "filename": "Wireless_power_meter_lite_app_v0.5.0.bin",
+    "size": 1267440,
+    "url": "https://cdn.jsdelivr.net/gh/qingmeijiupiao/Wireless_power_meter_lite@1c08d4201b0e0f8e99eecaa9215062e1e38db616/firmware/v0.5.0/Wireless_power_meter_lite_app_v0.5.0.bin"
+  }
+}
