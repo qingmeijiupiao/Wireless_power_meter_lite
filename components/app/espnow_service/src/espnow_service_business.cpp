@@ -35,10 +35,13 @@ constexpr char TAG[] = "EspNowService";
 portMUX_TYPE callback_lock = portMUX_INITIALIZER_UNLOCKED;
 CallbackSlot<SwitchResponseHandler> switch_response_slot = {};
 CallbackSlot<DataReceivedHandler> data_received_slot = {};
+RemoteSwitchStatus remote_switch_status = {};
+EspNowLink::MacAddress remote_switch_address = {};
 
 // 固定长度协议。接收时必须严格匹配，禁止接受截断包或带尾随字段的未知版本。
 constexpr size_t SWITCH_REQUEST_SIZE = 5;
 constexpr size_t SWITCH_RESPONSE_SIZE = 7;
+constexpr size_t REMOTE_BATTERY_SIZE = 1;
 constexpr size_t DATA_REQUEST_SIZE = 4;
 constexpr size_t DATA_MESSAGE_SIZE = 40;
 
@@ -77,6 +80,17 @@ bool is_reliable_unicast(const EspNowLink::Message& message) {
     return message.reliable && !message.destination.is_broadcast();
 }
 
+/** @brief 记录本次运行已经收到合法控制包，并锁定对应遥控器地址。 */
+void mark_remote_switch_connected(const EspNowLink::MacAddress& source) {
+    portENTER_CRITICAL(&callback_lock);
+    if (!remote_switch_status.connected || remote_switch_address != source) {
+        remote_switch_status = {};
+        remote_switch_address = source;
+    }
+    remote_switch_status.connected = true;
+    portEXIT_CRITICAL(&callback_lock);
+}
+
 /**
  * @brief 处理远端输出控制请求并返回实际执行结果
  *
@@ -100,6 +114,7 @@ void on_switch_request(const EspNowLink::Message& message, void*) {
         return;
     }
     const SwitchAction action = static_cast<SwitchAction>(message.payload[4]);
+    mark_remote_switch_connected(message.source);
 
     // 执行产品动作，并将 PowerOutput 的内部结果映射为稳定的线上业务结果。
     SwitchResponse response = {};
@@ -155,6 +170,35 @@ void on_switch_request(const EspNowLink::Message& message, void*) {
     const size_t size = encode_switch_response(response, payload, sizeof(payload));
     EspNowLink::send(
         message.source, MSG_SWITCH_RESPONSE, payload, size, reliable_options());
+}
+
+/** @brief 接收当前遥控器在控制包之后发送的尽力电量上报。 */
+void on_remote_battery(const EspNowLink::Message& message, void*) {
+    if (message.reliable ||
+        message.destination.is_broadcast() ||
+        message.payload_size != REMOTE_BATTERY_SIZE ||
+        message.payload[0] > 100) {
+        return;
+    }
+
+    bool accepted = false;
+    portENTER_CRITICAL(&callback_lock);
+    if (remote_switch_status.connected && remote_switch_address == message.source) {
+        remote_switch_status.battery_percent = message.payload[0];
+        remote_switch_status.battery_valid = true;
+        accepted = true;
+    }
+    portEXIT_CRITICAL(&callback_lock);
+
+    if (accepted) {
+        DEVICE_EVENT_I(
+            TAG,
+            "espnow: remote_battery peer=%02X:%02X:%02X:%02X:%02X:%02X percent=%u",
+            message.source.bytes[0], message.source.bytes[1],
+            message.source.bytes[2], message.source.bytes[3],
+            message.source.bytes[4], message.source.bytes[5],
+            static_cast<unsigned>(message.payload[0]));
+    }
 }
 
 /**
@@ -228,10 +272,12 @@ void on_data_request(const EspNowLink::Message& message, void*) {
              message.source.bytes[2], message.source.bytes[3],
              message.source.bytes[4], message.source.bytes[5]);
     const int64_t elapsed_us = esp_timer_get_time() - started_us;
-    ESP_LOGI(TAG, "data peer=%s voltage_mv=%u current_ua=%ld process_us=%lld",
-             mac, response.data.voltage_mv,
-             static_cast<long>(response.data.current_ua),
-             static_cast<long long>(elapsed_us));
+    DEVICE_EVENT_I(
+        TAG,
+        "espnow: data_request peer=%s voltage_mv=%u current_ua=%ld process_us=%lld",
+        mac, response.data.voltage_mv,
+        static_cast<long>(response.data.current_ua),
+        static_cast<long long>(elapsed_us));
     // 即使未来数据暂不可用，也应发送 available=false 的同格式响应，而不是静默超时。
     uint8_t payload[40] = {};
     const size_t size = encode_data_message(response, payload, sizeof(payload));
@@ -323,10 +369,39 @@ esp_err_t init() {
     // 每个业务 ID 直接绑定唯一处理函数，接收路径无需二次分发。
     ESP_ERROR_CHECK(EspNowLink::register_handler(Internal::MSG_SWITCH_REQUEST, Internal::on_switch_request));
     ESP_ERROR_CHECK(EspNowLink::register_handler(Internal::MSG_SWITCH_RESPONSE, Internal::on_switch_response));
+    ESP_ERROR_CHECK(EspNowLink::register_handler(Internal::MSG_REMOTE_BATTERY, Internal::on_remote_battery));
     ESP_ERROR_CHECK(EspNowLink::register_handler(Internal::MSG_DATA_REQUEST, Internal::on_data_request));
     ESP_ERROR_CHECK(EspNowLink::register_handler(Internal::MSG_DATA_RESPONSE, Internal::on_data_response));
     ESP_ERROR_CHECK(EspNowLink::register_handler(Internal::MSG_DATA_PERIODIC, Internal::on_periodic_data));
     return ESP_OK;
+}
+
+bool get_remote_switch_status(RemoteSwitchStatus& status) {
+    portENTER_CRITICAL(&Internal::callback_lock);
+    status = Internal::remote_switch_status;
+    portEXIT_CRITICAL(&Internal::callback_lock);
+    return status.connected;
+}
+
+esp_err_t send_remote_battery(const EspNowLink::MacAddress& destination,
+                              uint8_t battery_percent,
+                              EspNowLink::SendCallback callback,
+                              void* context) {
+    uint8_t payload[1] = {};
+    const size_t size =
+        Internal::encode_remote_battery(battery_percent, payload, sizeof(payload));
+    if (size == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    EspNowLink::SendOptions options = {};
+    options.delivery = EspNowLink::Delivery::BEST_EFFORT;
+    return EspNowLink::send(destination,
+                            Internal::MSG_REMOTE_BATTERY,
+                            payload,
+                            size,
+                            options,
+                            callback,
+                            context);
 }
 
 /**

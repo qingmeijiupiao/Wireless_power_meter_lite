@@ -62,7 +62,7 @@ sequenceDiagram
 | 主页 | `DashboardPage` | 约 33ms | 显示电压、电流、功率、板温、运行时间、输出状态和保护标签 |
 | 电量页 | `BatteryPage` | 250ms | 顶部显示实时电压、电流、功率和输出状态，下方显示累计 `mWh`、`mAh`、系统时间和计量时间；长按侧键清零页面累计值并重新开始计量时间 |
 | 曲线页 | `CurvePage` | 200ms | 当前为曲线功能占位页面 |
-| 无线页 | `WirelessPage` | 500ms | 显示 STA、AP 配网或 ESPNOW_ONLY；仅 ESP-NOW 模式显示当前信道；长按侧键进入 AP 配网 |
+| 无线页 | `WirelessPage` | 500ms | 显示 STA、AP 配网或 ESPNOW_ONLY；收到远程控制包及其电量包后在右上角显示遥控开关电量；仅 ESP-NOW 模式显示当前信道；长按侧键进入 AP 配网 |
 | 设置页 | `SettingsPage` | 200ms | 长按侧键进入菜单，短按侧键切换设置项，短按正面键修改当前设置 |
 
 ## 按键行为

@@ -18,6 +18,7 @@
 #include "current_calibration.h"
 #include "energy_meter.h"
 #include "espnow_link.h"
+#include "espnow_service.h"
 #include "esp_log.h"
 #include "ErrorRectangle.h"
 #include "WarningRectangle.h"
@@ -416,6 +417,45 @@ void WirelessPage::render(RenderMode mode) {
         ST7735::draw_string(x + 3, 2, text, color, background, DENGB16);
     };
 
+    auto draw_remote_battery = []() {
+        EspNowService::RemoteSwitchStatus status = {};
+        if (!EspNowService::get_remote_switch_status(status) ||
+            !status.battery_valid) {
+            return;
+        }
+
+        constexpr uint16_t body_x = 126;
+        constexpr uint16_t body_y = 1;
+        constexpr uint16_t body_w = 28;
+        constexpr uint16_t body_h = 16;
+        char text[5] = {};
+        if (status.battery_percent == 100) {
+            snprintf(text, sizeof(text), "100");
+        } else {
+            snprintf(text, sizeof(text), "%u%%",
+                     static_cast<unsigned>(status.battery_percent));
+        }
+
+        uint16_t text_w = 0;
+        for (const char* cursor = text; *cursor != '\0'; ++cursor) {
+            text_w += DENGB12.width_table[*cursor - ' '];
+        }
+        const ST7735::color_t text_color =
+            status.battery_percent <= 20
+                ? ST7735::color_t(0xef2a2a)
+                : ST7735::color_t(0x1ef851);
+
+        ST7735::draw_round_rect(body_x, body_y, body_w, body_h, 3, 1,
+                                ST7735::WHITE, ST7735::BLACK);
+        ST7735::fill_rect(body_x + body_w, body_y + 4, 4, 8, ST7735::WHITE);
+        ST7735::draw_string(body_x + (body_w - text_w) / 2,
+                            body_y + 4,
+                            text,
+                            text_color,
+                            ST7735::BLACK,
+                            DENGB12);
+    };
+
     auto draw_signal_logo = [&]() {
         constexpr uint16_t bar_x0 = 7;
         constexpr uint16_t bar_bottom = 76;
@@ -512,7 +552,7 @@ void WirelessPage::render(RenderMode mode) {
     };
 
     draw_status_pill(2, 0, mode_text, mode_color);
-    // 右侧预留状态区域，后续用于显示已配对远程开关数量。
+    draw_remote_battery();
     draw_signal_logo();
     draw_details();
 }
