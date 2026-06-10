@@ -31,14 +31,16 @@ void update_main_state(TimerHandle_t xTimer){
     if (!LP_Core_GetSnapshot(&snapshot)) {
         return;
     }
-    global_state.voltage_mV = snapshot.voltage_uv/1e3;
-    global_state.current_uA = snapshot.current_uA;
+    update_global_measurement({
+        .voltage_mV = static_cast<uint16_t>(snapshot.voltage_uv / 1000),
+        .current_uA = snapshot.current_uA,
+        .current_register_raw = snapshot.shunt_register_raw,
+        .voltage_register_raw = snapshot.voltage_register_raw,
+    });
     // GlobalState 保存固定大小的展示值；精确累计值交给 energy_meter 用于会话差分。
     global_state.meter_mah = snapshot.meter_uah / 1000.0f;
     global_state.meter_mwh = snapshot.meter_uwh / 1000.0f;
     EnergyMeter::update_lifetime(snapshot.meter_uah, snapshot.meter_uwh);
-    global_state.current_register_raw = snapshot.shunt_register_raw;
-    global_state.voltage_register_raw = snapshot.voltage_register_raw;
     global_state.board_temperature = Board_Temperature_sensor.getTemperature();
     global_state.chip_temperature = Chip_Temperature_Sensor.getTemperature()*100.0f;
     LP_Core_SetBoardTemperature(global_state.board_temperature);

@@ -48,6 +48,32 @@ struct GlobalState{
 };
 static_assert(sizeof(GlobalState) == 28, "GlobalState size mismatch");
 
+/**
+ * @brief 同一批次发布的实时测量快照
+ */
+struct GlobalMeasurementSnapshot {
+    uint16_t voltage_mV;          /**< 总线电压，单位 mV */
+    int32_t current_uA;           /**< 电流，单位 uA，符号表示方向 */
+    int16_t current_register_raw; /**< INA226 分流电压寄存器原始值 */
+    uint16_t voltage_register_raw;/**< INA226 总线电压寄存器原始值 */
+};
+
+/**
+ * @brief 获取全局运行状态引用
+ * @return 全局运行状态引用
+ */
 GlobalState& get_global_state();
+
+/**
+ * @brief 原子更新同一批次的测量值和原始寄存器值
+ * @param snapshot 待发布的测量快照
+ */
+void update_global_measurement(const GlobalMeasurementSnapshot& snapshot);
+
+/**
+ * @brief 原子读取同一批次的测量值和原始寄存器值
+ * @return 当前测量快照
+ */
+GlobalMeasurementSnapshot get_global_measurement_snapshot();
 
 #endif

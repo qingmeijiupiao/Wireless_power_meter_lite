@@ -351,6 +351,34 @@ void draw_pixel(uint16_t x, uint16_t y, color_t color) {
     double_buffer.data[double_buffer.current_buffer][y * display_width + x] = color.get_color_raw_big_endian();
 }
 
+void draw_line(int16_t x0, int16_t y0, int16_t x1, int16_t y1, color_t color) {
+    // Bresenham 只使用整数运算，适合在曲线页面高频绘制短线段。
+    const int16_t dx = std::abs(x1 - x0);
+    const int16_t sx = x0 < x1 ? 1 : -1;
+    const int16_t dy = -std::abs(y1 - y0);
+    const int16_t sy = y0 < y1 ? 1 : -1;
+    int16_t error = dx + dy;
+
+    while (true) {
+        if (x0 >= 0 && y0 >= 0) {
+            draw_pixel(static_cast<uint16_t>(x0), static_cast<uint16_t>(y0), color);
+        }
+        if (x0 == x1 && y0 == y1) {
+            break;
+        }
+
+        const int16_t doubled_error = error * 2;
+        if (doubled_error >= dy) {
+            error += dy;
+            x0 += sx;
+        }
+        if (doubled_error <= dx) {
+            error += dx;
+            y0 += sy;
+        }
+    }
+}
+
 void fill_screen(color_t color) {
     std::fill(double_buffer.data[double_buffer.current_buffer], double_buffer.data[double_buffer.current_buffer]+display_width*display_height, color.get_color_raw_big_endian());
 }

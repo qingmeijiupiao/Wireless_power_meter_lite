@@ -8,6 +8,7 @@
 #include "ui_manager.h"
 
 #include "esp_log.h"
+#include "curve_history.h"
 #include "freertos/task.h"
 #include "power_output.h"
 #include "st7735.h"
@@ -86,10 +87,11 @@ void UIManager::apply_saved_display_config() {
 }
 
 void UIManager::loop_once() {
+    const uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
+    CurveHistory::instance().poll(now_ms);
     process_button_events();
 
     // 页面可以声明自己的刷新周期；按键或切页会强制 full_redraw_，立即刷新。
-    uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
     Page* page = current_page();
     if (!full_redraw_ && now_ms - last_render_ms_ < page->refresh_interval_ms()) {
         vTaskDelay(pdMS_TO_TICKS(5));

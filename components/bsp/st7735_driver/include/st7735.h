@@ -82,6 +82,16 @@ esp_err_t init(const Config *cfg, Rotation rotation=Rotation::Horizontal);
 void draw_pixel(uint16_t x, uint16_t y, color_t color);
 
 /**
+ * @brief 使用 Bresenham 算法绘制一条直线
+ * @param x0 起点 X 坐标
+ * @param y0 起点 Y 坐标
+ * @param x1 终点 X 坐标
+ * @param y1 终点 Y 坐标
+ * @param color 线条颜色
+ */
+void draw_line(int16_t x0, int16_t y0, int16_t x1, int16_t y1, color_t color);
+
+/**
  * @brief 用颜色填充矩形
  * @param x 左上角的X坐标
  * @param y 左上角的Y坐标

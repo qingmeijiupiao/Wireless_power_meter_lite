@@ -2,6 +2,9 @@
 
 `global_state` 是 HP 核运行期状态的共享入口。它把测量值、温度、保护状态和各模块诊断标志集中到一个 `GlobalState` 实例中，供保护、屏幕、CAN、Web 和黑匣子读取。
 
+电压、电流和 INA226 原始寄存器通过 `update_global_measurement()` 同批次发布；
+需要跨字段一致性的调用方使用 `get_global_measurement_snapshot()` 读取。
+
 这里的“全局状态”只保存在 RAM 中，不负责持久化。需要掉电保存的数据由 NVS 或黑匣子组件单独处理。
 
 ## 设计目标
@@ -110,6 +113,9 @@ auto& state = get_global_state();
 int32_t current_uA = state.current_uA;
 bool output_on = state.flags.bits.output_enabled;
 
+// 同一批次读取电压、电流和 INA226 原始寄存器
+GlobalMeasurementSnapshot measurement = get_global_measurement_snapshot();
+
 // 模块更新自己负责的标志
 state.flags.bits.screen_initialized = true;
 ```
@@ -117,7 +123,7 @@ state.flags.bits.screen_initialized = true;
 ## 注意事项
 
 - `get_global_state()` 返回引用，不会复制结构体。
-- 当前组件没有互斥锁。已有调用以简单整数读写为主；新增复杂的跨字段一致性要求时，需要评估并发保护。
+- 普通业务状态仍按简单整数读写；测量相关四个字段由独立临界区提供同批次快照。
 - 单位不要混用：温度是 `0.01 摄氏度`，电流是 `uA`，电压是 `mV`。
 - `energy_meter` 保留精确的 `int64_t uAh/uWh` HP 缓存，供可重置计量会话使用。
 - INA226 原始寄存器随主状态一起同步，业务模块不会绕过跨核锁直接读取 RTC 内存。

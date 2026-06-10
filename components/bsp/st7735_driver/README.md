@@ -6,6 +6,7 @@ ST7735S TFT 显示屏（0.96" 160×80）SPI 驱动，提供像素绘制、矩形
 
 - **双缓冲**：内置两帧全屏缓冲区，绘制完成后调用 `sync_buffers()` 一次性刷屏，消除撕裂
 - **RGB565 色彩**：`color_t` 类支持 RGB 三通道 / HEX 构造，自动转 RGB565 小/大端序
+- **基础图元**：支持像素、矩形、圆角矩形和 Bresenham 整数直线绘制
 - **等高变宽字体**：通过 `Font_t` 结构支持不等宽字符渲染，含抗锯齿插值（`map_px_data`）
 - **四方向旋转**：`Vertical / Horizontal / VerticalMirror / HorizontalMirror`
 - **50 MHz SPI**：使用 `spi_device_polling_transmit` 轮询传输，低延迟
@@ -47,6 +48,7 @@ ST7735::set_backlight(200);
 |-----|------|
 | `init(cfg, rotation)` | 初始化 SPI + 显示屏，默认横屏 |
 | `draw_pixel(x, y, color)` | 绘制单像素 |
+| `draw_line(x0, y0, x1, y1, color)` | 使用 Bresenham 算法绘制直线 |
 | `fill_rect(x, y, w, h, color)` | 填充矩形 |
 | `fill_round_rect(x, y, w, h, radius, color, bg)` | 绘制带抗锯齿的填充圆角矩形 |
 | `draw_round_rect(x, y, w, h, radius, thickness, color, bg)` | 绘制带抗锯齿的圆角矩形边框 |
