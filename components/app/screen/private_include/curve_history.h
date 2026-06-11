@@ -37,7 +37,7 @@ struct CurveBucket {
  */
 class CurveHistory {
 public:
-    static constexpr uint32_t SAMPLE_INTERVAL_MS = 200;
+    static constexpr uint32_t SAMPLE_INTERVAL_MS = 500;
     static constexpr uint32_t MAX_WINDOW_MS = 10 * 60 * 1000;
     static constexpr size_t MAX_SAMPLES = MAX_WINDOW_MS / SAMPLE_INTERVAL_MS;
 

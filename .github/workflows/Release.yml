@@ -268,12 +268,10 @@ jobs:
           } > release_notes.md
 
       # ──────────────────────────────────────────────
-      #  步骤8：创建 GitHub Release 并上传所有附件
-      #  附件包括：
-      #    - app 固件和 merged 固件
-      #    - ESP Launchpad 配置 (config.toml)
-      #    - OTA 更新清单 (latest.json)
-      #    - 最新版本摘要 (last.toml)
+      # ── 步骤8：创建 GitHub Release 并上传附件 ──
+      #  附件包括固件和当前版本的 Launchpad 配置
+      #  注意：latest.json 和 last.toml 不在此上传，
+      #  它们仅存于 firmware-dist 分支，通过固定 CDN 链接访问
       # ──────────────────────────────────────────────
       - name: Create Release and Upload Bin
         uses: softprops/action-gh-release@v1
@@ -282,8 +280,6 @@ jobs:
             Wireless_power_meter_lite_app_v*.bin
             Wireless_power_meter_lite_merged_v*.bin
             ${{ steps.distribution.outputs.config_path }}
-            ${{ steps.distribution.outputs.manifest_path }}
-            ${{ steps.distribution.outputs.last_toml_path }}
           body_path: release_notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
