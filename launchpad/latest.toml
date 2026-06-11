@@ -1,0 +1,10 @@
+esp_toml_version = 1.0
+firmware_images_url = "https://cdn.jsdelivr.net/gh/qingmeijiupiao/Wireless_power_meter_lite@cd5271197f7652adb60471ef90aff466cc98024d/firmware/v0.6.0/"
+supported_apps = ["Wireless_power_meter_lite"]
+
+["Wireless_power_meter_lite"]
+image.esp32c6 = "Wireless_power_meter_lite_merged_v0.6.0.bin"
+description = "lite版本功率计固件-手动烧录"
+android_app_url = ""
+ios_app_url = ""
+chipsets = ["esp32c6"]
