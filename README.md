@@ -176,6 +176,14 @@ esptool.py --chip esp32c6 write_flash 0x20000 build/Wireless_power_meter_lite.bi
 
 CD 通过 Tag 触发，例如 `v1.0.0`，自动注入版本号并发布 Release。
 
+## 网页在线烧录
+
+使用 ESP Launchpad 在线烧录最新固件（无需本地安装工具链）：
+
+[![在线烧录](https://img.shields.io/badge/ESP_Launchpad-在线烧录最新固件-blue?style=flat&logo=espressif)](https://espressif.github.io/esp-launchpad/?flashConfigURL=https://cdn.jsdelivr.net/gh/qingmeijiupiao/Wireless_power_meter_lite@firmware-dist/launchpad/latest.toml)
+
+> 烧录链接始终指向 `firmware-dist` 分支上的最新版本。手动烧录会清空校准等 NVS 数据，必要时请先备份。
+
 ## CI/CD
 
 - CI：推送或 PR 到 `main` 分支时自动构建。

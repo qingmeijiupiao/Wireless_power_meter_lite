@@ -1,21 +1,33 @@
+# ────────────────────────────────────────────────────────
+#  功率计 Lite 持续集成流水线
+# ────────────────────────────────────────────────────────
+#  触发条件：
+#    - 向 main 分支推送代码
+#    - 向 main 分支发起 Pull Request
+#  作用：验证固件能否正常编译，提前发现构建错误
+# ────────────────────────────────────────────────────────
 name: 功率计 Lite CI
 
 on:
   push:
-    branches: [main]
+    branches: [main]        # 代码推送到 main 时触发
   pull_request:
-    branches: [main]
+    branches: [main]        # PR 目标为 main 时触发
 
 jobs:
   ci:
     name: CI Build
     runs-on: ubuntu-latest
     steps:
+      # ── 步骤1：检出源码（含子模块） ──
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          submodules: "recursive"
+          submodules: "recursive"   # 递归拉取子模块
 
+      # ── 步骤2：编译固件 ──
+      # 使用 ESP-IDF v6.0，目标芯片 esp32c6
+      # 不注入自定义版本号，使用 CMakeLists.txt 中的默认值（PATCH=99）
       - name: Build with ESP-IDF
         uses: espressif/esp-idf-ci-action@v1
         with:

@@ -1,42 +1,66 @@
+# ────────────────────────────────────────────────────────
+#  功率计 Lite 固件自动发布流水线
+# ────────────────────────────────────────────────────────
+#  触发条件：推送 v* 格式的 tag（如 v1.0、v1.2.3）
+#  功能流程：
+#    1. 解析 tag 提取版本号
+#    2. 编译固件（ESP-IDF v6.0 / esp32c6）
+#    3. 将固件和元数据推送到 firmware-dist 分支（CDN 分发）
+#    4. 创建 GitHub Release 并上传附件
+# ────────────────────────────────────────────────────────
 name: 功率计 Lite Release
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["v*"]            # 仅 v* 标签触发，例如 v1.0、v2.3.1
 
 permissions:
-  contents: write
+  contents: write           # 允许写入 Release 和推送分支
 
+# 防止多个 release 同时执行导致冲突（同一时刻只跑一个）
 concurrency:
   group: firmware-release
-  cancel-in-progress: false
+  cancel-in-progress: false # 不取消已在运行的任务，排队等待
 
 jobs:
   release:
     name: Build & Release
     runs-on: ubuntu-latest
     steps:
+      # ──────────────────────────────────────────────
+      #  步骤1：检出源码（含子模块）
+      # ──────────────────────────────────────────────
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          submodules: "recursive"
-          fetch-depth: 0
+          submodules: "recursive"   # 递归拉取子模块
+          fetch-depth: 0           # 完整 git 历史，用于生成 changelog
 
+      # ──────────────────────────────────────────────
+      #  步骤2：从 tag 中解析版本号
+      #  输入：v1.2 → 输出 major=1, minor=2, full=1.2.0
+      #  PATCH 固定为 0（CD 发布版本），本地构建 PATCH=99
+      # ──────────────────────────────────────────────
       - name: Extract version from tag
         id: version
         shell: bash
         run: |
-          TAG="${GITHUB_REF_NAME#v}"
+          TAG="${GITHUB_REF_NAME#v}"        # 去掉前缀 v，得到纯版本号
           if [[ ! "${TAG}" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
             echo "Tag must match vMAJOR.MINOR or vMAJOR.MINOR.PATCH" >&2
             exit 1
           fi
-          MAJOR="${TAG%%.*}"
-          MINOR="$(echo $TAG | cut -d. -f2)"
+          MAJOR="${TAG%%.*}"                # 主版本号
+          MINOR="$(echo $TAG | cut -d. -f2)" # 次版本号
           echo "major=${MAJOR}" >> $GITHUB_OUTPUT
           echo "minor=${MINOR}" >> $GITHUB_OUTPUT
           echo "full=${MAJOR}.${MINOR}.0" >> $GITHUB_OUTPUT
 
+      # ──────────────────────────────────────────────
+      #  步骤3：编译固件
+      #  使用 ESP-IDF v6.0，目标芯片 esp32c6
+      #  通过 -DVERSION_* 宏注入发布版本号
+      # ──────────────────────────────────────────────
       - name: Build with ESP-IDF
         uses: espressif/esp-idf-ci-action@v1
         with:
@@ -45,19 +69,47 @@ jobs:
           path: "./"
           command: idf.py -DVERSION_MAJOR=${{ steps.version.outputs.major }} -DVERSION_MINOR=${{ steps.version.outputs.minor }} -DVERSION_PATCH=0 build
 
+      # ──────────────────────────────────────────────
+      #  步骤4：重命名固件文件（加入版本号后缀）
+      #  生成两个文件：
+      #    - app 固件（仅 APP 分区，用于 OTA 升级）
+      #    - merged 固件（bootloader + 分区表 + APP，用于全新烧录）
+      # ──────────────────────────────────────────────
       - name: Rename firmware for release
         run: |
           VERSION="${{ steps.version.outputs.full }}"
           cp build/Wireless_power_meter_lite.bin "Wireless_power_meter_lite_app_v${VERSION}.bin"
           cp Wireless_power_meter_lite_merged.bin "Wireless_power_meter_lite_merged_v${VERSION}.bin"
 
+      # ──────────────────────────────────────────────
+      #  步骤5：检出 firmware-dist 分支
+      #  该分支作为固件分发的 CDN 源（通过 jsDelivr 访问）
+      # ──────────────────────────────────────────────
       - name: Checkout firmware distribution branch
         uses: actions/checkout@v4
         with:
-          ref: firmware-dist
-          path: firmware-dist
-          fetch-depth: 1
+          ref: firmware-dist     # 固件分发专用分支
+          path: firmware-dist    # 检出到此子目录，与主源码隔离
+          fetch-depth: 1         # 只需最新提交即可
 
+      # ──────────────────────────────────────────────
+      #  步骤6：发布固件到 firmware-dist 分支
+      #
+      #  此步骤完成以下工作：
+      #    1. 将固件 bin 文件复制到 firmware/vX.Y.0/ 目录
+      #    2. 第一次 commit：提交固件文件（获取 ARTIFACT_COMMIT）
+      #    3. 生成元数据文件：
+      #       - ota/latest.json           OTA 更新清单（设备自动检查）
+      #       - launchpad/vX.Y.0/config.toml  按版本的网页烧录配置
+      #       - launchpad/latest.toml         固定的最新版网页烧录配置
+      #       - last.toml                     固定最新版本信息（含下载链接）
+      #    4. 第二次 commit：提交元数据文件
+      #    5. 推送到远程 firmware-dist 分支
+      #
+      #  关键变量说明：
+      #    ARTIFACT_COMMIT → 固件文件所在 commit，用于生成不变 CDN 链接
+      #    CDN_ROOT      → jsDelivr CDN 根地址（commit 级别的固定链接）
+      # ──────────────────────────────────────────────
       - name: Publish firmware distribution
         id: distribution
         shell: bash
@@ -66,6 +118,7 @@ jobs:
         run: |
           set -euo pipefail
 
+          # ── 1. 复制固件到分发目录 ──
           APP_NAME="Wireless_power_meter_lite_app_v${VERSION}.bin"
           MERGED_NAME="Wireless_power_meter_lite_merged_v${VERSION}.bin"
           DIST_DIR="firmware-dist/firmware/v${VERSION}"
@@ -74,6 +127,7 @@ jobs:
           cp "${APP_NAME}" "${DIST_DIR}/${APP_NAME}"
           cp "${MERGED_NAME}" "${DIST_DIR}/${MERGED_NAME}"
 
+          # ── 2. 第一次 commit：固件二进制文件 ──
           git -C firmware-dist config user.name "github-actions[bot]"
           git -C firmware-dist config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git -C firmware-dist add -f "firmware/v${VERSION}/${APP_NAME}" \
@@ -81,9 +135,12 @@ jobs:
           git -C firmware-dist commit -m "Publish firmware v${VERSION}"
           ARTIFACT_COMMIT="$(git -C firmware-dist rev-parse HEAD)"
 
+          # ── 3. 生成 CDN 链接（基于固件 commit，保证链接不可变） ──
           APP_SIZE="$(stat -c%s "${DIST_DIR}/${APP_NAME}")"
           CDN_ROOT="https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${ARTIFACT_COMMIT}"
 
+          # ── 4. 生成 ota/latest.json（OTA 更新清单） ──
+          # 设备端通过此文件检查是否有新固件可用
           cat > firmware-dist/ota/latest.json <<EOF
           {
             "schema_version": 1,
@@ -97,6 +154,8 @@ jobs:
           }
           EOF
 
+          # ── 5. 生成 launchpad/vX.Y.0/config.toml（当前版本网页烧录配置） ──
+          # ESP Launchpad 网页烧录工具需要此配置文件
           cat > "firmware-dist/launchpad/v${VERSION}/config.toml" <<EOF
           esp_toml_version = 1.0
           firmware_images_url = "${CDN_ROOT}/firmware/v${VERSION}/"
@@ -110,17 +169,48 @@ jobs:
           chipsets = ["esp32c6"]
           EOF
 
-          git -C firmware-dist add ota/latest.json "launchpad/v${VERSION}/config.toml"
+          # ── 6. 生成 last.toml（固定最新版本信息摘要） ──
+          # 提供稳定的最新版本号及固件下载链接，外部工具可固定访问
+          MERGED_SIZE="$(stat -c%s "${DIST_DIR}/${MERGED_NAME}")"
+          cat > firmware-dist/last.toml <<EOF
+          esp_toml_version = 1.0
+          version = "${VERSION}"
+          published_at = "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+          [firmware]
+          app = "${APP_NAME}"
+          app_size = ${APP_SIZE}
+          app_url = "${CDN_ROOT}/firmware/v${VERSION}/${APP_NAME}"
+          merged = "${MERGED_NAME}"
+          merged_size = ${MERGED_SIZE}
+          merged_url = "${CDN_ROOT}/firmware/v${VERSION}/${MERGED_NAME}"
+          EOF
+
+          # ── 7. 复制最新版 launchpad 配置到固定路径 ──
+          # launchpad/latest.toml 始终指向最新版本，README 中的烧录链接用这个
+          cp "firmware-dist/launchpad/v${VERSION}/config.toml" firmware-dist/launchpad/latest.toml
+
+          # ── 8. 第二次 commit：元数据文件，然后推送 ──
+          git -C firmware-dist add ota/latest.json "launchpad/v${VERSION}/config.toml" last.toml launchpad/latest.toml
           git -C firmware-dist commit -m "Update release metadata for v${VERSION}"
           METADATA_COMMIT="$(git -C firmware-dist rev-parse HEAD)"
           git -C firmware-dist push origin HEAD:firmware-dist
 
+          # ── 9. 导出输出变量，供后续步骤使用 ──
           CONFIG_PATH="launchpad/v${VERSION}/config.toml"
           CONFIG_URL="https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${METADATA_COMMIT}/${CONFIG_PATH}"
+          LAST_TOML_URL="https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@firmware-dist/last.toml"
           echo "config_path=firmware-dist/${CONFIG_PATH}" >> "$GITHUB_OUTPUT"
           echo "config_url=${CONFIG_URL}" >> "$GITHUB_OUTPUT"
           echo "manifest_path=firmware-dist/ota/latest.json" >> "$GITHUB_OUTPUT"
+          echo "last_toml_path=firmware-dist/last.toml" >> "$GITHUB_OUTPUT"
+          echo "last_toml_url=${LAST_TOML_URL}" >> "$GITHUB_OUTPUT"
 
+      # ──────────────────────────────────────────────
+      #  步骤7：生成 Release 说明（changelog）
+      #  自动提取两个 tag 之间的所有提交记录
+      #  如果这是第一个 tag，则列出当前 tag 的所有提交
+      # ──────────────────────────────────────────────
       - name: Generate release notes
         shell: bash
         env:
@@ -131,11 +221,13 @@ jobs:
           PREVIOUS_TAG="$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${CURRENT_TAG}^" 2>/dev/null || true)"
 
           {
+            # 版本标题
             echo "## 无线功率计 Lite 固件 v${{ steps.version.outputs.full }}"
             echo
             echo "### 版本变更"
             echo
 
+            # 列出自上一 tag 以来的所有非合并提交
             if [ -n "${PREVIOUS_TAG}" ]; then
               RANGE="${PREVIOUS_TAG}..${CURRENT_TAG}"
               while IFS=$'\t' read -r SHA SHORT_SHA SUBJECT; do
@@ -146,12 +238,14 @@ jobs:
               echo
               echo "[查看 ${PREVIOUS_TAG}...${CURRENT_TAG} 完整差异](${REPOSITORY_URL}/compare/${PREVIOUS_TAG}...${CURRENT_TAG})"
             else
+              # 首个 tag：直接列出所有提交
               while IFS=$'\t' read -r SHA SHORT_SHA SUBJECT; do
                 printf -- '- [%s](%s/commit/%s) %s\n' \
                   "${SHORT_SHA}" "${REPOSITORY_URL}" "${SHA}" "${SUBJECT}"
               done < <(git log --no-merges --pretty=tformat:'%H%x09%h%x09%s' "${CURRENT_TAG}")
             fi
 
+            # 固件说明和烧录指引（固定模板）
             cat <<'EOF'
 
             ### 固件说明
@@ -173,6 +267,14 @@ jobs:
           EOF
           } > release_notes.md
 
+      # ──────────────────────────────────────────────
+      #  步骤8：创建 GitHub Release 并上传所有附件
+      #  附件包括：
+      #    - app 固件和 merged 固件
+      #    - ESP Launchpad 配置 (config.toml)
+      #    - OTA 更新清单 (latest.json)
+      #    - 最新版本摘要 (last.toml)
+      # ──────────────────────────────────────────────
       - name: Create Release and Upload Bin
         uses: softprops/action-gh-release@v1
         with:
@@ -181,6 +283,7 @@ jobs:
             Wireless_power_meter_lite_merged_v*.bin
             ${{ steps.distribution.outputs.config_path }}
             ${{ steps.distribution.outputs.manifest_path }}
+            ${{ steps.distribution.outputs.last_toml_path }}
           body_path: release_notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
