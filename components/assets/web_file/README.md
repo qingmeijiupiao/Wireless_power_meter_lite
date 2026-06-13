@@ -45,11 +45,13 @@ flowchart TD
 | `status_html_file` | `status.html` | 状态诊断页面 |
 | `logs_html_file` | `logs.html` | 实时日志页面 |
 | `blackbox_html_file` | `blackbox.html` | 历史日志入口页面 |
-| `firmware_html_file` | `firmware.html` | APP 固件上传、校验与激活页面 |
+| `firmware_html_file` | `firmware.html` | APP 固件上传、在线更新、CDN 最新固件下载和 GitHub 历史版本入口 |
 | `provision_html_file` | `provision.html` | AP 配网页 |
 | `app_css_file` | `app.css` | 公共样式 |
 
-`charts.html` 使用在线 Chart.js。CDN 加载失败时只有曲线页不可用，其他页面仍可工作。
+`charts.html` 使用在线 Chart.js。所有页面侧栏底部使用 jsDelivr 的在线 GitHub SVG
+图标并链接到项目仓库；图标加载失败不影响导航和文字链接。固件页的最新固件下载链接
+指向 `firmware-dist/ota/latest.bin`，该文件由 Release 工作流随每个版本更新。
 
 ## 使用方式
 

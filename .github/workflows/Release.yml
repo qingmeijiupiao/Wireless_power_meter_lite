@@ -96,7 +96,7 @@ jobs:
       #  步骤6：发布固件到 firmware-dist 分支
       #
       #  此步骤完成以下工作：
-      #    1. 将固件 bin 文件复制到 firmware/vX.Y.0/ 目录
+      #    1. 将固件 bin 文件复制到 firmware/vX.Y.0/，并更新 ota/latest.bin
       #    2. 第一次 commit：提交固件文件（获取 ARTIFACT_COMMIT）
       #    3. 生成元数据文件：
       #       - ota/latest.json           OTA 更新清单（设备自动检查）
@@ -118,7 +118,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          # ── 1. 复制固件到分发目录 ──
+          # ── 1. 复制版本固件，并更新供网页手动下载的固定 APP 固件路径 ──
           APP_NAME="Wireless_power_meter_lite_app_v${VERSION}.bin"
           MERGED_NAME="Wireless_power_meter_lite_merged_v${VERSION}.bin"
           DIST_DIR="firmware-dist/firmware/v${VERSION}"
@@ -126,12 +126,13 @@ jobs:
           mkdir -p "${DIST_DIR}" firmware-dist/ota "firmware-dist/launchpad/v${VERSION}"
           cp "${APP_NAME}" "${DIST_DIR}/${APP_NAME}"
           cp "${MERGED_NAME}" "${DIST_DIR}/${MERGED_NAME}"
+          cp "${APP_NAME}" firmware-dist/ota/latest.bin
 
           # ── 2. 第一次 commit：固件二进制文件 ──
           git -C firmware-dist config user.name "github-actions[bot]"
           git -C firmware-dist config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git -C firmware-dist add -f "firmware/v${VERSION}/${APP_NAME}" \
-            "firmware/v${VERSION}/${MERGED_NAME}"
+            "firmware/v${VERSION}/${MERGED_NAME}" ota/latest.bin
           git -C firmware-dist commit -m "Publish firmware v${VERSION}"
           ARTIFACT_COMMIT="$(git -C firmware-dist rev-parse HEAD)"
 
