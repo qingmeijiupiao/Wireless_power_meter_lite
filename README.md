@@ -1,85 +1,173 @@
 # Wireless Power Meter Lite
 
-无线功率计 Lite — 基于 ESP32-C6 的紧凑型无线功率测量、显示、保护与联网控制设备。
+`Wireless_power_meter_lite` 是一个基于 ESP-IDF 的无线功率测量与输出控制固件。
+工程将实时采样、累计计量、保护策略、本地交互、无线控制、Web 服务、日志诊断和
+OTA 升级组织为独立组件，既可以直接构建完整固件，也可以作为 ESP-IDF 多组件项目
+的参考实现。
 
-## 功能概览
+配套遥控器固件见
+[`Wireless_power_switch_button`](https://github.com/qingmeijiupiao/Wireless_power_switch_button)。
 
-- 电压/电流/功率实时测量：INA226 由 LP 核采样，主程序读取共享状态。
-- 输出保护：支持过温、过压、欠压、过流保护，并与输出控制联动。
-- 本地显示与控制：ST7735S 160x80 TFT 显示，按键与串口 Shell 调试。
-- 通信与联网：CAN(TWAI) 通信，WiFi STA/AP 配网，Web 页面与 REST API。
-- 数据与配置：NVS 持久化配置，Flash 循环日志，结构化黑匣子记录。
-- 固件布局：已提供 OTA 双 APP 分区、Web 流式上传、固件校验、二次确认激活与重启切换流程。
+> 本 README 主要介绍软件功能、架构和二次开发入口。具体器件连接、引脚定义和
+> 电气参数属于 BSP 与板级实现细节，不在根目录文档中展开。
 
-## 硬件平台
+## 主要功能
 
-| 项目 | 规格 |
-|------|------|
-| 主控 | ESP32-C6 |
-| 功率采样 | INA226 (I2C, LP 核驱动) |
-| 温度采样 | TMP235 (ADC) + ESP32-C6 片内温度传感器 |
-| 显示屏 | ST7735S 160x80 TFT (SPI) |
-| 通信接口 | CAN (TWAI) / WiFi |
-| 本地输入 | 主按键 / 侧按键 |
+- **实时测量**：由低功耗核心持续采样，主核心读取一致的数据快照。
+- **累计计量**：计算电量和能量，支持会话数据与长期累计数据。
+- **输出控制与保护**：开关操作经过保护策略和冷却策略检查，异常时主动关闭输出。
+- **本地交互**：提供屏幕页面、按键操作和串口 Shell。
+- **无线遥控**：通过 ESP-NOW 接收配对遥控器的控制请求，并可返回测量数据。
+- **网络与 Web**：支持 STA、AP 配网、Captive Portal、REST API 和网页控制。
+- **配置持久化**：使用 NVS 保存网络、校准、保护和业务配置。
+- **故障诊断**：Flash 循环黑匣子保存关键日志和运行快照。
+- **固件升级**：支持 Web 上传、远端版本检查、断点续传和双 APP 分区 OTA。
+- **自动化发布**：通过 CI/CD 构建、校验并发布可下载和可在线烧录的固件。
 
-## 分区表
+## 系统如何工作
 
-| 分区 | 类型 | 偏移 | 大小 | 说明 |
-|------|------|------|------|------|
-| nvs | data | 0x9000 | 80KB | NVS 键值存储 |
-| otadata | data | 0x1D000 | 8KB | OTA 状态数据 |
-| app0 | app(ota_0) | 0x20000 | 1280KB | 应用程序分区 A |
-| app1 | app(ota_1) | 0x160000 | 1280KB | 应用程序分区 B |
-| blackbox | data | 0x2A0000 | 1408KB | 黑匣子日志分区 |
+ESP32-C6 包含主核心和低功耗核心。本工程把持续采样和积分放到 LP Core，把屏幕、
+网络、保护和业务逻辑放到 HP Core。
 
-## 项目结构
+采用 LP Core 的主要原因不是单纯降低功耗，而是隔离 I2C 采样带来的阻塞。ESP32 上的
+I2C 读取需要等待总线事务完成；当采样运行在主核心时，频繁读取会占用执行时间并干扰
+WiFi、Web 和其他实时任务。将采样移到 LP Core 后，I2C 等待不会阻塞 HP Core 的业务
+任务，同时 LP Core 可以按独立节奏持续采样和积分，保证测量过程的实时性与连续性。
 
-```text
-├── CMakeLists.txt              # 顶层构建配置与版本号注入
-├── partitions.csv              # 分区表
-├── sdkconfig                   # ESP-IDF 项目配置
-├── scripts/                    # 构建、资源生成和固件合并脚本
-├── main/                       # app_main 与 LP 核程序
-├── components/
-│   ├── app/                    # 应用层组件
-│   ├── bsp/                    # 板级支持包
-│   ├── middleware/             # 通用中间件
-│   ├── assets/                 # 字体、UI、Web 静态资源
-│   └── common/                 # 通用算法/库
-├── .github/workflows/          # CI/CD
-└── .devcontainer/              # VS Code Dev Container
+- **LP Core** 是后台测量单元，即使主业务繁忙，也持续更新测量结果。
+- **HP Core** 是应用处理单元，读取测量快照并执行显示、保护、通信和 Web 服务。
+- 两个核心通过 RTC 共享内存交换固定格式的数据和状态。
+
+```mermaid
+flowchart LR
+    Sensor["测量前端"] --> LP["LP Core<br/>采样 / 校准 / 积分"]
+    LP --> Shared["RTC 共享状态"]
+    Shared --> State["global_state<br/>运行快照"]
+    State --> Protect["保护与输出控制"]
+    State --> Screen["屏幕与按键"]
+    State --> Wireless["ESP-NOW"]
+    State --> Web["WiFi / Web API"]
+    State --> Log["黑匣子与诊断"]
 ```
 
-## 架构与模块文档
+## 软件架构
 
-依赖方向原则为 `app -> middleware -> bsp/common`，资源组件由使用方按需引用。
-应用层组件之间允许按业务协作互相依赖，但 BSP 和通用中间件不应依赖应用层。
-每个组件 README 末尾都有按当前 CMake 生成的直接依赖链接。
+工程使用 ESP-IDF Component 管理模块。每个 Component 都可以声明自己的源码、
+公开头文件和依赖，CMake 会按照依赖关系完成编译和链接。
+
+```text
+main/                       启动编排、LP Core 程序和共享状态加载
+components/
+  app/                      产品业务和设备功能
+  middleware/               可复用服务、协议和数据处理
+  bsp/                      芯片外设与板级驱动
+  common/                   通用算法和日志契约
+  assets/                   字体、图片和 Web 静态资源
+scripts/                    资源生成、固件合并和日志分析工具
+```
+
+推荐依赖方向：
 
 ```mermaid
 flowchart TB
-    Main["main<br/>启动编排 / LP Core 加载"] --> App["app<br/>业务服务与设备功能"]
-    App --> Middleware["middleware<br/>可复用服务与协议"]
-    App --> BSP["bsp<br/>芯片与板级驱动"]
-    App --> Assets["assets<br/>字体 / 图片 / Web 资源"]
+    Main["main<br/>启动编排"] --> App["app<br/>产品业务"]
+    App --> Middleware["middleware<br/>通用服务"]
+    App --> BSP["bsp<br/>平台与驱动"]
+    App --> Assets["assets<br/>静态资源"]
     Middleware --> BSP
-    Middleware --> Common["common<br/>通用算法与日志契约"]
+    Middleware --> Common["common<br/>通用能力"]
     BSP --> Common
-    Assets --> BSP
 ```
 
-组件若需要私有头文件，统一放在 `private_include/` 并通过
-`PRIV_INCLUDE_DIRS` 引入；跨组件公开接口放在 `include/`。
+- `app` 可以组合多个底层组件完成完整功能。
+- `middleware` 不应依赖具体页面、按键含义或产品启动流程。
+- `bsp` 封装外设和板级差异，不应调用应用层业务。
+- 跨组件公开接口放在 `include/`，组件内部头文件放在 `private_include/`。
+
+这是一条设计原则，不表示应用层组件之间完全禁止协作。业务组件可以互相调用，但应
+优先通过公开接口连接，避免直接访问其他组件的内部状态。
+
+## 启动流程
+
+`main/app_main.cpp` 只负责编排初始化顺序，不实现具体驱动。
+
+```mermaid
+flowchart TD
+    Boot["app_main"] --> Log["初始化黑匣子和 NVS"]
+    Log --> Diag["记录启动诊断"]
+    Diag --> Board["加载板级配置和温度采样"]
+    Board --> UI["启动状态更新和屏幕任务"]
+    UI --> LP["加载 LP Core 测量程序"]
+    LP --> Safety["初始化保护和输出控制"]
+    Safety --> Local["初始化按键、CAN 和 Shell"]
+    Local --> Network["启动 ESP-NOW / WiFi / Web"]
+    Network --> Runtime["记录运行期诊断"]
+```
+
+先初始化诊断和存储，可以尽量保留后续初始化失败的原因；先初始化保护再开放网络控制，
+可以避免远程请求绕过设备安全状态。
+
+## 关键技术说明
+
+### LP Core 与共享快照
+
+LP Core 独立执行 I2C 读取、校准补偿和积分，避免同步总线事务阻塞 HP Core 上的
+WiFi、Web、屏幕和控制任务。采样循环不依赖主业务任务的调度状态，因此能够保持稳定
+的测量节奏。
+
+HP Core 不直接读取一组可能正在变化的零散变量，而是取得同一批次快照，再发布到
+`global_state`。这样可以减少电压、电流和原始寄存器来自不同采样时刻的问题。
+
+详细实现：
+
+- [LP Core 程序](main/ulp_app/README.md)
+- [HP Core 加载与共享状态](main/ulp_loader/README.md)
+
+### 输出控制与保护策略
+
+所有开启、关闭和切换请求都进入 `power_output`。开启输出前，组件按顺序检查已注册的
+策略；任一策略拒绝，本次操作就不会执行。保护状态触发时还会主动关闭输出。
+
+这种策略链便于二次开发：新增启动条件时，可以增加策略，而不必在按键、Web、CAN 和
+ESP-NOW 的每个入口重复判断。
+
+### ESP-NOW、WiFi 与 Web
+
+ESP-NOW 和普通 WiFi 共用同一套 2.4 GHz 射频，因此不能把它们当成完全独立的外设。
+`wifi_service` 统一管理以下运行模式：
+
+- 已保存网络可用时连接 STA 并启动 Web；
+- 未配置或连接失败时进入 AP 配网；
+- Web 被禁用时保留 ESP-NOW 所需射频；
+- WiFi 信道变化时配合 ESP-NOW 完成 peer 通信。
+
+`espnow_link` 负责可靠传输、配对和信道恢复，`espnow_service` 负责本产品的命令和
+数据格式。
+
+### 黑匣子
+
+普通日志主要用于实时调试，黑匣子用于保留设备已经重启或离线后的诊断信息。
+`blackbox_service` 捕获重要日志和状态，`blackbox` 将记录写入循环 Flash 分区。
+空间写满后覆盖最旧记录，从而限制 Flash 占用。
+
+### 双分区 OTA
+
+固件包含两个应用分区。设备运行其中一个分区时，新固件写入另一个分区；下载完成后
+校验镜像，再切换下次启动分区。这样可以避免直接覆盖当前正在运行的程序。
+
+远端 OTA 还会检查版本、HTTPS、文件长度和固件格式，并支持连接中断后的 Range 续传。
+
+## 组件导航
 
 ### 启动与工具
 
 | 模块 | 职责 |
 |------|------|
-| [LP 核加载](main/ulp_loader/README.md) | HP 核加载 LP 固件、共享快照与校准参数 |
-| [LP 核采样](main/ulp_app/README.md) | INA226 采样、累计计量与跨核状态 |
-| [构建脚本](scripts/README.md) | Web 压缩、资源生成、固件合并与日志分析 |
+| [LP 核加载](main/ulp_loader/README.md) | 加载 LP 固件、读取共享快照和传递校准参数 |
+| [LP 核采样](main/ulp_app/README.md) | 持续采样、校准补偿和累计计量 |
+| [构建脚本](scripts/README.md) | 资源生成、固件合并和黑匣子分析 |
 
-### 应用层 `components/app`
+### 应用层
 
 | 业务域 | 模块 |
 |--------|------|
@@ -87,17 +175,17 @@ flowchart TB
 | 安全与输出 | [protect](components/app/protect/README.md) · [power_output](components/app/power_output/README.md) · [current_calibration](components/app/current_calibration/README.md) |
 | 本地交互 | [screen](components/app/screen/README.md) · [shell_command](components/app/shell_command/README.md) · [can_callback](components/app/can_callback/README.md) |
 | 无线与 Web | [wifi_service](components/app/wifi_service/README.md) · [espnow_service](components/app/espnow_service/README.md) · [web_backend](components/app/web_backend/README.md) |
-| 升级 | [ota_service](components/app/ota_service/README.md) |
+| 固件升级 | [ota_service](components/app/ota_service/README.md) |
 
-### 中间件 `components/middleware`
+### 中间件
 
 | 领域 | 模块 |
 |------|------|
-| 网络协议 | [WebServer](components/middleware/WebServer/README.md) · [DNSServer](components/middleware/DNSServer/README.md) · [espnow_link](components/middleware/espnow_link/README.md) · [time_service](components/middleware/time_service/README.md) |
+| 网络服务 | [WebServer](components/middleware/WebServer/README.md) · [DNSServer](components/middleware/DNSServer/README.md) · [espnow_link](components/middleware/espnow_link/README.md) · [time_service](components/middleware/time_service/README.md) |
 | 数据与升级 | [blackbox](components/middleware/blackbox/README.md) · [energy_meter](components/middleware/energy_meter/README.md) · [ota_manager](components/middleware/ota_manager/README.md) |
 | 设备交互 | [Button](components/middleware/Button/README.md) · [can_resistor](components/middleware/can_resistor/README.md) |
 
-### 板级支持 `components/bsp`
+### BSP、通用库与资源
 
 | 领域 | 模块 |
 |------|------|
@@ -105,94 +193,100 @@ flowchart TB
 | 总线与无线 | [HXC_TWAI](components/bsp/HXC_TWAI/README.md) · [wifi_manager](components/bsp/wifi_manager/README.md) |
 | GPIO 与显示 | [cpp_gpio_driver](components/bsp/cpp_gpio_driver/README.md) · [PWM](components/bsp/PWM/README.md) · [st7735_driver](components/bsp/st7735_driver/README.md) |
 | 存储与平台 | [HXC_NVS](components/bsp/HXC_NVS/README.md) · [circular_flash_buffer](components/bsp/circular_flash_buffer/README.md) · [hardware](components/bsp/hardware/README.md) · [shell](components/bsp/shell/README.md) |
+| 通用库 | [diagnostic_log](components/common/diagnostic_log/README.md) · [Interp](components/common/Interp/README.md) |
+| 静态资源 | [Fonts](components/assets/Fonts/README.md) · [ui_resources](components/assets/ui_resources/README.md) · [web_file](components/assets/web_file/README.md) |
 
-### 通用库与资源
+## 二次开发入口
 
-| 层级 | 模块 |
-|------|------|
-| `common` | [diagnostic_log](components/common/diagnostic_log/README.md) · [Interp](components/common/Interp/README.md) |
-| `assets` | [Fonts](components/assets/Fonts/README.md) · [ui_resources](components/assets/ui_resources/README.md) · [web_file](components/assets/web_file/README.md) |
+| 需求 | 建议从这里开始 |
+|------|----------------|
+| 新增或修改屏幕页面 | `components/app/screen/` |
+| 新增 Shell 命令 | `components/app/shell_command/` |
+| 新增 REST API | `components/app/web_backend/` |
+| 修改网页 | `components/assets/web_file/` |
+| 修改保护逻辑 | `components/app/protect/` |
+| 增加输出操作约束 | `components/app/power_output/` 的策略接口 |
+| 修改 ESP-NOW 产品命令 | `components/app/espnow_service/` |
+| 修改可靠传输或配对 | `components/middleware/espnow_link/` |
+| 修改 WiFi/AP 配网策略 | `components/app/wifi_service/` |
+| 修改采样和积分 | `main/ulp_app/` 与 `main/ulp_loader/` |
+| 适配不同板卡 | `components/bsp/hardware/` 及相关 BSP 组件 |
 
-## Web 后端概览
+建议先阅读应用组件的公开头文件和 README，再查看实现文件。修改一个功能前，先确认
+它属于产品策略、通用服务还是板级驱动，避免把同一逻辑复制到多个入口。
 
-Web 后端由 `components/app/web_backend` 提供，对外入口为 `WebBackend::start_with_wifi_service()`。组件负责注册页面路由和 REST API，底层 HTTP 能力由 `components/middleware/WebServer` 提供，网页资源由 `components/assets/web_file` 嵌入固件。
+## Web 后端
 
-当前后端实现按职责拆分为路由注册、页面 handler、API handler、日志捕获和 JSON 请求解析等源文件。为适配 ESP32-C6 的内存约束，后端响应使用固定静态缓冲，请求 JSON 使用 common/json 的 SAX 方式按字段读取，不构造完整 JSON DOM。
+Web 后端入口为 `WebBackend::start_with_wifi_service()`。它负责启动网络策略、注册页面
+路由和 REST API；HTTP 服务由 `WebServer` 提供，网页由 `web_file` 嵌入固件。
 
-详细路由表、API 示例、内存策略和源码结构见 [components/app/web_backend/README.md](components/app/web_backend/README.md)。
+为控制 RAM 使用，后端响应采用固定缓冲区，请求 JSON 使用按字段读取方式，不构造完整
+JSON DOM。路由、API 和内存策略见
+[web_backend 文档](components/app/web_backend/README.md)。
 
-## 启动入口
-
-主入口位于 `main/app_main.cpp`。当前启动流程只在主 README 保留入口级说明：
-
-1. 初始化黑匣子、NVS 和黑匣子应用服务，再探测硬件配置，使最早期硬件异常也能落盘。
-2. 在其他功能启动前分行同步写入基础诊断块，包括复位原因、固件、Flash、OTA 槽位、MAC、CAN、WiFi、校准参数和保护阈值。
-3. 在温度、状态定时器/屏幕、LP Core、保护、输出、按键、CAN、Shell 和 WiFi/Web 初始化前分别写入同步阶段标记。
-4. 初始化温度采样、状态更新定时器和屏幕任务。
-5. 加载 LP 核采样程序。
-6. 初始化保护、输出控制、按键、CAN、Shell。
-7. 调用 `WebBackend::start_with_wifi_service()` 启动 WifiService；所有非 OFF 模式
-   启用 ESP-NOW，按配置决定是否继续启动 WiFi IP 网络与 Web。
-8. 写入依赖运行期状态的补充诊断，包括 CAN 电阻、WiFi 模式、IP、INA226 原始值和全局标志。
-
-具体模块行为以对应 README 和源码为准。
-
-## 构建与烧录
+## 构建
 
 ### 环境要求
 
 - ESP-IDF v6.0+
-- 目标芯片：`esp32c6`
+- Python 3 及 `scripts/requirements.txt` 中的脚本依赖
+- 目标芯片：ESP32-C6
 
-### 构建
-
-```bash
+```powershell
 idf.py set-target esp32c6
 idf.py build
 ```
 
-构建完成后 `scripts/post_build.py` 会自动合并固件生成 `Wireless_power_meter_lite_merged.bin`。
+构建过程会生成静态资源，并在完成后输出：
 
-### 烧录
+- `build/Wireless_power_meter_lite.bin`：仅应用程序；
+- `Wireless_power_meter_lite_merged.bin`：Bootloader、分区表和应用程序合并固件。
 
-合并固件，全新烧录：
+## 烧录
 
-```bash
+### 完整烧录
+
+适用于首次安装、故障恢复或分区布局发生变化：
+
+```powershell
 esptool.py --chip esp32c6 write_flash 0x0 Wireless_power_meter_lite_merged.bin
 ```
 
-仅 APP 固件，写入 app0：
+完整烧录会覆盖 NVS 和 OTA 状态区域，网络、校准和业务配置需要重新设置。
 
-```bash
-esptool.py --chip esp32c6 write_flash 0x20000 build/Wireless_power_meter_lite.bin
-```
+## 分区布局
 
-## 版本号
+| 分区 | 偏移 | 大小 | 用途 |
+|------|------|------|------|
+| `nvs` | `0x9000` | 80 KB | 持久化配置 |
+| `otadata` | `0x1D000` | 8 KB | OTA 启动状态 |
+| `app0` | `0x20000` | 1280 KB | 应用程序分区 A |
+| `app1` | `0x160000` | 1280 KB | 应用程序分区 B |
+| `blackbox` | `0x2A0000` | 1408 KB | 循环诊断日志 |
 
-版本号定义为 `MAJOR.MINOR.PATCH`，在 `CMakeLists.txt` 中配置：
+## 在线烧录
 
-- `MAJOR` / `MINOR`：开发者手动修改。
-- `PATCH`：`99` 表示本地构建，`0` 表示 CD 构建。
+[使用 ESP Launchpad 在线烧录最新固件](https://espressif.github.io/esp-launchpad/?flashConfigURL=https://cdn.jsdelivr.net/gh/qingmeijiupiao/Wireless_power_meter_lite@firmware-dist/launchpad/latest.toml)
 
-CD 通过 Tag 触发，例如 `v1.0.0`，自动注入版本号并发布 Release。
+在线入口读取 `firmware-dist` 分支上的最新发布配置，需要使用支持 Web Serial 的
+Chromium 系浏览器。完整烧录会清除 NVS 配置，升级前应确认是否需要备份。
 
-## 网页在线烧录
+## 版本与发布
 
-使用 ESP Launchpad 在线烧录最新固件（无需本地安装工具链）：
+版本格式为 `MAJOR.MINOR.PATCH`：
 
-[![在线烧录](https://img.shields.io/badge/ESP_Launchpad-在线烧录最新固件-blue?style=flat&logo=espressif)](https://espressif.github.io/esp-launchpad/?flashConfigURL=https://cdn.jsdelivr.net/gh/qingmeijiupiao/Wireless_power_meter_lite@firmware-dist/launchpad/latest.toml)
+- 开发者维护顶层 `CMakeLists.txt` 中的 `MAJOR` 和 `MINOR`；
+- 本地构建使用 `PATCH=99`，表示非正式固件；
+- 标签发布由 CI 使用 `PATCH=0` 构建，例如 `v0.9.0`；
+- 编译时间统一按 UTC+8 写入固件。
 
-> 烧录链接始终指向 `firmware-dist` 分支上的最新版本。手动烧录会清空校准等 NVS 数据，必要时请先备份。
-
-## CI/CD
-
-- CI：推送或 PR 到 `main` 分支时自动构建。
-- CD：推送 `v*` 标签时自动构建、合并固件、创建 GitHub Release 并上传固件。
+推送或提交 PR 到 `main` 时，CI 会检查工程能否正常构建。推送版本标签后，CD 会生成
+发布固件、校验文件和在线烧录配置。
 
 ## 开发环境
 
-项目提供 VS Code Dev Container 配置，基于 ESP-IDF v6.0 Docker 镜像。
+仓库提供 VS Code Dev Container 配置，可使用预配置的 ESP-IDF 容器完成编译。
 
 ## 许可证
 
-请参阅项目源文件头部的许可证声明。
+参阅仓库中的 [LICENSE](LICENSE)。
