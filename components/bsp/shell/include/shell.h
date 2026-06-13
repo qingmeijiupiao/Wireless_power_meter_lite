@@ -21,7 +21,7 @@ extern "C" {
 }
 
 #ifndef SHELL_TASK_STACK_SIZE
-#define SHELL_TASK_STACK_SIZE 8192
+#define SHELL_TASK_STACK_SIZE 6144
 #endif
 
 #ifndef SHELL_TASK_PRIORITY

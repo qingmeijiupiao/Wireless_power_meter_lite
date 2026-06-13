@@ -80,7 +80,8 @@ extern "C" void app_main(void){
     TimerHandle_t xMyTimer = xTimerCreate("update_main_state", pdMS_TO_TICKS(5), pdTRUE, NULL, update_main_state);
     configASSERT(xMyTimer != nullptr);
     configASSERT(xTimerStart(xMyTimer, 0) == pdPASS);
-    configASSERT(xTaskCreate(SCREEN::screen_task, "screen_task", 4096, NULL, 4, NULL) == pdPASS);
+    // 屏幕任务实测峰值约 2.1KB，保留约 1.4KB 栈余量覆盖页面切换。
+    configASSERT(xTaskCreate(SCREEN::screen_task, "screen_task", 3584, NULL, 4, NULL) == pdPASS);
 
     BootDiagnostics::append_stage("lp_core_load");
     ret = LP_Core_Load();

@@ -1,6 +1,10 @@
 #include "Button.h"
 #include "esp_log.h"
 
+namespace {
+constexpr uint32_t BUTTON_EVENT_TASK_STACK_SIZE = 2048;
+}
+
 Button::Button()
     : _pin(GPIO_NUM_NC), _active_low(true), _ticks(0), _gap_ticks(0) {
     
@@ -44,8 +48,9 @@ esp_err_t Button::setup(gpio_num_t gpio_num, bool active_low) {
         return ESP_ERR_NO_MEM;
     }
     
-    // 2. 创建独立任务处理耗时回调，优先级为3
-    if (xTaskCreate(_event_task, "btn_task", 4096, this, 3, &_task_handle) != pdPASS) {
+    // 2. 独立任务只负责消费事件并调用轻量回调，避免占用不必要的常驻栈。
+    if (xTaskCreate(_event_task, "btn_task", BUTTON_EVENT_TASK_STACK_SIZE,
+                    this, 3, &_task_handle) != pdPASS) {
         ESP_LOGE("Button", "Failed to create event task");
         return ESP_ERR_NO_MEM;
     }

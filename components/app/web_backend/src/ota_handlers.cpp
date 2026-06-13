@@ -16,8 +16,6 @@ namespace WebBackend {
 namespace {
 
 constexpr const char* TAG = "WebBackendOta";
-constexpr size_t OTA_UPLOAD_BUFFER_SIZE = 4096;
-char ota_upload_buffer[OTA_UPLOAD_BUFFER_SIZE];
 
 const char* ota_state_to_str(OtaManager::State state) {
     switch (state) {
@@ -106,7 +104,7 @@ esp_err_t send_ota_status(WebServer::Request* request, bool ok, const char* reas
         strncpy(target_version, target_desc.version, sizeof(target_version) - 1);
     }
 
-    snprintf(detail_response_buffer, sizeof(detail_response_buffer),
+    snprintf(web_scratch_buffer, sizeof(web_scratch_buffer),
         "{"
         "\"ok\":%s,"
         "\"reason\":\"%s\","
@@ -145,7 +143,7 @@ esp_err_t send_ota_status(WebServer::Request* request, bool ok, const char* reas
         remote.last_error,
         static_cast<unsigned>(remote.bytes_downloaded),
         static_cast<unsigned>(remote.image_size));
-    return WebServer::send_json(request, detail_response_buffer);
+    return WebServer::send_json(request, web_scratch_buffer);
 }
 
 void ota_reboot_timer_callback(void*) {
@@ -210,15 +208,15 @@ esp_err_t ota_upload_handler(WebServer::Request* request) {
             static_cast<unsigned>(ota_partition_slot(status_target_partition())),
             ota_error_to_str(err),
             static_cast<unsigned>(err));
-        snprintf(response_buffer, sizeof(response_buffer),
+        snprintf(web_scratch_buffer, sizeof(web_scratch_buffer),
             "{\"ok\":false,\"reason\":\"%s\"}\n", ota_error_to_str(err));
         return WebServer::send(request, err == ESP_ERR_INVALID_SIZE ? 413 : 409,
-            "application/json", response_buffer, strlen(response_buffer));
+            "application/json", web_scratch_buffer, strlen(web_scratch_buffer));
     }
     append_ota_status_event("upload_started");
 
     uint8_t next_progress_percent = 25;
-    err = WebServer::stream_body(request, ota_upload_buffer, sizeof(ota_upload_buffer),
+    err = WebServer::stream_body(request, web_scratch_buffer, sizeof(web_scratch_buffer),
         [image_size, &next_progress_percent](const char* data, size_t size) -> esp_err_t {
             const esp_err_t write_err = OtaManager::write(data, size);
             if (write_err != ESP_OK) {

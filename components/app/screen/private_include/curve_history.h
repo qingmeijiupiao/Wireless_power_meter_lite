@@ -72,9 +72,11 @@ public:
 
 private:
     struct Sample {
-        uint16_t voltage_mV;
-        int32_t current_uA;
+        uint16_t voltage_mV; /**< 电压，单位 1mV/LSB。 */
+        uint16_t current_mA; /**< 电流绝对值，单位 1mA/LSB。 */
     };
+
+    static_assert(sizeof(Sample) == 4, "CurveHistory::Sample must stay compact");
 
     CurveHistory() = default;
 

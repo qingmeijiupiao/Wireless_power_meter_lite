@@ -191,6 +191,7 @@ esp_err_t LP_Core_Load(void){
                        static_cast<long>(snapshot.current_uA));
     }
 
-    xTaskCreate(print_lp_core_log_task, "print_lp_core_log", 2048, NULL, 4, NULL);
+    // LP 日志任务只读取共享快照和输出单条日志，保留约 1.2KB 实测余量。
+    xTaskCreate(print_lp_core_log_task, "print_lp_core_log", 1536, NULL, 4, NULL);
     return ESP_OK;
 }

@@ -128,7 +128,7 @@ bool block = protect_should_block_output();
 
 | API | 说明 |
 |-----|------|
-| `protect_init()` | 启动保护检测任务（优先级 5，4KB 栈） |
+| `protect_init()` | 启动保护检测任务（优先级 5，3584 字节栈） |
 | `protect_deinit()` | 停止任务并清除保护状态 |
 | `protect_init_ok()` | 返回是否完成首次检测 |
 | `add_on_protect_change_callback(cb)` | 注册状态变化回调 |

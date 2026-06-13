@@ -84,7 +84,7 @@ shell.deregister_command("hello");
 
 | 宏 | 默认值 | 说明 |
 |----|--------|------|
-| `SHELL_TASK_STACK_SIZE` | 8192 | listener 任务栈大小 |
+| `SHELL_TASK_STACK_SIZE` | 6144 | listener 与交互命令执行任务栈大小 |
 | `SHELL_TASK_PRIORITY` | 6 | listener 任务优先级 |
 
 ## 注意事项

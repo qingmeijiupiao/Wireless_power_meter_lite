@@ -36,7 +36,7 @@ flowchart LR
         RXQ["rx_queue<br/>RxEvent × 16"]
         MACQ["mac_queue<br/>MacResultEvent × 8"]
         ACKQ["ack_queue<br/>AckRequest × 8"]
-        LinkTask["espnow_link 任务<br/>优先级 4 / 栈 5120"]
+        LinkTask["espnow_link 任务<br/>优先级 4 / 栈 4096"]
         Pending["PendingTransmission<br/>最多 1 个业务在途包"]
 
         TXQ --> LinkTask

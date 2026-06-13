@@ -6,6 +6,25 @@
 #include "global_state.h"
 
 namespace SCREEN {
+namespace {
+
+/**
+ * @brief 将有符号微安值压缩为无符号毫安值。
+ *
+ * 曲线只展示电流绝对值，因此使用 1mA/LSB 保存，并对超出 uint16_t
+ * 范围的数据做饱和处理，使每个历史采样点保持 4 字节。
+ */
+uint16_t compact_current_mA(int32_t current_uA) {
+    const int64_t magnitude_uA = current_uA < 0
+        ? -static_cast<int64_t>(current_uA)
+        : static_cast<int64_t>(current_uA);
+    const uint64_t rounded_mA =
+        (static_cast<uint64_t>(magnitude_uA) + 500U) / 1000U;
+    return static_cast<uint16_t>(
+        std::min<uint64_t>(rounded_mA, UINT16_MAX));
+}
+
+} // namespace
 
 CurveHistory& CurveHistory::instance() {
     static CurveHistory history;
@@ -20,7 +39,7 @@ void CurveHistory::poll(uint32_t now_ms) {
     const GlobalMeasurementSnapshot measurement = get_global_measurement_snapshot();
     samples_[write_index_] = {
         .voltage_mV = measurement.voltage_mV,
-        .current_uA = measurement.current_uA,
+        .current_mA = compact_current_mA(measurement.current_uA),
     };
     write_index_ = (write_index_ + 1) % MAX_SAMPLES;
     count_ = std::min(count_ + 1, MAX_SAMPLES);
@@ -114,7 +133,7 @@ size_t CurveHistory::sample_count() const {
 
 float CurveHistory::metric_value(const Sample& sample, CurveMetric metric) {
     const float voltage = sample.voltage_mV / 1000.0f;
-    const float current = std::abs(sample.current_uA) / 1000000.0f;
+    const float current = sample.current_mA / 1000.0f;
     switch (metric) {
         case CurveMetric::Voltage:
             return voltage;

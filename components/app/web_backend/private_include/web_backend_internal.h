@@ -20,12 +20,16 @@
 namespace WebBackend {
 
 /*
- * 这些响应缓冲区定义在 web_backend.cpp 中，其他 handler 只引用。
- * 嵌入式 Web 后端优先使用固定静态缓冲，避免每个 HTTP 请求动态分配堆内存。
+ * HTTP server 串行分发请求，各 handler 共用一块响应/流式上传缓冲。
+ * 响应发送在 handler 返回前完成，不允许后台任务保留该缓冲区指针。
  */
-extern char response_buffer[1536];
-extern char detail_response_buffer[4096];
-extern char scan_response_buffer[3072];
+constexpr size_t WEB_SCRATCH_BUFFER_SIZE = 8192;
+extern char web_scratch_buffer[WEB_SCRATCH_BUFFER_SIZE];
+
+// 现有 handler 按响应规模使用这些名称，底层均指向同一串行 scratch buffer。
+inline char (&response_buffer)[WEB_SCRATCH_BUFFER_SIZE] = web_scratch_buffer;
+inline char (&detail_response_buffer)[WEB_SCRATCH_BUFFER_SIZE] = web_scratch_buffer;
+inline char (&scan_response_buffer)[WEB_SCRATCH_BUFFER_SIZE] = web_scratch_buffer;
 
 /** @brief 安装 ESP_LOG 捕获钩子，将实时日志写入 RAM 环形缓冲。 */
 void install_log_capture();

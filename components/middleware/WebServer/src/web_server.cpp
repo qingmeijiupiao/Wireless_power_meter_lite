@@ -340,8 +340,8 @@ esp_err_t begin() {
     config.server_port = server_port;
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.max_uri_handlers = 8;
-    // 请求上下文已移到静态区，仍保留较大的栈以容纳ESP-IDF日志和业务handler调用链。
-    config.stack_size = 8192;
+    // 请求上下文已移到静态区，按实测峰值保留约 3KB 余量覆盖日志和业务 handler 调用链。
+    config.stack_size = 6144;
 
     esp_err_t ret = httpd_start(&server_handle, &config);
     if (ret != ESP_OK) {

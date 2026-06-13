@@ -15,7 +15,8 @@ constexpr size_t RX_QUEUE_LENGTH = 16;
 constexpr size_t TX_QUEUE_LENGTH = 16;
 constexpr size_t MAC_QUEUE_LENGTH = 8;
 constexpr size_t ACK_QUEUE_LENGTH = 8;
-constexpr uint32_t TASK_STACK_SIZE = 5120;
+// 链路任务实测峰值约 1.4KB，保留超过 2KB 余量覆盖业务回调和重传路径。
+constexpr uint32_t TASK_STACK_SIZE = 4096;
 constexpr UBaseType_t TASK_PRIORITY = 4;
 constexpr uint16_t DEFAULT_ACK_TIMEOUT_MS = 20;
 constexpr uint16_t MIN_ACK_TIMEOUT_MS = 8;

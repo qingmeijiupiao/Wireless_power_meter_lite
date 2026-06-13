@@ -9,6 +9,7 @@
 namespace CanCallback {
 
 static constexpr char TAG[] = "CanCallback";
+static constexpr uint32_t DIAGNOSTICS_TASK_STACK_SIZE = 2048;
 
 static HXC_TWAI* can_bus = nullptr;
 
@@ -185,7 +186,9 @@ esp_err_t init() {
                    static_cast<unsigned long>(CAN_ID.read()),
                    static_cast<unsigned long>(CAN_BAUDRATE.read()),
                    can_resistor.get() ? 1U : 0U);
-    if (xTaskCreate(diagnostics_task, "can_diag", 3072, nullptr, 2, nullptr) != pdPASS) {
+    // 诊断任务仅周期读取计数器并在变化时输出日志，2KB 足以覆盖格式化路径。
+    if (xTaskCreate(diagnostics_task, "can_diag", DIAGNOSTICS_TASK_STACK_SIZE,
+                    nullptr, 2, nullptr) != pdPASS) {
         ESP_LOGE(TAG, "failed to create diagnostics task");
     }
     return ESP_OK;

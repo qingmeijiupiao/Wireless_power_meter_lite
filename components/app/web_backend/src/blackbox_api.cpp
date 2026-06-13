@@ -18,22 +18,21 @@ namespace {
 constexpr uint32_t DEFAULT_PAGE_LIMIT = 8;
 constexpr uint32_t MAX_PAGE_LIMIT = 16;
 constexpr uint32_t MAX_SNAPSHOT_INTERVAL_S = 86400;
-char blackbox_response_buffer[8192];
 
 bool append_checked(size_t* pos, const char* fmt, ...) {
-    if (pos == nullptr || *pos >= sizeof(blackbox_response_buffer)) {
+    if (pos == nullptr || *pos >= sizeof(web_scratch_buffer)) {
         return false;
     }
 
     va_list args;
     va_start(args, fmt);
-    int n = vsnprintf(blackbox_response_buffer + *pos,
-                      sizeof(blackbox_response_buffer) - *pos,
+    int n = vsnprintf(web_scratch_buffer + *pos,
+                      sizeof(web_scratch_buffer) - *pos,
                       fmt,
                       args);
     va_end(args);
-    if (n < 0 || static_cast<size_t>(n) >= sizeof(blackbox_response_buffer) - *pos) {
-        blackbox_response_buffer[sizeof(blackbox_response_buffer) - 1] = '\0';
+    if (n < 0 || static_cast<size_t>(n) >= sizeof(web_scratch_buffer) - *pos) {
+        web_scratch_buffer[sizeof(web_scratch_buffer) - 1] = '\0';
         return false;
     }
     *pos += static_cast<size_t>(n);
@@ -139,10 +138,10 @@ esp_err_t blackbox_api_handler(WebServer::Request* request) {
     if (start == 0) {
         esp_err_t ret = Blackbox::sync();
         if (ret != ESP_OK) {
-            snprintf(blackbox_response_buffer, sizeof(blackbox_response_buffer),
+            snprintf(web_scratch_buffer, sizeof(web_scratch_buffer),
                      "{\"ok\":false,\"reason\":\"%s\",\"records\":[]}\n",
                      esp_err_to_name(ret));
-            return WebServer::send_json(request, blackbox_response_buffer);
+            return WebServer::send_json(request, web_scratch_buffer);
         }
     }
 
@@ -211,21 +210,21 @@ esp_err_t blackbox_api_handler(WebServer::Request* request) {
                             !metadata_only && index < raw_count ? "true" : "false");
     }
     if (!ok) {
-        snprintf(blackbox_response_buffer, sizeof(blackbox_response_buffer),
+        snprintf(web_scratch_buffer, sizeof(web_scratch_buffer),
                  "{\"ok\":false,\"reason\":\"response_too_large\",\"records\":[]}\n");
     }
-    return WebServer::send_json(request, blackbox_response_buffer);
+    return WebServer::send_json(request, web_scratch_buffer);
 }
 
 /** @brief POST /api/blackbox/clear，清空持久化日志并保留 reset 标记。 */
 esp_err_t blackbox_clear_handler(WebServer::Request* request) {
     const esp_err_t ret = Blackbox::erase_all();
-    snprintf(blackbox_response_buffer, sizeof(blackbox_response_buffer),
+    snprintf(web_scratch_buffer, sizeof(web_scratch_buffer),
              "{\"ok\":%s,\"reason\":\"%s\",\"persisted_records\":%lu}\n",
              ret == ESP_OK ? "true" : "false",
              ret == ESP_OK ? "ok" : esp_err_to_name(ret),
              static_cast<unsigned long>(Blackbox::count()));
-    return WebServer::send_json(request, blackbox_response_buffer);
+    return WebServer::send_json(request, web_scratch_buffer);
 }
 
 /** @brief POST /api/blackbox/config，更新周期快照间隔。 */
@@ -249,10 +248,10 @@ esp_err_t blackbox_config_handler(WebServer::Request* request) {
             "{\"ok\":false,\"reason\":\"persist_failed\"}\n",
             strlen("{\"ok\":false,\"reason\":\"persist_failed\"}\n"));
     }
-    snprintf(blackbox_response_buffer, sizeof(blackbox_response_buffer),
+    snprintf(web_scratch_buffer, sizeof(web_scratch_buffer),
              "{\"ok\":true,\"snapshot_interval_s\":%lu}\n",
              static_cast<unsigned long>(BlackboxService::get_snapshot_interval_s()));
-    return WebServer::send_json(request, blackbox_response_buffer);
+    return WebServer::send_json(request, web_scratch_buffer);
 }
 
 } // namespace WebBackend

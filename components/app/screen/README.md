@@ -61,7 +61,7 @@ sequenceDiagram
 |------|------|----------|------|
 | 主页 | `DashboardPage` | 约 33ms | 显示电压、电流、功率、板温、运行时间、输出状态和保护标签 |
 | 电量页 | `BatteryPage` | 250ms | 顶部显示实时电压、电流、功率和输出状态，下方显示累计 `mWh`、`mAh`、系统时间和计量时间；长按侧键清零页面累计值并重新开始计量时间 |
-| 曲线页 | `CurvePage` | 200ms | 显示电压、电流、功率趋势，支持单项/叠加显示、时间跨度切换和自动量程 |
+| 曲线页 | `CurvePage` | 500ms | 显示电压、电流、功率趋势，支持单项/叠加显示、时间跨度切换和自动量程 |
 | 无线页 | `WirelessPage` | 500ms | 显示 STA、AP 配网或 ESPNOW_ONLY；收到远程控制包及其电量包后在右上角显示遥控开关电量；仅 ESP-NOW 模式显示当前信道；长按侧键进入 AP 配网 |
 | 设置页 | `SettingsPage` | 200ms | 长按侧键进入菜单，短按侧键切换设置项，短按正面键修改当前设置 |
 
@@ -97,8 +97,10 @@ sequenceDiagram
 
 ### 曲线页行为
 
-曲线历史由屏幕任务持续采样，不因切换到其他页面而中断。固定采样周期为 `200ms`，
+曲线历史由屏幕任务持续采样，不因切换到其他页面而中断。固定采样周期为 `500ms`，
 最长保存 `10min`，并支持 `10s`、`30s`、`2min` 和 `10min` 四档显示窗口。
+每个历史点使用 4 字节保存：电压为 `uint16_t` 毫伏值，电流为 `uint16_t` 毫安绝对值；
+电流以 1mA 分辨率四舍五入并在超出范围时饱和。
 
 | 状态 | 按键 | 事件 | 行为 |
 |------|------|------|------|
@@ -168,7 +170,7 @@ screen/
 ```cpp
 #include "screen.h"
 
-xTaskCreate(SCREEN::screen_task, "screen_task", 4096, NULL, 4, NULL);
+xTaskCreate(SCREEN::screen_task, "screen_task", 3584, NULL, 4, NULL);
 ```
 
 `screen_task()` 内部会初始化 ST7735，因此调用前需要保证 `hardware_config_init()` 已完成。

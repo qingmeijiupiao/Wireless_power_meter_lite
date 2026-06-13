@@ -3,6 +3,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -12,9 +13,9 @@ namespace WebBackend {
 namespace {
 
 constexpr size_t MAX_RTOS_TASKS = 48;
-constexpr size_t RTOS_RESPONSE_SIZE = 8192;
 constexpr uint32_t RTOS_SAMPLE_MIN_SECONDS = 1;
 constexpr uint32_t RTOS_SAMPLE_MAX_SECONDS = 300;
+constexpr uint32_t RTOS_SAMPLE_TASK_STACK_SIZE = 2048;
 
 enum class SampleState : uint8_t {
     IDLE,
@@ -41,9 +42,6 @@ unsigned long long sample_total_delta = 0;
 double sample_cpu_used_pct = 0.0;
 size_t result_count = 0;
 TaskResult results[MAX_RTOS_TASKS];
-TaskStatus_t before_tasks[MAX_RTOS_TASKS];
-TaskStatus_t after_tasks[MAX_RTOS_TASKS];
-char rtos_response_buffer[RTOS_RESPONSE_SIZE];
 
 const char* sample_state_to_str(SampleState state) {
     switch (state) {
@@ -56,15 +54,15 @@ const char* sample_state_to_str(SampleState state) {
 }
 
 bool append_response(size_t* pos, const char* fmt, ...) {
-    if (*pos >= sizeof(rtos_response_buffer)) {
+    if (*pos >= WEB_SCRATCH_BUFFER_SIZE) {
         return false;
     }
     va_list args;
     va_start(args, fmt);
-    int n = vsnprintf(rtos_response_buffer + *pos, sizeof(rtos_response_buffer) - *pos, fmt, args);
+    int n = vsnprintf(web_scratch_buffer + *pos, WEB_SCRATCH_BUFFER_SIZE - *pos, fmt, args);
     va_end(args);
-    if (n < 0 || static_cast<size_t>(n) >= sizeof(rtos_response_buffer) - *pos) {
-        rtos_response_buffer[sizeof(rtos_response_buffer) - 1] = '\0';
+    if (n < 0 || static_cast<size_t>(n) >= WEB_SCRATCH_BUFFER_SIZE - *pos) {
+        web_scratch_buffer[WEB_SCRATCH_BUFFER_SIZE - 1] = '\0';
         return false;
     }
     *pos += static_cast<size_t>(n);
@@ -79,11 +77,24 @@ void set_error_state() {
 }
 
 void sample_task(void*) {
+    // 两份任务快照仅在采样窗口内使用，按需分配可避免长期占用约 3.8KB 静态 RAM。
+    TaskStatus_t* before_tasks = new (std::nothrow) TaskStatus_t[MAX_RTOS_TASKS];
+    TaskStatus_t* after_tasks = new (std::nothrow) TaskStatus_t[MAX_RTOS_TASKS];
+    if (before_tasks == nullptr || after_tasks == nullptr) {
+        delete[] before_tasks;
+        delete[] after_tasks;
+        set_error_state();
+        vTaskDelete(nullptr);
+        return;
+    }
+
     configRUN_TIME_COUNTER_TYPE before_total = 0;
     configRUN_TIME_COUNTER_TYPE after_total = 0;
     const UBaseType_t before_count =
         uxTaskGetSystemState(before_tasks, MAX_RTOS_TASKS, &before_total);
     if (before_count == 0) {
+        delete[] before_tasks;
+        delete[] after_tasks;
         set_error_state();
         vTaskDelete(nullptr);
         return;
@@ -98,6 +109,8 @@ void sample_task(void*) {
     const UBaseType_t after_count =
         uxTaskGetSystemState(after_tasks, MAX_RTOS_TASKS, &after_total);
     if (after_count == 0) {
+        delete[] before_tasks;
+        delete[] after_tasks;
         set_error_state();
         vTaskDelete(nullptr);
         return;
@@ -137,6 +150,8 @@ void sample_task(void*) {
     result_count = count;
     sample_state = SampleState::READY;
     taskEXIT_CRITICAL(&stats_mux);
+    delete[] before_tasks;
+    delete[] after_tasks;
     vTaskDelete(nullptr);
 }
 
@@ -182,10 +197,10 @@ esp_err_t send_current_state(WebServer::Request* request) {
     ok = ok && append_response(&pos, "}\n");
 
     if (!ok) {
-        snprintf(rtos_response_buffer, sizeof(rtos_response_buffer),
+        snprintf(web_scratch_buffer, WEB_SCRATCH_BUFFER_SIZE,
             "{\"state\":\"error\",\"reason\":\"response_too_large\"}\n");
     }
-    return WebServer::send_json(request, rtos_response_buffer);
+    return WebServer::send_json(request, web_scratch_buffer);
 }
 
 } // namespace
@@ -222,7 +237,9 @@ esp_err_t rtos_stats_handler(WebServer::Request* request) {
     sample_state = SampleState::SAMPLING;
     taskEXIT_CRITICAL(&stats_mux);
 
-    if (xTaskCreate(sample_task, "rtos_web_stats", 4096, nullptr, 2, nullptr) != pdPASS) {
+    // 采样任务的大块快照位于堆中，栈只保留计数器和少量临时状态。
+    if (xTaskCreate(sample_task, "rtos_web_stats", RTOS_SAMPLE_TASK_STACK_SIZE,
+                    nullptr, 2, nullptr) != pdPASS) {
         set_error_state();
         return WebServer::send(request, 500, "application/json",
             "{\"ok\":false,\"reason\":\"task_create_failed\"}\n",

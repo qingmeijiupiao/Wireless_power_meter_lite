@@ -25,13 +25,10 @@ static bool initialized = false;
 static bool running = false;
 
 /*
- * 统一响应缓冲区。
- * ESP32-C6 RAM 有限，Web 后端避免为每次请求创建 std::string/json DOM。
- * handler 按响应规模选择缓冲区，发送完成后内容即可被下一次请求覆盖。
+ * WebServer 使用单任务串行分发请求，因此响应生成和本地 OTA 上传可以共用
+ * 一块缓冲；handler 返回前响应已经发送完成，后台任务不得保存该指针。
  */
-char response_buffer[1536];
-char detail_response_buffer[4096];
-char scan_response_buffer[3072];
+char web_scratch_buffer[WEB_SCRATCH_BUFFER_SIZE];
 
 /**
  * @brief 设置 CORS 响应头并处理 OPTIONS 预检请求。

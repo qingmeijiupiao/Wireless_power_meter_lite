@@ -624,7 +624,8 @@ esp_err_t protect_init(){
     ensure_protect_config_loaded();
     log_initial_thresholds();
     reset_pending_protect_states();
-    constexpr uint32_t protect_task_stack_size = 4096;
+    // 保护状态切换包含日志和订阅回调，按实测峰值额外保留约 1.7KB。
+    constexpr uint32_t protect_task_stack_size = 3584;
     if (xTaskCreate(protect_task, "protect_task", protect_task_stack_size, nullptr, 5, &protect_task_handle) != pdPASS) {
         protect_task_handle = nullptr;
         ESP_LOGE(PROTECT_LOG_TAG, "failed to create protect task");
