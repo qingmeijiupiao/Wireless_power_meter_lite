@@ -11,7 +11,8 @@ APP 固件 OTA 写入与启动分区切换中间件。仅封装 ESP-IDF `app_upd
 - `activate()` 在用户确认后调用 `esp_ota_set_boot_partition()` 设置下次启动分区。
 - `activate()` 成功后不会主动重启，由应用层决定何时调用 `esp_restart()`。
 - 同时只允许一个写入会话；完成分区切换后，重启前不允许开始新会话。
-- 不支持断点续传和乱序写入。
+- 只接受顺序写入，不负责 HTTP 断点续传或乱序写入。上层可在同一 `WRITING` 会话中
+  重新建立网络连接，从当前累计偏移继续按顺序调用 `write()`。
 
 ESP-IDF APP 镜像格式内置校验信息。`esp_ota_end()` 会校验新写入镜像；
 启用 Secure Boot 时也会进行签名校验。

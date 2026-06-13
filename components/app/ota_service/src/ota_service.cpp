@@ -30,6 +30,8 @@ constexpr size_t CONFIG_BUFFER_SIZE = 4096;
 constexpr size_t DOWNLOAD_BUFFER_SIZE = 4096;
 constexpr uint32_t HTTP_TIMEOUT_MS = 15000;
 constexpr uint32_t TASK_STACK_SIZE = 10240;
+constexpr uint8_t MAX_DOWNLOAD_ATTEMPTS = 4;
+constexpr uint32_t RETRY_DELAY_MS = 1000;
 
 enum class Operation : uint8_t {
     CHECK,
@@ -48,6 +50,29 @@ Status status = {};
 char config_buffer[CONFIG_BUFFER_SIZE];
 char firmware_url[384];
 size_t firmware_size = 0;
+
+/**
+ * @brief 以 ASCII 大小写不敏感方式比较两个字符串。
+ *
+ * HTTP Header 字段名不区分大小写，不能依赖服务端固定返回 Content-Range 的拼写。
+ */
+bool ascii_equals_ignore_case(const char* lhs, const char* rhs) {
+    if (lhs == nullptr || rhs == nullptr) {
+        return false;
+    }
+    while (*lhs != '\0' && *rhs != '\0') {
+        const char lhs_lower =
+            *lhs >= 'A' && *lhs <= 'Z' ? static_cast<char>(*lhs + ('a' - 'A')) : *lhs;
+        const char rhs_lower =
+            *rhs >= 'A' && *rhs <= 'Z' ? static_cast<char>(*rhs + ('a' - 'A')) : *rhs;
+        if (lhs_lower != rhs_lower) {
+            return false;
+        }
+        ++lhs;
+        ++rhs;
+    }
+    return *lhs == *rhs;
+}
 
 void lock_status() {
     xSemaphoreTake(status_mutex, portMAX_DELAY);
@@ -380,30 +405,73 @@ struct DownloadContext {
     size_t total;
     size_t image_size;
     size_t expected_size;
+    size_t request_offset; /**< 本次 HTTP 请求从固件中的哪个偏移开始。 */
     bool ota_started;
+    bool range_header_seen; /**< 续传响应是否包含 Content-Range。 */
+    bool range_valid;       /**< Content-Range 是否与请求偏移和总长度一致。 */
 };
 
+/**
+ * @brief 接收固件 HTTP 事件并按顺序写入 OTA 分区。
+ *
+ * 首次下载要求 HTTP 200；续传要求 HTTP 206，并严格校验 Content-Range，
+ * 防止服务端忽略 Range 后从头返回固件而导致目标分区内容重复。
+ */
 esp_err_t firmware_http_event(esp_http_client_event_t* event) {
     auto* context = static_cast<DownloadContext*>(event->user_data);
     if (context == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
+
+    if (event->event_id == HTTP_EVENT_ON_HEADER &&
+        context->request_offset > 0 &&
+        event->header_key != nullptr &&
+        event->header_value != nullptr &&
+        ascii_equals_ignore_case(event->header_key, "Content-Range")) {
+        unsigned long long start = 0;
+        unsigned long long end = 0;
+        unsigned long long total = 0;
+        char tail = '\0';
+        context->range_header_seen = true;
+        context->range_valid =
+            sscanf(event->header_value, "bytes %llu-%llu/%llu%c",
+                   &start, &end, &total, &tail) == 3 &&
+            start == context->request_offset &&
+            total == context->expected_size &&
+            end >= start &&
+            end < total;
+        return ESP_OK;
+    }
+
     if (event->event_id != HTTP_EVENT_ON_DATA || event->data_len <= 0) {
         return ESP_OK;
     }
+
+    const int status_code = esp_http_client_get_status_code(event->client);
+    if ((context->request_offset == 0 && status_code != 200) ||
+        (context->request_offset > 0 &&
+         (status_code != 206 || !context->range_header_seen || !context->range_valid))) {
+        context->error = ESP_ERR_INVALID_RESPONSE;
+        return context->error;
+    }
+
     const size_t data_size = static_cast<size_t>(event->data_len);
     if (data_size > context->expected_size - context->total) {
         context->error = ESP_ERR_INVALID_SIZE;
         return context->error;
     }
 
-    if (!context->ota_started) {
+    if (context->total == context->request_offset) {
         const int64_t content_length = esp_http_client_get_content_length(event->client);
         if (content_length > 0 &&
-            static_cast<uint64_t>(content_length) != context->expected_size) {
+            static_cast<uint64_t>(content_length) !=
+                context->expected_size - context->request_offset) {
             context->error = ESP_ERR_INVALID_SIZE;
             return context->error;
         }
+    }
+
+    if (!context->ota_started) {
         context->image_size = context->expected_size;
         context->error = OtaManager::begin(context->expected_size);
         if (context->error != ESP_OK) {
@@ -434,38 +502,103 @@ esp_err_t download_firmware(const char* url,
         .total = 0,
         .image_size = 0,
         .expected_size = expected_size,
+        .request_offset = 0,
         .ota_started = false,
+        .range_header_seen = false,
+        .range_valid = false,
     };
-
-    esp_http_client_config_t config = {};
-    config.url = url;
-    config.timeout_ms = HTTP_TIMEOUT_MS;
-    config.buffer_size = DOWNLOAD_BUFFER_SIZE;
-    config.crt_bundle_attach = esp_crt_bundle_attach;
-    config.event_handler = firmware_http_event;
-    config.user_data = &context;
-    config.keep_alive_enable = true;
-    config.max_redirection_count = 5;
-
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (client == nullptr) {
-        ESP_LOGW(TAG, "ota: firmware source=jsdelivr result=failed reason=http_init");
-        return ESP_ERR_NO_MEM;
-    }
 
     set_state(State::DOWNLOADING);
     set_active_source("jsdelivr");
     set_progress(0, 0);
-    esp_err_t err = esp_http_client_perform(client);
-    const int status_code = esp_http_client_get_status_code(client);
-    esp_http_client_cleanup(client);
 
-    if (err == ESP_OK) {
-        err = context.error;
+    esp_err_t err = ESP_FAIL;
+    // 首次连接失败后保留已写入的 OTA 会话，后续通过 Range 从断点继续下载。
+    for (uint8_t attempt = 1;
+         attempt <= MAX_DOWNLOAD_ATTEMPTS && context.total < expected_size;
+         ++attempt) {
+        context.error = ESP_OK;
+        context.request_offset = context.total;
+        context.range_header_seen = false;
+        context.range_valid = context.request_offset == 0;
+
+        esp_http_client_config_t config = {};
+        config.url = url;
+        config.timeout_ms = HTTP_TIMEOUT_MS;
+        config.buffer_size = DOWNLOAD_BUFFER_SIZE;
+        config.crt_bundle_attach = esp_crt_bundle_attach;
+        config.event_handler = firmware_http_event;
+        config.user_data = &context;
+        config.keep_alive_enable = true;
+        config.max_redirection_count = 5;
+
+        esp_http_client_handle_t client = esp_http_client_init(&config);
+        if (client == nullptr) {
+            err = ESP_ERR_NO_MEM;
+            break;
+        }
+
+        char range_header[48] = {};
+        if (context.request_offset > 0) {
+            snprintf(range_header, sizeof(range_header), "bytes=%u-",
+                     static_cast<unsigned>(context.request_offset));
+            err = esp_http_client_set_header(client, "Range", range_header);
+            if (err != ESP_OK) {
+                esp_http_client_cleanup(client);
+                break;
+            }
+        }
+
+        DEVICE_EVENT_I(TAG,
+                       "ota: http_attempt attempt=%u/%u offset=%u expected=%u",
+                       static_cast<unsigned>(attempt),
+                       static_cast<unsigned>(MAX_DOWNLOAD_ATTEMPTS),
+                       static_cast<unsigned>(context.request_offset),
+                       static_cast<unsigned>(expected_size));
+        const size_t before_attempt = context.total;
+        err = esp_http_client_perform(client);
+        const int status_code = esp_http_client_get_status_code(client);
+        esp_http_client_cleanup(client);
+
+        if (context.error != ESP_OK) {
+            err = context.error;
+        }
+        if (err == ESP_OK) {
+            const int expected_status = context.request_offset == 0 ? 200 : 206;
+            if (status_code != expected_status || !context.ota_started) {
+                err = ESP_ERR_INVALID_RESPONSE;
+            } else if (context.total != expected_size) {
+                err = ESP_ERR_HTTP_INCOMPLETE_DATA;
+            }
+        }
+        if (err == ESP_OK) {
+            break;
+        }
+
+        ESP_LOGW(TAG,
+                 "ota: http_attempt attempt=%u result=failed status=%d "
+                 "bytes=%u/%u gained=%u err=%s",
+                 static_cast<unsigned>(attempt),
+                 status_code,
+                 static_cast<unsigned>(context.total),
+                 static_cast<unsigned>(expected_size),
+                 static_cast<unsigned>(context.total - before_attempt),
+                 esp_err_to_name(err));
+
+        const bool protocol_or_write_error =
+            err == ESP_ERR_INVALID_RESPONSE ||
+            err == ESP_ERR_INVALID_SIZE ||
+            context.error == ESP_ERR_INVALID_RESPONSE ||
+            context.error == ESP_ERR_INVALID_SIZE ||
+            (context.error != ESP_OK &&
+             context.error != ESP_ERR_HTTP_INCOMPLETE_DATA &&
+             context.error != ESP_ERR_HTTP_READ_TIMEOUT);
+        if (protocol_or_write_error || attempt == MAX_DOWNLOAD_ATTEMPTS) {
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS * attempt));
     }
-    if (err == ESP_OK && (status_code < 200 || status_code >= 300 || !context.ota_started)) {
-        err = ESP_ERR_INVALID_RESPONSE;
-    }
+
     if (err == ESP_OK && context.total != expected_size) {
         err = ESP_ERR_INVALID_SIZE;
     }
