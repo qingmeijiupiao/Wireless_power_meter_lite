@@ -87,26 +87,6 @@ flowchart TB
 这是一条设计原则，不表示应用层组件之间完全禁止协作。业务组件可以互相调用，但应
 优先通过公开接口连接，避免直接访问其他组件的内部状态。
 
-## 启动流程
-
-`main/app_main.cpp` 只负责编排初始化顺序，不实现具体驱动。
-
-```mermaid
-flowchart TD
-    Boot["app_main"] --> Log["初始化黑匣子和 NVS"]
-    Log --> Diag["记录启动诊断"]
-    Diag --> Board["加载板级配置和温度采样"]
-    Board --> UI["启动状态更新和屏幕任务"]
-    UI --> LP["加载 LP Core 测量程序"]
-    LP --> Safety["初始化保护和输出控制"]
-    Safety --> Local["初始化按键、CAN 和 Shell"]
-    Local --> Network["启动 ESP-NOW / WiFi / Web"]
-    Network --> Runtime["记录运行期诊断"]
-```
-
-先初始化诊断和存储，可以尽量保留后续初始化失败的原因；先初始化保护再开放网络控制，
-可以避免远程请求绕过设备安全状态。
-
 ## 关键技术说明
 
 ### LP Core 与共享快照
