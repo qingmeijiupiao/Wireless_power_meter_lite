@@ -5,8 +5,13 @@
 OTA 升级组织为独立组件，既可以直接构建完整固件，也可以作为 ESP-IDF 多组件项目
 的参考实现。
 
+
 配套遥控器固件见
 [`Wireless_power_switch_button`](https://github.com/qingmeijiupiao/Wireless_power_switch_button)。
+
+- 本工程提供[使用github生成固件，无需搭建开发环境的教程](#使用在线环境开发并生成固件/烧录)
+
+- 不想了解代码请跳转[固件烧录](#烧录)
 
 > 本 README 主要介绍软件功能、架构和二次开发入口。具体器件连接、引脚定义和
 > 电气参数属于 BSP 与板级实现细节，不在根目录文档中展开。
@@ -263,9 +268,45 @@ Chromium 系浏览器。完整烧录会清除 NVS 配置，升级前应确认是
 推送或提交 PR 到 `main` 时，CI 会检查工程能否正常构建。推送版本标签后，CD 会生成
 发布固件、校验文件和在线烧录配置。
 
-## 开发环境
+## 使用在线环境开发并生成固件/烧录
+### 1.fork工程
 
-仓库提供 VS Code Dev Container 配置，可使用预配置的 ESP-IDF 容器完成编译。
+<img width="1274" height="683" alt="image" src="https://github.com/user-attachments/assets/94c9bb5b-924f-426c-996e-adb42f540807" />
+
+### 2.在fork后的工程中创建codespace
+
+注意是在自己刚刚fork的工程下创建，否则后续不能触发CD
+<img width="938" height="771" alt="image" src="https://github.com/user-attachments/assets/ad0171dd-7ab5-4cd9-bed0-ff7ce03dbcc7" />
+
+### 3.等待初始化完成后安装插件
+
+codespace加载较慢请耐心等待
+需要安装以下插件
+- ESP-IDF
+- ESP-IDF WEB
+
+<img width="450" height="222" alt="image" src="https://github.com/user-attachments/assets/35561324-b230-4f36-82e0-db1ca967bd1b" />
+
+安装后使用ctrl + shift + P 或者 F1 输入reload点击重新加载
+
+<img width="471" height="113" alt="image" src="https://github.com/user-attachments/assets/61da61bb-b84d-4571-a28e-8be0c27a9723" />
+
+### 4.连接串口
+先将设备插入电脑USB
+使用ctrl + shift + P 或者 F1
+搜索serial
+
+<img width="456" height="105" alt="image" src="https://github.com/user-attachments/assets/12016ab6-a163-452d-9194-d871e5a792dd" />
+
+点击后浏览器会弹出选择串口选择设备所在串口即可
+
+### 5.常用操作
+
+<img width="268" height="147" alt="image" src="https://github.com/user-attachments/assets/80809532-7cc4-4ef5-85c3-22b915bbdac5" />
+
+web按钮和本地开发无异,但是由于codespace性能低延迟高,操作响应慢是正常现象
+有条件还是建议本地开发
+
 
 ## 许可证
 
