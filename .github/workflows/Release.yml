@@ -86,11 +86,32 @@ jobs:
       #  该分支作为固件分发的 CDN 源（通过 jsDelivr 访问）
       # ──────────────────────────────────────────────
       - name: Checkout firmware distribution branch
+        id: dist_checkout
+        continue-on-error: true
         uses: actions/checkout@v4
         with:
           ref: firmware-dist     # 固件分发专用分支
           path: firmware-dist    # 检出到此子目录，与主源码隔离
           fetch-depth: 1         # 只需最新提交即可
+
+      # Fork 通常只复制默认分支。分发分支不存在时在当前仓库中初始化，
+      # 但分发失败不得阻塞 GitHub Release。
+      - name: Initialize firmware distribution branch
+        if: steps.dist_checkout.outcome == 'failure'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p firmware-dist
+          if [[ ! -d firmware-dist/.git ]]; then
+            git -C firmware-dist init
+            git -C firmware-dist remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          fi
+          git -C firmware-dist checkout --orphan firmware-dist
+          git -C firmware-dist rm -rf . 2>/dev/null || true
+          git -C firmware-dist clean -fdx
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # ──────────────────────────────────────────────
       #  步骤6：发布固件到 firmware-dist 分支
@@ -112,6 +133,7 @@ jobs:
       # ──────────────────────────────────────────────
       - name: Publish firmware distribution
         id: distribution
+        continue-on-error: true
         shell: bash
         env:
           VERSION: ${{ steps.version.outputs.full }}
@@ -260,7 +282,11 @@ jobs:
 
             **手动烧录固件（merged）：**
           EOF
-            echo "[网页在线烧录](https://espressif.github.io/esp-launchpad/?flashConfigURL=${LAUNCHPAD_CONFIG_URL})"
+            if [ -n "${LAUNCHPAD_CONFIG_URL}" ]; then
+              echo "[网页在线烧录](https://espressif.github.io/esp-launchpad/?flashConfigURL=${LAUNCHPAD_CONFIG_URL})"
+            else
+              echo "本次发布未生成在线烧录配置，请下载 merged 固件后手动烧录。"
+            fi
             cat <<'EOF'
 
             **OTA固件：**
@@ -275,12 +301,24 @@ jobs:
       #  它们仅存于 firmware-dist 分支，通过固定 CDN 链接访问
       # ──────────────────────────────────────────────
       - name: Create Release and Upload Bin
+        if: steps.distribution.outcome == 'success'
         uses: softprops/action-gh-release@v1
         with:
           files: |
             Wireless_power_meter_lite_app_v*.bin
             Wireless_power_meter_lite_merged_v*.bin
             ${{ steps.distribution.outputs.config_path }}
+          body_path: release_notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release without distribution metadata
+        if: steps.distribution.outcome != 'success'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            Wireless_power_meter_lite_app_v*.bin
+            Wireless_power_meter_lite_merged_v*.bin
           body_path: release_notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
