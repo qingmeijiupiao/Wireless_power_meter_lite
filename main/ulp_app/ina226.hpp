@@ -75,6 +75,13 @@ union MaskEnable_reg_t {
     } bits;
 };
 
+/**
+ * @brief 通过 LP I2C 读取 INA226 16 位寄存器。
+ *
+ * @param reg 目标寄存器地址。
+ * @param val 输出寄存器值；允许为 nullptr，此时只检查读操作是否成功。
+ * @return ESP_OK 读取成功；其他值表示 LP I2C 访问失败。
+ */
 esp_err_t read_register(Register_enum reg, uint16_t *val){
     uint8_t reg_byte = reg;
     uint8_t data[2];
@@ -90,6 +97,15 @@ esp_err_t read_register(Register_enum reg, uint16_t *val){
     return ESP_OK;
 }
 
+/**
+ * @brief 通过 LP I2C 写入 INA226 16 位寄存器。
+ *
+ * @param reg 目标寄存器地址。
+ * @param val 写入的寄存器值。
+ * @return ESP_OK 写入成功；其他值表示 LP I2C 访问失败。
+ *
+ * @note IDF v6.0.0 的 LP I2C API 不允许 0 字节读取，因此写入后读取 1 个占位字节。
+ */
 esp_err_t write_register(Register_enum reg, uint16_t val){
     uint8_t data[3] = {static_cast<uint8_t>(reg), static_cast<uint8_t>(val >> 8), static_cast<uint8_t>(val)};
     uint8_t reg_byte;//v6.0.0版本的IDF API不允许读取0字节
@@ -101,6 +117,15 @@ esp_err_t write_register(Register_enum reg, uint16_t val){
     return ESP_OK;
 }
 
+/**
+ * @brief 配置 INA226 平均次数、转换时间和工作模式。
+ *
+ * @param avg_times 平均采样次数。
+ * @param shunt_timing 分流电压转换时间。
+ * @param bus_timing 总线电压转换时间。
+ * @param mode INA226 工作模式。
+ * @return ESP_OK 配置成功；其他值表示写配置寄存器失败。
+ */
 esp_err_t set_configuration(Avg_times_enum avg_times,Timing_enum shunt_timing,Timing_enum bus_timing,Mode_enum mode){
     uint16_t config = (static_cast<uint16_t>(avg_times) << 9) |
                       (static_cast<uint16_t>(shunt_timing) << 6) |
@@ -109,10 +134,14 @@ esp_err_t set_configuration(Avg_times_enum avg_times,Timing_enum shunt_timing,Ti
     return write_register(INA226_CONFIGURATION, config);
 }
 
+/**
+ * @brief 触发 INA226 软件复位。
+ *
+ * @return ESP_OK 复位命令写入成功；其他值表示 LP I2C 访问失败。
+ */
 esp_err_t reset(){
     return write_register(INA226_CONFIGURATION, static_cast<uint16_t>(1<<15));
 }
 
 }//namespace INA226
 #endif
-

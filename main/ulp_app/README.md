@@ -108,7 +108,6 @@ flowchart TD
 | `ulp_state` | `uint32_t` | - | LP -> HP，HP 可清零/置重载位 | 状态位集合 |
 | `shared_lock` | `ulp_lp_core_spinlock_t` | - | HP <-> LP | 保护 RTC 共享变量快照 |
 | `log_data` | `uint32_t` | - | LP -> HP | 预留 LP 日志数据 |
-| `core_run_freq_hz` | `uint32_t` | Hz | LP -> HP | LP 主循环频率统计 |
 | `voltage_uv` | `uint32_t` | uV | LP -> HP | 总线电压 |
 | `voltage_register_raw` | `uint16_t` | raw | LP -> HP | INA226 总线电压原始值 |
 | `current_uA` | `int32_t` | uA | LP -> HP | 补偿后的电流 |
@@ -123,7 +122,7 @@ flowchart TD
 
 | 位域 | 当前行为 |
 |------|----------|
-| `ulp_have_log` | `lp_log()` 写入日志时置位；当前主循环没有启用日志调用 |
+| `ulp_have_log` | 预留 LP 日志标志；当前主循环没有启用日志上报 |
 | `ulp_i2c_init_err` | INA226 初始化中的 I2C 操作失败时置位 |
 | `ulp_ina226_init_ok` | INA226 初始化和首个电压样本成功后置位 |
 | `ulp_ina226_read_timeout` | INA226 连续 1 秒没有完整采样时置位；恢复采样后清零 |
