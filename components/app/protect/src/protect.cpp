@@ -1,4 +1,5 @@
 #include "protect.h"
+#include "protect_internal.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "global_state.h"
@@ -30,62 +31,6 @@ GlobalState& glb_states = get_global_state();
 /** @brief 将物理量转换为千分之一单位，供日志使用整数格式输出。 */
 static int32_t to_milli(float value) {
     return static_cast<int32_t>(value * 1000.0f);
-}
-
-/**
- * @brief 检测输出 MOS 是否损坏。
- *
- * 当输出关闭但仍持续检测到不小于阈值的电流时，判定 MOS 可能损坏并打印一次错误日志。
- * 输出重新开启或电流恢复到阈值以下后，重新允许下一次故障上报。
- */
-static void check_mos_fault() {
-    constexpr int32_t mos_fault_current_threshold_uA = 10 * 1000;
-    constexpr TickType_t mos_fault_output_settle_ticks = pdMS_TO_TICKS(500);
-    constexpr TickType_t mos_fault_detection_ticks = pdMS_TO_TICKS(200);
-    static TickType_t output_off_start_ticks = 0;
-    static TickType_t detection_start_ticks = 0;
-    static bool output_was_enabled = true;
-    static bool detection_active = false;
-    static bool fault_reported = false;
-
-    const TickType_t now_ticks = xTaskGetTickCount();
-    const int32_t current_uA = std::abs(glb_states.current_uA);
-    // 输出开启时重置诊断；下一次关闭后先等待 INA226 平均采样窗口稳定。
-    if (glb_states.flags.bits.output_enabled) {
-        output_was_enabled = true;
-        detection_active = false;
-        fault_reported = false;
-        return;
-    }
-
-    if (output_was_enabled) {
-        output_was_enabled = false;
-        output_off_start_ticks = now_ticks;
-        detection_active = false;
-        fault_reported = false;
-        return;
-    }
-
-    if (now_ticks - output_off_start_ticks < mos_fault_output_settle_ticks ||
-        current_uA < mos_fault_current_threshold_uA) {
-        detection_active = false;
-        fault_reported = false;
-        return;
-    }
-
-    // 首次检测到异常电流时开始计时，过滤关断瞬态和采样波动。
-    if (!detection_active) {
-        detection_start_ticks = now_ticks;
-        detection_active = true;
-        return;
-    }
-
-    // 异常电流持续达到指定时间后仅上报一次，避免保护轮询持续刷屏。
-    if (!fault_reported && now_ticks - detection_start_ticks >= mos_fault_detection_ticks) {
-        PROTECT_LOGE("MOS fault detected: output is off but current remains, current_ma=%ld",
-                     static_cast<long>(current_uA / 1000));
-        fault_reported = true;
-    }
 }
 
 /**
@@ -344,9 +289,24 @@ ProtectState_t check_now_state(protect_threshold_t threshold, ProtectState_t las
     }
 }
 
-// 所有保护通道共用的编译期时间迟滞，不保存到 NVS，也不提供运行期修改入口。
+// OTP 保持较短触发确认；INA226 相关通道使用更长确认时间过滤电机和总线瞬态。
 constexpr uint32_t protect_state_change_delay_ms = 200;
-constexpr TickType_t protect_state_change_delay_ticks = pdMS_TO_TICKS(protect_state_change_delay_ms);
+constexpr uint32_t ina226_protect_state_change_delay_ms = 2000;
+
+/**
+ * @brief 返回指定保护通道的触发确认时间。
+ *
+ * @param channel 保护通道编号：0=OTP，1=OVP，2=UVP，3=OCP。
+ * @return 候选状态进入更严重级别前必须持续的 FreeRTOS tick 数。
+ *
+ * @note INA226 相关通道面对电机反电动势、I2C 瞬断和机械振动时更容易出现短时尖峰，
+ *       因此使用 2s 触发确认；恢复路径不调用该时间，恢复立即生效。
+ */
+static TickType_t protect_state_change_delay_ticks(uint8_t channel) {
+    return pdMS_TO_TICKS(protect_is_ina226_channel(channel)
+                         ? ina226_protect_state_change_delay_ms
+                         : protect_state_change_delay_ms);
+}
 
 /** @brief 单个通道正在等待提交的候选状态及其起始时间。 */
 struct protect_pending_state_t {
@@ -366,10 +326,12 @@ static void reset_pending_protect_states() {
 }
 
 /**
- * @brief 对保护状态切换执行固定 200ms 时间迟滞。
+ * @brief 对保护状态恶化执行按通道区分的触发确认。
  *
- * 候选状态必须连续保持到编译期固定延迟后才正式提交。候选状态恢复为当前状态，
- * 或在等待期间变化为另一状态时，原计时立即取消。
+ * 状态进入更严重级别时，候选状态必须连续保持满通道对应的触发确认时间后才正式提交。
+ * 候选状态恢复为当前状态，或在等待期间变化为另一状态时，原计时立即取消。
+ *
+ * @note 恢复到更轻状态不做时间迟滞，保证故障解除或 INA226 降级解除后不会继续阻塞调试输出。
  */
 static ProtectState_t debounce_protect_state(uint8_t channel, ProtectState_t current_state, ProtectState_t candidate_state) {
     if (channel >= sizeof(protect_pending_states) / sizeof(protect_pending_states[0])) {
@@ -381,6 +343,12 @@ static ProtectState_t debounce_protect_state(uint8_t channel, ProtectState_t cur
         return current_state;
     }
 
+    // 恢复不做时间迟滞，避免保护解除后继续影响调试操作。
+    if (candidate_state < current_state) {
+        pending.active = false;
+        return candidate_state;
+    }
+
     const TickType_t now_ticks = xTaskGetTickCount();
     if (!pending.active || pending.state != candidate_state) {
         pending.state = candidate_state;
@@ -389,7 +357,8 @@ static ProtectState_t debounce_protect_state(uint8_t channel, ProtectState_t cur
         return current_state;
     }
 
-    if (now_ticks - pending.start_ticks < protect_state_change_delay_ticks) {
+    const TickType_t delay_ticks = protect_state_change_delay_ticks(channel);
+    if (now_ticks - pending.start_ticks < delay_ticks) {
         return current_state;
     }
 
@@ -398,7 +367,7 @@ static ProtectState_t debounce_protect_state(uint8_t channel, ProtectState_t cur
                  static_cast<unsigned>(channel),
                  static_cast<unsigned>(current_state),
                  static_cast<unsigned>(candidate_state),
-                 static_cast<unsigned long>(protect_state_change_delay_ms));
+                 static_cast<unsigned long>(delay_ticks * portTICK_PERIOD_MS));
     return candidate_state;
 }
 
@@ -440,7 +409,38 @@ bool protect_is_bypassed(){
 }
 
 bool protect_should_block_output(){
-    return !protect_is_bypassed() && protect_has_active_fault();
+    if (protect_is_bypassed()) {
+        return false;
+    }
+    auto& states = glb_states.protect_states.states_bit;
+    if (states.temperature_protect_state == PROTECT_STATE_PROTECT) {
+        return true;
+    }
+    // INA226 降级时不允许 OVP/UVP/OCP 的旧状态继续阻止输出，避免传感器异常影响机器人调试。
+    if (!protect_ina226_measurement_reliable()) {
+        return false;
+    }
+    return states.high_voltage_protect_state == PROTECT_STATE_PROTECT ||
+           states.low_voltage_protect_state == PROTECT_STATE_PROTECT ||
+           states.current_protect_state == PROTECT_STATE_PROTECT;
+}
+
+/**
+ * @brief 判断 INA226 测量链路是否可用于保护决策。
+ *
+ * @return true 当前电压/电流数据可以参与 OVP、UVP、OCP 和 MOS 诊断；false 当前只能展示/记录降级状态。
+ */
+bool protect_ina226_measurement_reliable(){
+    return glb_states.flags.bits.lp_ina226_initialized &&
+           !glb_states.flags.bits.lp_i2c_error &&
+           !glb_states.flags.bits.lp_ina226_read_timeout;
+}
+
+/**
+ * @brief 判断通道是否依赖 INA226 电压/电流数据。
+ */
+bool protect_is_ina226_channel(unsigned channel){
+    return channel == 1 || channel == 2 || channel == 3;
 }
 
 uint8_t protect_get_channel_count(){
@@ -540,8 +540,10 @@ static bool _protect_init_ok = false;
 /**
  * @brief 保护轮询任务。
  *
- * 以 20Hz 依次检查 OTP、OVP、UVP、OCP。每个通道先计算候选状态，再执行
- * 固定 200ms 时间迟滞；正式切换后记录黑匣子并通知输出控制等订阅模块。
+ * 以 20Hz 依次检查 OTP、OVP、UVP、OCP。每个通道先计算候选状态，状态恶化时再执行
+ * 按通道区分的触发确认；恢复状态立即提交。正式切换后记录黑匣子并通知输出控制等订阅模块。
+ *
+ * @note INA226 不可靠时 OVP、UVP、OCP 直接恢复为 NORMAL，不参与输出阻断。
  */
 void protect_task(void* pvParameters){
     auto ticks = xTaskGetTickCount();
@@ -550,8 +552,22 @@ void protect_task(void* pvParameters){
     ProtectState_t temp_state;
     ProtectState_t last_state;
     static bool first_check = true;
+    bool last_ina226_reliable = protect_ina226_measurement_reliable();
 
     while(1){
+        const bool ina226_reliable = protect_ina226_measurement_reliable();
+        if (ina226_reliable != last_ina226_reliable) {
+            if (ina226_reliable) {
+                DEVICE_STATE_I(PROTECT_LOG_TAG,
+                               "protect: measurement old=unreliable new=reliable");
+            } else {
+                DEVICE_STATE_W(PROTECT_LOG_TAG,
+                               "protect: measurement old=reliable new=unreliable reason=ina226 flags=0x%08lx",
+                               static_cast<unsigned long>(glb_states.flags.raw));
+            }
+            last_ina226_reliable = ina226_reliable;
+        }
+
         //检查温度保护状态
         temp_state = debounce_protect_state(0, global_state_protects.temperature_protect_state,
             check_now_state(temperature_threshold, global_state_protects.temperature_protect_state, glb_states.board_temperature / 100.0f));
@@ -566,7 +582,9 @@ void protect_task(void* pvParameters){
 
         //检查电压保护状态
         temp_state = debounce_protect_state(1, global_state_protects.high_voltage_protect_state,
-            check_now_state(high_voltage_threshold, global_state_protects.high_voltage_protect_state, glb_states.voltage_mV / 1e3));
+            ina226_reliable
+                ? check_now_state(high_voltage_threshold, global_state_protects.high_voltage_protect_state, glb_states.voltage_mV / 1e3)
+                : PROTECT_STATE_NORMAL);
         if(temp_state != global_state_protects.high_voltage_protect_state){
             last_state = global_state_protects.high_voltage_protect_state;
             global_state_protects.high_voltage_protect_state = temp_state;
@@ -578,7 +596,9 @@ void protect_task(void* pvParameters){
         }
         
         temp_state = debounce_protect_state(2, global_state_protects.low_voltage_protect_state,
-            check_now_state(low_voltage_threshold, global_state_protects.low_voltage_protect_state, glb_states.voltage_mV / 1e3));
+            ina226_reliable
+                ? check_now_state(low_voltage_threshold, global_state_protects.low_voltage_protect_state, glb_states.voltage_mV / 1e3)
+                : PROTECT_STATE_NORMAL);
         if(temp_state != global_state_protects.low_voltage_protect_state){
             last_state = global_state_protects.low_voltage_protect_state;
             global_state_protects.low_voltage_protect_state = temp_state;
@@ -590,7 +610,9 @@ void protect_task(void* pvParameters){
         
         //检查电流保护状态
         temp_state = debounce_protect_state(3, global_state_protects.current_protect_state,
-            check_now_state(current_threshold, global_state_protects.current_protect_state, std::abs(glb_states.current_uA) / 1e6));
+            ina226_reliable
+                ? check_now_state(current_threshold, global_state_protects.current_protect_state, std::abs(glb_states.current_uA) / 1e6)
+                : PROTECT_STATE_NORMAL);
         if(temp_state != global_state_protects.current_protect_state){
             last_state = global_state_protects.current_protect_state;
             global_state_protects.current_protect_state = temp_state;
@@ -599,9 +621,6 @@ void protect_task(void* pvParameters){
                 cb(last_state, temp_state);
             }
         }
-
-        // MOS 损坏诊断独立于四类保护状态，只上报日志，不修改保护状态。
-        check_mos_fault();
 
         if(first_check){
             first_check = false;
@@ -631,12 +650,14 @@ esp_err_t protect_init(){
         ESP_LOGE(PROTECT_LOG_TAG, "failed to create protect task");
         return ESP_ERR_NO_MEM;
     }
+    protect_mos_fault_start();
     return ESP_OK;
 }
 bool protect_init_ok(){
     return _protect_init_ok;
 }
 esp_err_t protect_deinit(){
+    protect_mos_fault_stop();
     if(protect_task_handle){
         glb_states.protect_states.protect_states_raw = 0; //清除保护状态
         reset_pending_protect_states();

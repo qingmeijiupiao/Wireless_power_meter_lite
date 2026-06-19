@@ -98,36 +98,47 @@ static CurrentCalib::params_t read_current_calib_params() {
 }
 
 constexpr uint32_t INA226_READ_TIMEOUT_MS = 1000;
+// INA226 reset/config/首样本等待期间置位，避免 ina226_run() 在恢复流程内再次递归触发恢复。
+static bool ina226_configuring = false;
+
+bool ulp_ina226_init();
+void timer_run(void);
 
 /**
  * @brief 执行一次 INA226 采样轮询并发布成功样本。
  *
- * @note 当前策略保持原行为：读寄存器失败或转换未完成时只检查 1 秒超时；
- *       超时后清零电压/电流并置位 `ulp_ina226_read_timeout`。
+ * @note 读寄存器失败或转换未完成时先保留最后一次有效样本；连续失败超过
+ *       INA226_READ_TIMEOUT_MS 后置位 `ulp_ina226_read_timeout`，并在非配置流程中
+ *       阻塞执行 INA226 重新初始化，直到恢复首个有效样本。
  */
 void ina226_run(){
+    // 最近一次成功发布完整电压/电流样本的 LP 毫秒时间，用于判断数据是否陈旧。
     static uint32_t last_success_ms = 0;
-    const auto mark_read_timeout_if_needed = [&]() {
+    const auto handle_ina226_read_not_ready = [&]() {
         // 只在本函数内判断连续采样失败时长，避免把 INA226 私有状态暴露为文件级变量。
         if ((now_time_ms - last_success_ms) <= INA226_READ_TIMEOUT_MS) {
             return;
         }
 
-        // 采样失效后不再暴露陈旧值；当前保护链路会把 0V 当作 UVP 处理。
+        // 采样失效时保留最后一次有效样本，避免把通信异常伪装成 0V 欠压。
         with_shared_lock_void([]() {
-            voltage_uv = 0;
-            current_uA = 0;
             ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout = true;
         });
+        // 配置流程内部只标记超时，由外层 init 循环重新 reset/config，避免递归恢复。
+        if (ina226_configuring) {
+            return;
+        }
+        ulp_ina226_init();
+        last_success_ms = now_time_ms;
     };
 
     uint16_t mask_enable = 0;
     if (INA226::read_register(INA226::Register_enum::INA226_MASK_ENABLE, &mask_enable) != ESP_OK) {
-        mark_read_timeout_if_needed();
+        handle_ina226_read_not_ready();
         return;
     }
-    if(!(mask_enable & (1 << 3))){ //CNVR位为0，说明没有转换完成
-        mark_read_timeout_if_needed();
+    if(!(mask_enable & (1 << 3))){ // CNVR 位为 0 表示本轮转换未完成，继续保留上次有效样本。
+        handle_ina226_read_not_ready();
         return;
     }
 
@@ -135,14 +146,14 @@ void ina226_run(){
     int16_t new_shunt_register_raw = 0;
     /* 读取电压寄存器 */
     if (INA226::read_register(INA226::Register_enum::INA226_BUS_VOLTAGE, &new_voltage_register_raw) != ESP_OK) {
-        mark_read_timeout_if_needed();
+        handle_ina226_read_not_ready();
         return;
     }
 
     /* 读取电流寄存器 */
     if (INA226::read_register(INA226::Register_enum::INA226_SHUNT_VOLTAGE,
                               (uint16_t*)&new_shunt_register_raw) != ESP_OK) {
-        mark_read_timeout_if_needed();
+        handle_ina226_read_not_ready();
         return;
     }
 
@@ -173,69 +184,85 @@ void ina226_run(){
 /**
  * @brief 初始化 INA226 并等待首个有效电压样本。
  *
- * @return true 初始化、配置和首个样本读取成功；false 任一 I2C 操作失败。
+ * @return true 初始化、配置和首个样本读取成功；当前实现会一直重试，不返回 false。
  *
- * @note 成功后置位 `ulp_ina226_init_ok`，失败时置位 `ulp_i2c_init_err` 供 HP 核诊断。
+ * @note LP Core 的核心职责就是 INA226 采样，因此初始化和恢复阶段允许阻塞重试。
+ *       恢复期间置位 `ulp_i2c_init_err` 与 `ulp_ina226_read_timeout`，HP 核保护逻辑会据此
+ *       暂停 INA226 相关保护，避免用无效数据关断输出。
  */
 bool ulp_ina226_init(){
-    if (INA226::reset() != ESP_OK) {
-        with_shared_lock_void([]() {
-            ulp_state_p.ulp_state_bits.ulp_i2c_init_err = true;
-        });
-        return false;
-    }
-
-    ulp_lp_core_delay_us(MS_TO_US(5));
-
-    uint16_t new_ina226_manufacturer_id = 0;
-    if (INA226::read_register(INA226::Register_enum::INA226_MANUFACTURER,
-                              &new_ina226_manufacturer_id) != ESP_OK) {
-        with_shared_lock_void([]() {
-            ulp_state_p.ulp_state_bits.ulp_i2c_init_err = true;
-        });
-        return false;
-    }
-    with_shared_lock_void([=]() {
-        ina226_manufacturer_id = new_ina226_manufacturer_id;
-    });
-    if (INA226::set_configuration(
-        INA226::Avg_times_enum::INA226_64_samples,
-        INA226::Timing_enum::INA226_1100_us,
-        INA226::Timing_enum::INA226_1100_us,
-        INA226::Mode_enum::INA226_SHUNT_AND_BUS_CONTINUOUS
-    ) != ESP_OK) {
-        with_shared_lock_void([]() {
-            ulp_state_p.ulp_state_bits.ulp_i2c_init_err = true;
-        });
-        return false;
-    }
-
-    INA226::MaskEnable_reg_t MaskEnable_reg;
-    MaskEnable_reg.raw = 0;
-    MaskEnable_reg.bits.LEN=1;
-    MaskEnable_reg.bits.APOL=0;
-    MaskEnable_reg.bits.CNVR=1;
-    if (INA226::write_register(INA226::Register_enum::INA226_MASK_ENABLE,MaskEnable_reg.raw) != ESP_OK) {
-        with_shared_lock_void([]() {
-            ulp_state_p.ulp_state_bits.ulp_i2c_init_err = true;
-        });
-        return false;
-    }
-    while(true){
-        ina226_run();
-        bool sample_ready = false;
-        with_shared_lock_void([&]() {
-            sample_ready = voltage_uv != 0;
-        });
-        if (sample_ready) {
-            break;
-        }
-        ulp_lp_core_delay_us(100);
-    }
+    ina226_configuring = true;
     with_shared_lock_void([]() {
-        ulp_state_p.ulp_state_bits.ulp_ina226_init_ok = true;
+        ulp_state_p.ulp_state_bits.ulp_i2c_init_err = true;
+        ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout = true;
     });
-    return true;
+
+    while (true) {
+        // 恢复循环中仍维护 LP 毫秒计数，避免超时判断长期停滞。
+        timer_run();
+        if (INA226::reset() != ESP_OK) {
+            ulp_lp_core_delay_us(MS_TO_US(20));
+            continue;
+        }
+
+        ulp_lp_core_delay_us(MS_TO_US(5));
+        timer_run();
+
+        uint16_t new_ina226_manufacturer_id = 0;
+        if (INA226::read_register(INA226::Register_enum::INA226_MANUFACTURER,
+                                  &new_ina226_manufacturer_id) != ESP_OK) {
+            ulp_lp_core_delay_us(MS_TO_US(20));
+            continue;
+        }
+        with_shared_lock_void([=]() {
+            ina226_manufacturer_id = new_ina226_manufacturer_id;
+        });
+
+        if (INA226::set_configuration(
+            INA226::Avg_times_enum::INA226_64_samples,
+            INA226::Timing_enum::INA226_1100_us,
+            INA226::Timing_enum::INA226_1100_us,
+            INA226::Mode_enum::INA226_SHUNT_AND_BUS_CONTINUOUS
+        ) != ESP_OK) {
+            ulp_lp_core_delay_us(MS_TO_US(20));
+            continue;
+        }
+
+        INA226::MaskEnable_reg_t MaskEnable_reg;
+        MaskEnable_reg.raw = 0;
+        MaskEnable_reg.bits.LEN=1;
+        MaskEnable_reg.bits.APOL=0;
+        MaskEnable_reg.bits.CNVR=1;
+        if (INA226::write_register(INA226::Register_enum::INA226_MASK_ENABLE,MaskEnable_reg.raw) != ESP_OK) {
+            ulp_lp_core_delay_us(MS_TO_US(20));
+            continue;
+        }
+
+        const uint32_t sample_wait_start_ms = now_time_ms;
+        while(true){
+            timer_run();
+            ina226_run();
+            bool sample_ready = false;
+            with_shared_lock_void([&]() {
+                sample_ready = voltage_uv != 0 && !ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout;
+            });
+            if (sample_ready) {
+                // 首个有效样本发布后，测量链路重新变为可靠，HP 核可恢复 INA226 相关保护。
+                with_shared_lock_void([]() {
+                    ulp_state_p.ulp_state_bits.ulp_i2c_init_err = false;
+                    ulp_state_p.ulp_state_bits.ulp_ina226_init_ok = true;
+                    ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout = false;
+                });
+                ina226_configuring = false;
+                return true;
+            }
+            if ((now_time_ms - sample_wait_start_ms) > INA226_READ_TIMEOUT_MS) {
+                // 配置成功但首样本迟迟不可用，重新 reset/config，处理 INA226 卡死或总线瞬断。
+                break;
+            }
+            ulp_lp_core_delay_us(100);
+        }
+    }
 };
 
 /**
@@ -311,11 +338,20 @@ void update_meter() {
     // ----- 电量积分 (uAh) -----
     int32_t sample_current_uA = 0;
     uint32_t sample_voltage_uv = 0;
+    bool sample_valid = false;
     // 电流和电压必须在同一临界区读取，避免电量积分组合到不同批次样本。
     with_shared_lock_void([&]() {
         sample_current_uA = current_uA;
         sample_voltage_uv = voltage_uv;
+        sample_valid = !ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout &&
+                       ulp_state_p.ulp_state_bits.ulp_ina226_init_ok &&
+                       !ulp_state_p.ulp_state_bits.ulp_i2c_init_err;
     });
+    if (!sample_valid) {
+        // 测量降级时保留最后显示样本，但不继续用陈旧电流积分电量。
+        last_run_ms = now_time_ms;
+        return;
+    }
 
     charge_accum_uAms += (int64_t)sample_current_uA * delta_ms;
     const int64_t UAH_THRESHOLD = 3600000LL;   // 1 uAh = 3,600,000 uA·ms
@@ -361,23 +397,19 @@ void app_loop_every_ms(uint32_t interval_ms, F&& action) {
 /**
  * @brief LP Core 应用入口。
  *
- * @return 不返回；初始化失败或主循环都会常驻运行。
+ * @return 不返回；INA226 初始化会阻塞重试直到成功，随后进入主循环。
  *
  * @note 主循环持续轮询 INA226、维护毫秒计数、处理校准重载并执行电量积分。
  */
 int main(void){
     load_current_calib_params();
-    if (!ulp_ina226_init()) {
-        while (1) {
-            ulp_lp_core_delay_us(MS_TO_US(3000));
-        }
-    }
+    ulp_ina226_init();
     with_shared_lock_void([]() {
         ulp_state_p.ulp_state_bits.ulp_run = true;
     });
     while (1) {
-        ina226_run();
         timer_run();
+        ina226_run();
 
         //检查是否需要重新加载校准参数
         app_loop_every_ms(20,check_reload_current_calib_params);
