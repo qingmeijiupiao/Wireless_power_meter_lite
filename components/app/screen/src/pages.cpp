@@ -1376,12 +1376,14 @@ void SettingsPage::build_dialog_content() {
         }
     } else if (item == FirmwareInfo) {
         const MAC_t mac = WiFiManager::instance().get_mac(WIFI_IF_STA);
-        snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "Version %u.%u.%u",
+        snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "Version %u.%u.%u %s",
                  static_cast<unsigned>(VERSION_MAJOR),
                  static_cast<unsigned>(VERSION_MINOR),
-                 static_cast<unsigned>(VERSION_PATCH));
-        snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Build %s", BUILD_TIME);
-        snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "MAC %02X:%02X:%02X:%02X:%02X:%02X",
+                 static_cast<unsigned>(VERSION_PATCH),
+                 VERSION_PATCH == 99 ? "Test" : "Release");
+        snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Build Time");
+        snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "%.16s", BUILD_TIME);
+        snprintf(detail_lines_[3], sizeof(detail_lines_[3]), "MAC %02X:%02X:%02X:%02X:%02X:%02X",
                  mac.octet1, mac.octet2, mac.octet3,
                  mac.octet4, mac.octet5, mac.octet6);
     } else if (item == FirmwareUpdate) {
