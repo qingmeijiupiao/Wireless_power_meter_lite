@@ -22,16 +22,15 @@
 namespace OtaService {
 namespace {
 
-constexpr char TAG[] = "OtaService";
-constexpr char MANIFEST_URL[] =
-    "https://cdn.jsdelivr.net/gh/qingmeijiupiao/"
-    "Wireless_power_meter_lite@firmware-dist/ota/latest.json";
-constexpr size_t CONFIG_BUFFER_SIZE = 4096;
-constexpr size_t DOWNLOAD_BUFFER_SIZE = 4096;
-constexpr uint32_t HTTP_TIMEOUT_MS = 15000;
-constexpr uint32_t TASK_STACK_SIZE = 10240;
-constexpr uint8_t MAX_DOWNLOAD_ATTEMPTS = 4;
-constexpr uint32_t RETRY_DELAY_MS = 1000;
+constexpr char     TAG[]                 = "OtaService";
+constexpr char     MANIFEST_URL[]        = "https://cdn.jsdelivr.net/gh/qingmeijiupiao/"
+                                           "Wireless_power_meter_lite@firmware-dist/ota/latest.json";
+constexpr size_t   CONFIG_BUFFER_SIZE    = 4096;
+constexpr size_t   DOWNLOAD_BUFFER_SIZE  = 4096;
+constexpr uint32_t HTTP_TIMEOUT_MS       = 15000;
+constexpr uint32_t TASK_STACK_SIZE       = 10240;
+constexpr uint8_t  MAX_DOWNLOAD_ATTEMPTS = 4;
+constexpr uint32_t RETRY_DELAY_MS        = 1000;
 
 enum class Operation : uint8_t {
     CHECK,
@@ -45,26 +44,25 @@ struct Version {
 };
 
 SemaphoreHandle_t status_mutex = nullptr;
-TaskHandle_t worker_task = nullptr;
-Status status = {};
-char config_buffer[CONFIG_BUFFER_SIZE];
-char firmware_url[384];
-size_t firmware_size = 0;
+TaskHandle_t      worker_task  = nullptr;
+Status            status       = {};
+char              config_buffer[CONFIG_BUFFER_SIZE];
+char              firmware_url[384];
+size_t            firmware_size = 0;
 
 /**
  * @brief 以 ASCII 大小写不敏感方式比较两个字符串。
  *
- * HTTP Header 字段名不区分大小写，不能依赖服务端固定返回 Content-Range 的拼写。
+ * HTTP Header
+ * 字段名不区分大小写，不能依赖服务端固定返回 Content-Range 的拼写。
  */
 bool ascii_equals_ignore_case(const char* lhs, const char* rhs) {
     if (lhs == nullptr || rhs == nullptr) {
         return false;
     }
     while (*lhs != '\0' && *rhs != '\0') {
-        const char lhs_lower =
-            *lhs >= 'A' && *lhs <= 'Z' ? static_cast<char>(*lhs + ('a' - 'A')) : *lhs;
-        const char rhs_lower =
-            *rhs >= 'A' && *rhs <= 'Z' ? static_cast<char>(*rhs + ('a' - 'A')) : *rhs;
+        const char lhs_lower = *lhs >= 'A' && *lhs <= 'Z' ? static_cast<char>(*lhs + ('a' - 'A')) : *lhs;
+        const char rhs_lower = *rhs >= 'A' && *rhs <= 'Z' ? static_cast<char>(*rhs + ('a' - 'A')) : *rhs;
         if (lhs_lower != rhs_lower) {
             return false;
         }
@@ -85,20 +83,17 @@ void unlock_status() {
 void set_state(State state, const char* error = "") {
     lock_status();
     const State old_state = status.state;
-    status.state = state;
+    status.state          = state;
     snprintf(status.last_error, sizeof(status.last_error), "%s", error == nullptr ? "" : error);
     unlock_status();
     if (old_state == state && (error == nullptr || error[0] == '\0')) {
         return;
     }
     if (state == State::FAILED) {
-        DEVICE_STATE_W(TAG, "ota: state old=%s new=%s reason=%s",
-                       state_to_string(old_state),
-                       state_to_string(state),
+        DEVICE_STATE_W(TAG, "ota: state old=%s new=%s reason=%s", state_to_string(old_state), state_to_string(state),
                        error == nullptr || error[0] == '\0' ? "unknown" : error);
     } else {
-        DEVICE_STATE_I(TAG, "ota: state old=%s new=%s result=ok",
-                       state_to_string(old_state), state_to_string(state));
+        DEVICE_STATE_I(TAG, "ota: state old=%s new=%s result=ok", state_to_string(old_state), state_to_string(state));
     }
 }
 
@@ -111,7 +106,7 @@ void set_active_source(const char* source) {
 void set_progress(size_t downloaded, size_t image_size) {
     lock_status();
     status.bytes_downloaded = downloaded;
-    status.image_size = image_size;
+    status.image_size       = image_size;
     unlock_status();
 }
 
@@ -119,11 +114,11 @@ bool parse_version(const char* text, Version* version) {
     if (text == nullptr || version == nullptr) {
         return false;
     }
-    unsigned major = 0;
-    unsigned minor = 0;
-    unsigned patch = 0;
+    unsigned    major = 0;
+    unsigned    minor = 0;
+    unsigned    patch = 0;
     const char* start = text[0] == 'v' ? text + 1 : text;
-    char tail = '\0';
+    char        tail  = '\0';
     if (sscanf(start, "%u.%u.%u%c", &major, &minor, &patch, &tail) != 3) {
         return false;
     }
@@ -148,12 +143,12 @@ int compare_version(const Version& lhs, const Version& rhs) {
 
 esp_http_client_handle_t open_http(const char* url, int64_t* content_length) {
     esp_http_client_config_t config = {};
-    config.url = url;
-    config.timeout_ms = HTTP_TIMEOUT_MS;
-    config.buffer_size = DOWNLOAD_BUFFER_SIZE;
-    config.crt_bundle_attach = esp_crt_bundle_attach;
-    config.keep_alive_enable = true;
-    config.max_redirection_count = 5;
+    config.url                      = url;
+    config.timeout_ms               = HTTP_TIMEOUT_MS;
+    config.buffer_size              = DOWNLOAD_BUFFER_SIZE;
+    config.crt_bundle_attach        = esp_crt_bundle_attach;
+    config.keep_alive_enable        = true;
+    config.max_redirection_count    = 5;
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (client == nullptr) {
@@ -166,8 +161,8 @@ esp_http_client_handle_t open_http(const char* url, int64_t* content_length) {
         return nullptr;
     }
 
-    const int64_t length = esp_http_client_fetch_headers(client);
-    const int status_code = esp_http_client_get_status_code(client);
+    const int64_t length      = esp_http_client_fetch_headers(client);
+    const int     status_code = esp_http_client_get_status_code(client);
     if (length < 0 || status_code < 200 || status_code >= 300) {
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
@@ -191,8 +186,8 @@ esp_err_t fetch_manifest(char* output, size_t output_size) {
     set_active_source("jsdelivr");
     DEVICE_EVENT_I(TAG, "ota: manifest_attempt source=jsdelivr url=%s", MANIFEST_URL);
 
-    int64_t content_length = 0;
-    esp_http_client_handle_t client = open_http(MANIFEST_URL, &content_length);
+    int64_t                  content_length = 0;
+    esp_http_client_handle_t client         = open_http(MANIFEST_URL, &content_length);
     if (client == nullptr) {
         ESP_LOGW(TAG, "ota: manifest source=jsdelivr result=failed reason=http_open");
         return ESP_FAIL;
@@ -204,8 +199,7 @@ esp_err_t fetch_manifest(char* output, size_t output_size) {
 
     size_t total = 0;
     while (total + 1 < output_size) {
-        const int read = esp_http_client_read(
-            client, output + total, static_cast<int>(output_size - total - 1));
+        const int read = esp_http_client_read(client, output + total, static_cast<int>(output_size - total - 1));
         if (read < 0) {
             close_http(client);
             return ESP_FAIL;
@@ -220,22 +214,17 @@ esp_err_t fetch_manifest(char* output, size_t output_size) {
     if (total == 0) {
         return ESP_ERR_INVALID_RESPONSE;
     }
-    DEVICE_EVENT_I(TAG, "ota: manifest source=jsdelivr result=ok bytes=%u",
-                   static_cast<unsigned>(total));
+    DEVICE_EVENT_I(TAG, "ota: manifest source=jsdelivr result=ok bytes=%u", static_cast<unsigned>(total));
     return ESP_OK;
 }
 
 bool token_equals(const char* json, const jsmntok_t& token, const char* text) {
     const size_t token_size = static_cast<size_t>(token.end - token.start);
-    return token.type == JSMN_STRING &&
-        strlen(text) == token_size &&
-        strncmp(json + token.start, text, token_size) == 0;
+    return token.type == JSMN_STRING && strlen(text) == token_size &&
+           strncmp(json + token.start, text, token_size) == 0;
 }
 
-const jsmntok_t* find_value_token(const char* json,
-                                  const jsmntok_t* tokens,
-                                  int token_count,
-                                  const char* key) {
+const jsmntok_t* find_value_token(const char* json, const jsmntok_t* tokens, int token_count, const char* key) {
     for (int index = 1; index + 1 < token_count; ++index) {
         if (token_equals(json, tokens[index], key)) {
             return &tokens[index + 1];
@@ -244,12 +233,8 @@ const jsmntok_t* find_value_token(const char* json,
     return nullptr;
 }
 
-bool copy_string_token(const char* json,
-                       const jsmntok_t* token,
-                       char* output,
-                       size_t output_size) {
-    if (token == nullptr || token->type != JSMN_STRING ||
-        token->start < 0 || token->end < token->start) {
+bool copy_string_token(const char* json, const jsmntok_t* token, char* output, size_t output_size) {
+    if (token == nullptr || token->type != JSMN_STRING || token->start < 0 || token->end < token->start) {
         return false;
     }
     const size_t length = static_cast<size_t>(token->end - token->start);
@@ -262,8 +247,8 @@ bool copy_string_token(const char* json,
 }
 
 bool parse_size_token(const char* json, const jsmntok_t* token, size_t* output) {
-    if (token == nullptr || output == nullptr || token->type != JSMN_PRIMITIVE ||
-        token->start < 0 || token->end < token->start) {
+    if (token == nullptr || output == nullptr || token->type != JSMN_PRIMITIVE || token->start < 0 ||
+        token->end < token->start) {
         return false;
     }
     const size_t length = static_cast<size_t>(token->end - token->start);
@@ -274,63 +259,47 @@ bool parse_size_token(const char* json, const jsmntok_t* token, size_t* output) 
     memcpy(text, json + token->start, length);
 
     unsigned long long parsed = 0;
-    char tail = '\0';
-    if (sscanf(text, "%llu%c", &parsed, &tail) != 1 ||
-        parsed == 0 || parsed > SIZE_MAX) {
+    char               tail   = '\0';
+    if (sscanf(text, "%llu%c", &parsed, &tail) != 1 || parsed == 0 || parsed > SIZE_MAX) {
         return false;
     }
     *output = static_cast<size_t>(parsed);
     return true;
 }
 
-bool parse_manifest(const char* manifest,
-                    char* version,
-                    size_t version_size,
-                    char* url,
-                    size_t url_size,
+bool parse_manifest(const char* manifest, char* version, size_t version_size, char* url, size_t url_size,
                     size_t* image_size) {
-    if (manifest == nullptr || version == nullptr || url == nullptr ||
-        image_size == nullptr) {
+    if (manifest == nullptr || version == nullptr || url == nullptr || image_size == nullptr) {
         return false;
     }
 
-    jsmn_parser parser = {};
-    jsmntok_t tokens[32] = {};
+    jsmn_parser parser     = {};
+    jsmntok_t   tokens[32] = {};
     jsmn_init(&parser);
-    const int token_count = jsmn_parse(
-        &parser, manifest, strlen(manifest), tokens, sizeof(tokens) / sizeof(tokens[0]));
+    const int token_count = jsmn_parse(&parser, manifest, strlen(manifest), tokens, sizeof(tokens) / sizeof(tokens[0]));
     if (token_count < 1 || tokens[0].type != JSMN_OBJECT) {
         return false;
     }
 
-    const jsmntok_t* schema_token =
-        find_value_token(manifest, tokens, token_count, "schema_version");
-    const jsmntok_t* version_token =
-        find_value_token(manifest, tokens, token_count, "version");
-    const jsmntok_t* firmware_token =
-        find_value_token(manifest, tokens, token_count, "firmware");
-    const jsmntok_t* url_token =
-        find_value_token(manifest, tokens, token_count, "url");
-    const jsmntok_t* size_token =
-        find_value_token(manifest, tokens, token_count, "size");
+    const jsmntok_t* schema_token   = find_value_token(manifest, tokens, token_count, "schema_version");
+    const jsmntok_t* version_token  = find_value_token(manifest, tokens, token_count, "version");
+    const jsmntok_t* firmware_token = find_value_token(manifest, tokens, token_count, "firmware");
+    const jsmntok_t* url_token      = find_value_token(manifest, tokens, token_count, "url");
+    const jsmntok_t* size_token     = find_value_token(manifest, tokens, token_count, "size");
 
     char schema[8] = {};
-    if (firmware_token == nullptr || firmware_token->type != JSMN_OBJECT ||
-        schema_token == nullptr || schema_token->type != JSMN_PRIMITIVE ||
-        !copy_string_token(manifest, version_token, version, version_size) ||
-        !copy_string_token(manifest, url_token, url, url_size) ||
-        !parse_size_token(manifest, size_token, image_size)) {
+    if (firmware_token == nullptr || firmware_token->type != JSMN_OBJECT || schema_token == nullptr ||
+        schema_token->type != JSMN_PRIMITIVE || !copy_string_token(manifest, version_token, version, version_size) ||
+        !copy_string_token(manifest, url_token, url, url_size) || !parse_size_token(manifest, size_token, image_size)) {
         return false;
     }
 
-    const size_t schema_length =
-        static_cast<size_t>(schema_token->end - schema_token->start);
+    const size_t schema_length = static_cast<size_t>(schema_token->end - schema_token->start);
     if (schema_length >= sizeof(schema)) {
         return false;
     }
     memcpy(schema, manifest + schema_token->start, schema_length);
-    if (strcmp(schema, "1") != 0 ||
-        strncmp(url, "https://", 8) != 0) {
+    if (strcmp(schema, "1") != 0 || strncmp(url, "https://", 8) != 0) {
         return false;
     }
 
@@ -354,27 +323,20 @@ esp_err_t check_latest_version() {
         return err;
     }
 
-    char latest[32] = {};
-    char latest_url[sizeof(firmware_url)] = {};
-    size_t latest_size = 0;
-    if (!parse_manifest(config_buffer,
-                        latest,
-                        sizeof(latest),
-                        latest_url,
-                        sizeof(latest_url),
-                        &latest_size)) {
+    char   latest[32]                       = {};
+    char   latest_url[sizeof(firmware_url)] = {};
+    size_t latest_size                      = 0;
+    if (!parse_manifest(config_buffer, latest, sizeof(latest), latest_url, sizeof(latest_url), &latest_size)) {
         ESP_LOGW(TAG, "remote manifest parse failed");
         set_state(State::FAILED, "manifest_invalid");
         return ESP_ERR_INVALID_RESPONSE;
     }
-    ESP_LOGI(TAG, "remote manifest parsed latest=%s size=%u",
-             latest, static_cast<unsigned>(latest_size));
+    ESP_LOGI(TAG, "remote manifest parsed latest=%s size=%u", latest, static_cast<unsigned>(latest_size));
 
-    const esp_app_desc_t* running = esp_app_get_description();
-    Version current_version = {};
-    Version latest_version = {};
-    if (!parse_version(running->version, &current_version) ||
-        !parse_version(latest, &latest_version)) {
+    const esp_app_desc_t* running         = esp_app_get_description();
+    Version               current_version = {};
+    Version               latest_version  = {};
+    if (!parse_version(running->version, &current_version) || !parse_version(latest, &latest_version)) {
         set_state(State::FAILED, "version_invalid");
         return ESP_ERR_INVALID_VERSION;
     }
@@ -384,37 +346,37 @@ esp_err_t check_latest_version() {
     snprintf(status.current_version, sizeof(status.current_version), "%s", running->version);
     snprintf(status.latest_version, sizeof(status.latest_version), "%s", latest);
     snprintf(firmware_url, sizeof(firmware_url), "%s", latest_url);
-    firmware_size = latest_size;
+    firmware_size           = latest_size;
     status.active_source[0] = '\0';
-    status.last_error[0] = '\0';
-    status.state = compare_version(latest_version, current_version) > 0
-        ? State::UPDATE_AVAILABLE
-        : State::UP_TO_DATE;
+    status.last_error[0]    = '\0';
+    status.state = compare_version(latest_version, current_version) > 0 ? State::UPDATE_AVAILABLE : State::UP_TO_DATE;
     const State result_state = status.state;
     unlock_status();
 
-    DEVICE_STATE_I(TAG, "ota: state old=%s new=%s result=ok",
-                   state_to_string(previous_state), state_to_string(result_state));
-    DEVICE_EVENT_I(TAG, "ota: remote_check current=%s latest=%s result=%s",
-                   running->version, latest, state_to_string(result_state));
+    DEVICE_STATE_I(TAG, "ota: state old=%s new=%s result=ok", state_to_string(previous_state),
+                   state_to_string(result_state));
+    DEVICE_EVENT_I(TAG, "ota: remote_check current=%s latest=%s result=%s", running->version, latest,
+                   state_to_string(result_state));
     return ESP_OK;
 }
 
 struct DownloadContext {
     esp_err_t error;
-    size_t total;
-    size_t image_size;
-    size_t expected_size;
-    size_t request_offset; /**< 本次 HTTP 请求从固件中的哪个偏移开始。 */
-    bool ota_started;
-    bool range_header_seen; /**< 续传响应是否包含 Content-Range。 */
-    bool range_valid;       /**< Content-Range 是否与请求偏移和总长度一致。 */
+    size_t    total;
+    size_t    image_size;
+    size_t    expected_size;
+    size_t    request_offset; /**< 本次 HTTP 请求从固件中的哪个偏移开始。 */
+    bool      ota_started;
+    bool      range_header_seen; /**< 续传响应是否包含 Content-Range。 */
+    bool      range_valid;       /**< Content-Range 是否与请求偏移和总长度一致。 */
 };
 
 /**
  * @brief 接收固件 HTTP 事件并按顺序写入 OTA 分区。
  *
- * 首次下载要求 HTTP 200；续传要求 HTTP 206，并严格校验 Content-Range，
+ * 首次下载要求 HTTP 200；续传要求 HTTP
+ * 206，并严格校验
+ * Content-Range，
  * 防止服务端忽略 Range 后从头返回固件而导致目标分区内容重复。
  */
 esp_err_t firmware_http_event(esp_http_client_event_t* event) {
@@ -423,23 +385,16 @@ esp_err_t firmware_http_event(esp_http_client_event_t* event) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (event->event_id == HTTP_EVENT_ON_HEADER &&
-        context->request_offset > 0 &&
-        event->header_key != nullptr &&
-        event->header_value != nullptr &&
-        ascii_equals_ignore_case(event->header_key, "Content-Range")) {
-        unsigned long long start = 0;
-        unsigned long long end = 0;
-        unsigned long long total = 0;
-        char tail = '\0';
+    if (event->event_id == HTTP_EVENT_ON_HEADER && context->request_offset > 0 && event->header_key != nullptr &&
+        event->header_value != nullptr && ascii_equals_ignore_case(event->header_key, "Content-Range")) {
+        unsigned long long start   = 0;
+        unsigned long long end     = 0;
+        unsigned long long total   = 0;
+        char               tail    = '\0';
         context->range_header_seen = true;
         context->range_valid =
-            sscanf(event->header_value, "bytes %llu-%llu/%llu%c",
-                   &start, &end, &total, &tail) == 3 &&
-            start == context->request_offset &&
-            total == context->expected_size &&
-            end >= start &&
-            end < total;
+            sscanf(event->header_value, "bytes %llu-%llu/%llu%c", &start, &end, &total, &tail) == 3 &&
+            start == context->request_offset && total == context->expected_size && end >= start && end < total;
         return ESP_OK;
     }
 
@@ -449,8 +404,7 @@ esp_err_t firmware_http_event(esp_http_client_event_t* event) {
 
     const int status_code = esp_http_client_get_status_code(event->client);
     if ((context->request_offset == 0 && status_code != 200) ||
-        (context->request_offset > 0 &&
-         (status_code != 206 || !context->range_header_seen || !context->range_valid))) {
+        (context->request_offset > 0 && (status_code != 206 || !context->range_header_seen || !context->range_valid))) {
         context->error = ESP_ERR_INVALID_RESPONSE;
         return context->error;
     }
@@ -464,8 +418,7 @@ esp_err_t firmware_http_event(esp_http_client_event_t* event) {
     if (context->total == context->request_offset) {
         const int64_t content_length = esp_http_client_get_content_length(event->client);
         if (content_length > 0 &&
-            static_cast<uint64_t>(content_length) !=
-                context->expected_size - context->request_offset) {
+            static_cast<uint64_t>(content_length) != context->expected_size - context->request_offset) {
             context->error = ESP_ERR_INVALID_SIZE;
             return context->error;
         }
@@ -473,7 +426,7 @@ esp_err_t firmware_http_event(esp_http_client_event_t* event) {
 
     if (!context->ota_started) {
         context->image_size = context->expected_size;
-        context->error = OtaManager::begin(context->expected_size);
+        context->error      = OtaManager::begin(context->expected_size);
         if (context->error != ESP_OK) {
             return context->error;
         }
@@ -490,22 +443,19 @@ esp_err_t firmware_http_event(esp_http_client_event_t* event) {
     return ESP_OK;
 }
 
-esp_err_t download_firmware(const char* url,
-                            const char* version,
-                            size_t expected_size) {
+esp_err_t download_firmware(const char* url, const char* version, size_t expected_size) {
     set_active_source("jsdelivr");
-    DEVICE_EVENT_I(TAG, "ota: firmware_attempt source=%s version=%s url=%s",
-                   "jsdelivr", version, url);
+    DEVICE_EVENT_I(TAG, "ota: firmware_attempt source=%s version=%s url=%s", "jsdelivr", version, url);
 
     DownloadContext context = {
-        .error = ESP_OK,
-        .total = 0,
-        .image_size = 0,
-        .expected_size = expected_size,
-        .request_offset = 0,
-        .ota_started = false,
+        .error             = ESP_OK,
+        .total             = 0,
+        .image_size        = 0,
+        .expected_size     = expected_size,
+        .request_offset    = 0,
+        .ota_started       = false,
         .range_header_seen = false,
-        .range_valid = false,
+        .range_valid       = false,
     };
 
     set_state(State::DOWNLOADING);
@@ -514,23 +464,21 @@ esp_err_t download_firmware(const char* url,
 
     esp_err_t err = ESP_FAIL;
     // 首次连接失败后保留已写入的 OTA 会话，后续通过 Range 从断点继续下载。
-    for (uint8_t attempt = 1;
-         attempt <= MAX_DOWNLOAD_ATTEMPTS && context.total < expected_size;
-         ++attempt) {
-        context.error = ESP_OK;
-        context.request_offset = context.total;
+    for (uint8_t attempt = 1; attempt <= MAX_DOWNLOAD_ATTEMPTS && context.total < expected_size; ++attempt) {
+        context.error             = ESP_OK;
+        context.request_offset    = context.total;
         context.range_header_seen = false;
-        context.range_valid = context.request_offset == 0;
+        context.range_valid       = context.request_offset == 0;
 
         esp_http_client_config_t config = {};
-        config.url = url;
-        config.timeout_ms = HTTP_TIMEOUT_MS;
-        config.buffer_size = DOWNLOAD_BUFFER_SIZE;
-        config.crt_bundle_attach = esp_crt_bundle_attach;
-        config.event_handler = firmware_http_event;
-        config.user_data = &context;
-        config.keep_alive_enable = true;
-        config.max_redirection_count = 5;
+        config.url                      = url;
+        config.timeout_ms               = HTTP_TIMEOUT_MS;
+        config.buffer_size              = DOWNLOAD_BUFFER_SIZE;
+        config.crt_bundle_attach        = esp_crt_bundle_attach;
+        config.event_handler            = firmware_http_event;
+        config.user_data                = &context;
+        config.keep_alive_enable        = true;
+        config.max_redirection_count    = 5;
 
         esp_http_client_handle_t client = esp_http_client_init(&config);
         if (client == nullptr) {
@@ -540,8 +488,7 @@ esp_err_t download_firmware(const char* url,
 
         char range_header[48] = {};
         if (context.request_offset > 0) {
-            snprintf(range_header, sizeof(range_header), "bytes=%u-",
-                     static_cast<unsigned>(context.request_offset));
+            snprintf(range_header, sizeof(range_header), "bytes=%u-", static_cast<unsigned>(context.request_offset));
             err = esp_http_client_set_header(client, "Range", range_header);
             if (err != ESP_OK) {
                 esp_http_client_cleanup(client);
@@ -549,15 +496,12 @@ esp_err_t download_firmware(const char* url,
             }
         }
 
-        DEVICE_EVENT_I(TAG,
-                       "ota: http_attempt attempt=%u/%u offset=%u expected=%u",
-                       static_cast<unsigned>(attempt),
-                       static_cast<unsigned>(MAX_DOWNLOAD_ATTEMPTS),
-                       static_cast<unsigned>(context.request_offset),
+        DEVICE_EVENT_I(TAG, "ota: http_attempt attempt=%u/%u offset=%u expected=%u", static_cast<unsigned>(attempt),
+                       static_cast<unsigned>(MAX_DOWNLOAD_ATTEMPTS), static_cast<unsigned>(context.request_offset),
                        static_cast<unsigned>(expected_size));
         const size_t before_attempt = context.total;
-        err = esp_http_client_perform(client);
-        const int status_code = esp_http_client_get_status_code(client);
+        err                         = esp_http_client_perform(client);
+        const int status_code       = esp_http_client_get_status_code(client);
         esp_http_client_cleanup(client);
 
         if (context.error != ESP_OK) {
@@ -578,20 +522,14 @@ esp_err_t download_firmware(const char* url,
         ESP_LOGW(TAG,
                  "ota: http_attempt attempt=%u result=failed status=%d "
                  "bytes=%u/%u gained=%u err=%s",
-                 static_cast<unsigned>(attempt),
-                 status_code,
-                 static_cast<unsigned>(context.total),
-                 static_cast<unsigned>(expected_size),
-                 static_cast<unsigned>(context.total - before_attempt),
+                 static_cast<unsigned>(attempt), status_code, static_cast<unsigned>(context.total),
+                 static_cast<unsigned>(expected_size), static_cast<unsigned>(context.total - before_attempt),
                  esp_err_to_name(err));
 
         const bool protocol_or_write_error =
-            err == ESP_ERR_INVALID_RESPONSE ||
-            err == ESP_ERR_INVALID_SIZE ||
-            context.error == ESP_ERR_INVALID_RESPONSE ||
-            context.error == ESP_ERR_INVALID_SIZE ||
-            (context.error != ESP_OK &&
-             context.error != ESP_ERR_HTTP_INCOMPLETE_DATA &&
+            err == ESP_ERR_INVALID_RESPONSE || err == ESP_ERR_INVALID_SIZE ||
+            context.error == ESP_ERR_INVALID_RESPONSE || context.error == ESP_ERR_INVALID_SIZE ||
+            (context.error != ESP_OK && context.error != ESP_ERR_HTTP_INCOMPLETE_DATA &&
              context.error != ESP_ERR_HTTP_READ_TIMEOUT);
         if (protocol_or_write_error || attempt == MAX_DOWNLOAD_ATTEMPTS) {
             break;
@@ -607,9 +545,7 @@ esp_err_t download_firmware(const char* url,
             OtaManager::abort();
         }
         ESP_LOGW(TAG, "ota: firmware source=jsdelivr result=failed bytes=%u/%u err=%s",
-                 static_cast<unsigned>(context.total),
-                 static_cast<unsigned>(expected_size),
-                 esp_err_to_name(err));
+                 static_cast<unsigned>(context.total), static_cast<unsigned>(expected_size), esp_err_to_name(err));
         return err;
     }
 
@@ -623,13 +559,12 @@ esp_err_t download_firmware(const char* url,
         if (OtaManager::get_status().state == OtaManager::State::VERIFIED) {
             OtaManager::abort();
         }
-        ESP_LOGE(TAG, "ota: firmware_verify source=jsdelivr result=failed err=%s",
-                 esp_err_to_name(err));
+        ESP_LOGE(TAG, "ota: firmware_verify source=jsdelivr result=failed err=%s", esp_err_to_name(err));
         return err;
     }
 
-    DEVICE_STATE_I(TAG, "ota: firmware source=jsdelivr result=activated version=%s bytes=%u",
-                   version, static_cast<unsigned>(context.total));
+    DEVICE_STATE_I(TAG, "ota: firmware source=jsdelivr result=activated version=%s bytes=%u", version,
+                   static_cast<unsigned>(context.total));
     return ESP_OK;
 }
 
@@ -651,15 +586,14 @@ esp_err_t perform_upgrade() {
         return ESP_ERR_INVALID_VERSION;
     }
 
-    char download_url[sizeof(firmware_url)] = {};
-    size_t expected_size = 0;
+    char   download_url[sizeof(firmware_url)] = {};
+    size_t expected_size                      = 0;
     lock_status();
     snprintf(download_url, sizeof(download_url), "%s", firmware_url);
     expected_size = firmware_size;
     unlock_status();
 
-    const esp_err_t err = download_firmware(
-        download_url, snapshot.latest_version, expected_size);
+    const esp_err_t err = download_firmware(download_url, snapshot.latest_version, expected_size);
     if (err == ESP_OK) {
         set_state(State::RESTARTING);
         DEVICE_EVENT_I(TAG, "ota: restart delay_ms=2000 reason=upgrade_complete");
@@ -702,8 +636,7 @@ esp_err_t start_operation(Operation operation) {
         unlock_status();
         return ESP_ERR_NO_MEM;
     }
-    const BaseType_t result = xTaskCreate(
-        worker, "ota_remote", TASK_STACK_SIZE, argument, 3, &worker_task);
+    const BaseType_t result = xTaskCreate(worker, "ota_remote", TASK_STACK_SIZE, argument, 3, &worker_task);
     if (result != pdPASS) {
         worker_task = nullptr;
         delete argument;
@@ -725,7 +658,7 @@ esp_err_t init() {
         return ESP_ERR_NO_MEM;
     }
     const esp_app_desc_t* running = esp_app_get_description();
-    status.state = State::IDLE;
+    status.state                  = State::IDLE;
     snprintf(status.current_version, sizeof(status.current_version), "%s", running->version);
     return ESP_OK;
 }
@@ -742,7 +675,7 @@ Status get_status() {
     Status snapshot = {};
     if (status_mutex == nullptr) {
         const esp_app_desc_t* running = esp_app_get_description();
-        snapshot.state = State::IDLE;
+        snapshot.state                = State::IDLE;
         snprintf(snapshot.current_version, sizeof(snapshot.current_version), "%s", running->version);
         return snapshot;
     }
@@ -754,15 +687,24 @@ Status get_status() {
 
 const char* state_to_string(State state) {
     switch (state) {
-        case State::IDLE: return "idle";
-        case State::CHECKING: return "checking";
-        case State::UPDATE_AVAILABLE: return "update_available";
-        case State::UP_TO_DATE: return "up_to_date";
-        case State::DOWNLOADING: return "downloading";
-        case State::VERIFYING: return "verifying";
-        case State::RESTARTING: return "restarting";
-        case State::FAILED: return "failed";
-        default: return "unknown";
+    case State::IDLE:
+        return "idle";
+    case State::CHECKING:
+        return "checking";
+    case State::UPDATE_AVAILABLE:
+        return "update_available";
+    case State::UP_TO_DATE:
+        return "up_to_date";
+    case State::DOWNLOADING:
+        return "downloading";
+    case State::VERIFYING:
+        return "verifying";
+    case State::RESTARTING:
+        return "restarting";
+    case State::FAILED:
+        return "failed";
+    default:
+        return "unknown";
     }
 }
 

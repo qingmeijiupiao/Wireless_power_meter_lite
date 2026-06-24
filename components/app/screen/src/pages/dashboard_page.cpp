@@ -59,8 +59,7 @@ constexpr char TAG[] = "ScreenPages";
  * @param total_seconds 总秒数。
  */
 void format_duration(char* line, size_t line_size, const char* prefix, uint64_t total_seconds) {
-    snprintf(line, line_size, "%s%02llu:%02llu:%02llu",
-             prefix == nullptr ? "" : prefix,
+    snprintf(line, line_size, "%s%02llu:%02llu:%02llu", prefix == nullptr ? "" : prefix,
              static_cast<unsigned long long>(total_seconds / 3600),
              static_cast<unsigned long long>((total_seconds / 60) % 60),
              static_cast<unsigned long long>(total_seconds % 60));
@@ -88,12 +87,12 @@ uint32_t DashboardPage::refresh_interval_ms() const {
  */
 void DashboardPage::render(RenderMode mode) {
     (void)mode;
-    char temp_str[16];
-    auto& global_state = get_global_state();
-    auto& global_state_flags = global_state.flags;
-    auto& protect_states = global_state.protect_states.states_bit;
-    const float voltage = global_state.voltage_mV / 1000.0f;
-    const float current = std::abs(global_state.current_uA / 1000000.0f);
+    char        temp_str[16];
+    auto&       global_state       = get_global_state();
+    auto&       global_state_flags = global_state.flags;
+    auto&       protect_states     = global_state.protect_states.states_bit;
+    const float voltage            = global_state.voltage_mV / 1000.0f;
+    const float current            = std::abs(global_state.current_uA / 1000000.0f);
 
     auto draw_static_layout = []() {
         ST7735::fill_screen(ST7735::BLACK);
@@ -127,19 +126,17 @@ void DashboardPage::render(RenderMode mode) {
 
     auto draw_output_state = [&]() {
         const bool enabled = global_state_flags.bits.output_enabled;
-        ST7735::draw_image(62, 66,
-                           enabled ? OPEN_WIDTH : CLOSE_WIDTH,
-                           enabled ? OPEN_HEIGHT : CLOSE_HEIGHT,
+        ST7735::draw_image(62, 66, enabled ? OPEN_WIDTH : CLOSE_WIDTH, enabled ? OPEN_HEIGHT : CLOSE_HEIGHT,
                            enabled ? open_data : close_data);
     };
 
     auto draw_protect_states = [&]() {
         draw_protect_tag(113, 18, "OTP", protect_states.temperature_protect_state);
         ProtectState_t voltage_state = protect_states.high_voltage_protect_state;
-        const char* voltage_text = "OVP";
+        const char*    voltage_text  = "OVP";
         if (voltage_state == PROTECT_STATE_NORMAL) {
             voltage_state = protect_states.low_voltage_protect_state;
-            voltage_text = "UVP";
+            voltage_text  = "UVP";
         }
         draw_protect_tag(113, 39, voltage_text, voltage_state);
         draw_protect_tag(113, 60, "OCP", protect_states.current_protect_state);
@@ -177,6 +174,5 @@ void DashboardPage::draw_protect_tag(uint16_t x, uint16_t y, const char* text, P
         ST7735::draw_string(x + 5, y + 2, text, ST7735::BLACK, warning_background_color, DENGB16);
     }
 }
-
 
 } // namespace SCREEN

@@ -24,25 +24,25 @@ namespace SCREEN {
 namespace {
 
 static constexpr const char* TAG = "screen_task";
-Button main_button;
-Button side_button;
-HXC::NVS_DATA<uint32_t> start_logo_duration_ms("ui_logo_ms", DEFAULT_START_LOGO_DURATION_MS);
+Button                       main_button;
+Button                       side_button;
+HXC::NVS_DATA<uint32_t>      start_logo_duration_ms("ui_logo_ms", DEFAULT_START_LOGO_DURATION_MS);
 
 /**
  * @brief 从硬件配置生成 ST7735 初始化参数
  * @return ST7735 配置结构
  */
 ST7735::Config make_lcd_config() {
-    auto hardware_config = get_hardware_config();
-    ST7735::Config cfg = {};
-    cfg.sclk_io_num = hardware_config.TFT_SCL;
-    cfg.mosi_io_num = hardware_config.TFT_SDA;
-    cfg.cs_io_num = hardware_config.TFT_CS;
-    cfg.dc_io_num = hardware_config.TFT_RS;
-    cfg.rst_io_num = hardware_config.TFT_RST;
-    cfg.bl_io_num = hardware_config.TFT_BLK;
-    cfg.bl_active_state = hardware_config.TFT_BLK_ACTIVE_STATE;
-    cfg.host_id = SPI2_HOST;
+    auto           hardware_config = get_hardware_config();
+    ST7735::Config cfg             = {};
+    cfg.sclk_io_num                = hardware_config.TFT_SCL;
+    cfg.mosi_io_num                = hardware_config.TFT_SDA;
+    cfg.cs_io_num                  = hardware_config.TFT_CS;
+    cfg.dc_io_num                  = hardware_config.TFT_RS;
+    cfg.rst_io_num                 = hardware_config.TFT_RST;
+    cfg.bl_io_num                  = hardware_config.TFT_BLK;
+    cfg.bl_active_state            = hardware_config.TFT_BLK_ACTIVE_STATE;
+    cfg.host_id                    = SPI2_HOST;
     return cfg;
 }
 
@@ -58,8 +58,8 @@ uint32_t get_start_logo_duration_ms() {
 }
 
 esp_err_t set_start_logo_duration_ms(uint32_t duration_ms) {
-    return start_logo_duration_ms.set(
-        duration_ms > MAX_START_LOGO_DURATION_MS ? MAX_START_LOGO_DURATION_MS : duration_ms);
+    return start_logo_duration_ms.set(duration_ms > MAX_START_LOGO_DURATION_MS ? MAX_START_LOGO_DURATION_MS
+                                                                               : duration_ms);
 }
 
 esp_err_t init_buttons() {
@@ -68,21 +68,16 @@ esp_err_t init_buttons() {
             PowerOutput::toggle(TAG);
         }
     });
-    main_button.bind_event(ButtonEvent::LONG_PRESS, []() {
-        post_button_event(ButtonId::Main, ButtonEvent::LONG_PRESS);
-    });
-    side_button.bind_event(ButtonEvent::SHORT_PRESS, []() {
-        post_button_event(ButtonId::Side, ButtonEvent::SHORT_PRESS);
-    });
-    side_button.bind_event(ButtonEvent::DOUBLE_CLICK, []() {
-        post_button_event(ButtonId::Side, ButtonEvent::DOUBLE_CLICK);
-    });
-    side_button.bind_event(ButtonEvent::LONG_PRESS, []() {
-        post_button_event(ButtonId::Side, ButtonEvent::LONG_PRESS);
-    });
-    side_button.bind_event(ButtonEvent::SUPER_LONG_PRESS, []() {
-        post_button_event(ButtonId::Side, ButtonEvent::SUPER_LONG_PRESS);
-    });
+    main_button.bind_event(ButtonEvent::LONG_PRESS,
+                           []() { post_button_event(ButtonId::Main, ButtonEvent::LONG_PRESS); });
+    side_button.bind_event(ButtonEvent::SHORT_PRESS,
+                           []() { post_button_event(ButtonId::Side, ButtonEvent::SHORT_PRESS); });
+    side_button.bind_event(ButtonEvent::DOUBLE_CLICK,
+                           []() { post_button_event(ButtonId::Side, ButtonEvent::DOUBLE_CLICK); });
+    side_button.bind_event(ButtonEvent::LONG_PRESS,
+                           []() { post_button_event(ButtonId::Side, ButtonEvent::LONG_PRESS); });
+    side_button.bind_event(ButtonEvent::SUPER_LONG_PRESS,
+                           []() { post_button_event(ButtonId::Side, ButtonEvent::SUPER_LONG_PRESS); });
 
     esp_err_t ret = main_button.setup(get_hardware_config().MAIN_BUTTON, true);
     if (ret != ESP_OK) {
@@ -102,7 +97,7 @@ void screen_task(void* arg) {
     (void)arg;
 
     static ST7735::Config cfg = make_lcd_config();
-    esp_err_t ret = ST7735::init(&cfg, ST7735::Rotation::Horizontal);
+    esp_err_t             ret = ST7735::init(&cfg, ST7735::Rotation::Horizontal);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "ST7735 init failed");
         vTaskDelete(nullptr);
@@ -121,8 +116,7 @@ void screen_task(void* arg) {
     ST7735::sync_buffers();
 
     const TickType_t logo_start_ticks = xTaskGetTickCount();
-    while (!protect_init_ok() ||
-           xTaskGetTickCount() - logo_start_ticks < pdMS_TO_TICKS(logo_duration_ms)) {
+    while (!protect_init_ok() || xTaskGetTickCount() - logo_start_ticks < pdMS_TO_TICKS(logo_duration_ms)) {
         vTaskDelay(pdMS_TO_TICKS(5));
     }
 

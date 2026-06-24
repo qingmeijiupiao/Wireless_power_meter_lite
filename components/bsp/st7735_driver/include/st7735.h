@@ -1,10 +1,10 @@
 /**
  * @file st7735.h
  * @brief ST7735S显示屏驱动
- * 
+ *
  * 通过SPI控制TFT ST7735S显示屏的公共API。
  * 包含像素、矩形、抗锯齿圆角矩形、文本、图像和双缓冲同步接口。
- * 
+ *
  * @example
  * ```cpp
  * ST7735::Config cfg = {
@@ -38,12 +38,7 @@ static constexpr uint16_t WIDTH = 160;
 /** 显示屏在横向模式下的高度（像素） */
 static constexpr uint16_t HEIGHT = 80;
 
-enum class Rotation {
-    Vertical = 0,
-    Horizontal = 1,
-    VerticalMirror = 2,
-    HorizontalMirror = 3
-};
+enum class Rotation { Vertical = 0, Horizontal = 1, VerticalMirror = 2, HorizontalMirror = 3 };
 
 /* ==================== 像素偏移 ==================== */
 static constexpr uint8_t COLSTART = 0;
@@ -53,14 +48,14 @@ static constexpr uint8_t ROWSTART = 24;
  * @brief 显示屏硬件配置
  */
 struct Config {
-    int mosi_io_num;           /**< MOSI的GPIO引脚（显示屏上的SI） */
-    int sclk_io_num;           /**< 时钟的GPIO引脚（SCK） */
-    int cs_io_num;             /**< 片选的GPIO引脚（TCS） */
-    int dc_io_num;             /**< 数据/命令的GPIO引脚（DC） */
-    int rst_io_num;            /**< 复位的GPIO引脚（RST） */
-    int bl_io_num;             /**< 背光的GPIO引脚（Lite），-1表示未使用 */
-    bool bl_active_state;      /**< 背光开启时引脚的电平状态 */
-    spi_host_device_t host_id; /**< SPI主机（SPI2_HOST或SPI3_HOST） */
+    int               mosi_io_num;     /**< MOSI的GPIO引脚（显示屏上的SI） */
+    int               sclk_io_num;     /**< 时钟的GPIO引脚（SCK） */
+    int               cs_io_num;       /**< 片选的GPIO引脚（TCS） */
+    int               dc_io_num;       /**< 数据/命令的GPIO引脚（DC） */
+    int               rst_io_num;      /**< 复位的GPIO引脚（RST） */
+    int               bl_io_num;       /**< 背光的GPIO引脚（Lite），-1表示未使用 */
+    bool              bl_active_state; /**< 背光开启时引脚的电平状态 */
+    spi_host_device_t host_id;         /**< SPI主机（SPI2_HOST或SPI3_HOST） */
 };
 
 /* ==================== 公共函数 ==================== */
@@ -71,7 +66,7 @@ struct Config {
  * @param rotation 旋转方向
  * @return 成功返回ESP_OK，否则返回错误代码
  */
-esp_err_t init(const Config *cfg, Rotation rotation=Rotation::Horizontal);
+esp_err_t init(const Config* cfg, Rotation rotation = Rotation::Horizontal);
 
 /**
  * @brief 绘制一个像素
@@ -85,7 +80,8 @@ void draw_pixel(uint16_t x, uint16_t y, color_t color);
  * @brief 使用 Bresenham 算法绘制一条直线
  * @param x0 起点 X 坐标
  * @param y0 起点 Y 坐标
- * @param x1 终点 X 坐标
+ * @param x1 终点
+ * X 坐标
  * @param y1 终点 Y 坐标
  * @param color 线条颜色
  */
@@ -111,8 +107,7 @@ void fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, color_t color);
  * @param color 填充颜色
  * @param bg 抗锯齿边缘使用的背景颜色
  */
-void fill_round_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
-                     uint16_t radius, color_t color, color_t bg);
+void fill_round_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t radius, color_t color, color_t bg);
 
 /**
  * @brief 绘制带抗锯齿的圆角矩形边框
@@ -125,8 +120,8 @@ void fill_round_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
  * @param color 边框颜色
  * @param bg 抗锯齿边缘和边框内部使用的背景颜色
  */
-void draw_round_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
-                     uint16_t radius, uint16_t thickness, color_t color, color_t bg);
+void draw_round_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t radius, uint16_t thickness, color_t color,
+                     color_t bg);
 
 /**
  * @brief 用颜色填充整个屏幕
@@ -155,7 +150,7 @@ void invert_display(bool invert);
  * @param bg 背景颜色
  * @param font 字体资源
  */
-void draw_char(uint16_t x, uint16_t y, char c, color_t color, color_t bg,const Font_t& font);
+void draw_char(uint16_t x, uint16_t y, char c, color_t color, color_t bg, const Font_t& font);
 
 /**
  * @brief 绘制文本字符串
@@ -166,7 +161,7 @@ void draw_char(uint16_t x, uint16_t y, char c, color_t color, color_t bg,const F
  * @param bg 背景颜色
  * @param font 字体资源
  */
-void draw_string(uint16_t x, uint16_t y, const char *str, color_t color, color_t bg,const Font_t& font);
+void draw_string(uint16_t x, uint16_t y, const char* str, color_t color, color_t bg, const Font_t& font);
 
 /**
  * @brief 获取当前显示屏的宽度
@@ -188,7 +183,7 @@ uint16_t get_height(void);
  * @param h 图像的高度
  * @param data 指向RGB565原始值数组的指针；驱动写入帧缓冲时转换为发送字节序
  */
-void draw_image(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t *data);
+void draw_image(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t* data);
 
 /**
  * @brief 同步双缓冲区，将当前缓冲区的内容发送到显示屏

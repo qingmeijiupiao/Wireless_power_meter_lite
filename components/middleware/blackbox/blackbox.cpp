@@ -21,15 +21,15 @@
 using namespace Blackbox;
 
 // 运行状态标志
-static bool enabled = true;
+static bool               enabled              = true;
 // FreeRTOS 消息队列句柄，用于存储等待写入 Flash 的日志记录
-static QueueHandle_t log_queue = nullptr;
+static QueueHandle_t      log_queue            = nullptr;
 // 异步写入任务句柄
-static TaskHandle_t blackbox_task_handle = nullptr;
+static TaskHandle_t       blackbox_task_handle = nullptr;
 // 保护启停状态和控制操作，避免清空过程中有新记录进入队列
-static SemaphoreHandle_t state_mutex = nullptr;
+static SemaphoreHandle_t  state_mutex          = nullptr;
 // 队列深度：可缓冲的记录条数。设为 64 可应对短时间的日志爆发
-static constexpr uint32_t QUEUE_SIZE = 64;
+static constexpr uint32_t QUEUE_SIZE           = 64;
 
 enum class QueueItemType : uint8_t {
     WRITE,
@@ -38,10 +38,10 @@ enum class QueueItemType : uint8_t {
 };
 
 struct QueueItem {
-    QueueItemType type;
-    Record record;
+    QueueItemType     type;
+    Record            record;
     SemaphoreHandle_t completion;
-    esp_err_t* result;
+    esp_err_t*        result;
 };
 
 /**
@@ -87,14 +87,14 @@ static void blackbox_task(void* arg) {
         if (xQueueReceive(log_queue, &item, portMAX_DELAY) == pdPASS) {
             esp_err_t result = ESP_OK;
             switch (item.type) {
-                case QueueItemType::WRITE:
-                    result = write_record_internal(item.record);
-                    break;
-                case QueueItemType::ERASE_ALL:
-                    result = CircularFlashBuffer::erase_all();
-                    break;
-                case QueueItemType::BARRIER:
-                    break;
+            case QueueItemType::WRITE:
+                result = write_record_internal(item.record);
+                break;
+            case QueueItemType::ERASE_ALL:
+                result = CircularFlashBuffer::erase_all();
+                break;
+            case QueueItemType::BARRIER:
+                break;
             }
             if (item.result != nullptr) {
                 *item.result = result;
@@ -126,10 +126,10 @@ static esp_err_t queue_item(const QueueItem& item, TickType_t ticks_to_wait = 0)
 
 static esp_err_t queue_record(const Record& raw, TickType_t ticks_to_wait = 0) {
     QueueItem item = {
-        .type = QueueItemType::WRITE,
-        .record = raw,
+        .type       = QueueItemType::WRITE,
+        .record     = raw,
         .completion = nullptr,
-        .result = nullptr,
+        .result     = nullptr,
     };
     return queue_item(item, ticks_to_wait);
 }
@@ -141,11 +141,11 @@ static esp_err_t wait_for_item(QueueItemType type) {
     }
 
     esp_err_t operation_result = ESP_OK;
-    QueueItem item = {
-        .type = type,
-        .record = {},
-        .completion = completion,
-        .result = &operation_result,
+    QueueItem item             = {
+                    .type       = type,
+                    .record     = {},
+                    .completion = completion,
+                    .result     = &operation_result,
     };
     esp_err_t err = queue_item(item, portMAX_DELAY);
     if (err == ESP_OK && xSemaphoreTake(completion, portMAX_DELAY) != pdTRUE) {
@@ -159,11 +159,11 @@ static esp_err_t wait_for_item(QueueItemType type) {
 }
 
 static Record make_text_record(const char* text) {
-    Record raw = {};
-    raw.header.sof = CircularFlashBuffer::BLOCK_SOF;
-    raw.header.type = LogType::STRING;
+    Record raw           = {};
+    raw.header.sof       = CircularFlashBuffer::BLOCK_SOF;
+    raw.header.type      = LogType::STRING;
     raw.header.timestamp = esp_timer_get_time() / 1000;
-    size_t len = strnlen(text, PAYLOAD_SIZE - 1);
+    size_t len           = strnlen(text, PAYLOAD_SIZE - 1);
     memcpy(raw.payload.str, text, len);
     raw.payload.str[len] = '\0';
     return raw;
@@ -180,7 +180,8 @@ esp_err_t Blackbox::init() {
 
     // 初始化底层驱动（分配分区，设置块大小）
     esp_err_t err = CircularFlashBuffer::init("blackbox", sizeof(Record));
-    if (err != ESP_OK) return err;
+    if (err != ESP_OK)
+        return err;
 
     // 创建 FreeRTOS 队列
     log_queue = xQueueCreate(QUEUE_SIZE, sizeof(QueueItem));
@@ -214,7 +215,7 @@ esp_err_t Blackbox::init() {
  * @param fmt printf 风格的格式化字符串
  * @details 支持长字符串自动切片存储。
  */
-esp_err_t Blackbox::append_text(const char *fmt, ...) {
+esp_err_t Blackbox::append_text(const char* fmt, ...) {
     if (fmt == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -229,7 +230,7 @@ esp_err_t Blackbox::append_text(const char *fmt, ...) {
         return ESP_ERR_INVALID_STATE;
     }
 
-    char buf[TEXT_BUFFER_SIZE];
+    char    buf[TEXT_BUFFER_SIZE];
     va_list args;
     va_start(args, fmt);
     vsnprintf(buf, sizeof(buf), fmt, args);
@@ -240,8 +241,8 @@ esp_err_t Blackbox::append_text(const char *fmt, ...) {
     // 情况 A：字符串较短，单条 Record 即可容纳
     if (len < PAYLOAD_SIZE) {
         Record raw;
-        raw.header.sof = CircularFlashBuffer::BLOCK_SOF;
-        raw.header.type = LogType::STRING;
+        raw.header.sof       = CircularFlashBuffer::BLOCK_SOF;
+        raw.header.type      = LogType::STRING;
         raw.header.timestamp = esp_timer_get_time() / 1000;
         memset(raw.payload.bytes, 0, PAYLOAD_SIZE);
         memcpy(raw.payload.str, buf, len + 1);
@@ -252,7 +253,8 @@ esp_err_t Blackbox::append_text(const char *fmt, ...) {
 
     // 情况 B：长字符串，需要切分为多个碎片
     uint8_t fragments = (len + PAYLOAD_SIZE) / PAYLOAD_SIZE;
-    if (fragments > MAX_TEXT_FRAGMENTS) fragments = MAX_TEXT_FRAGMENTS;
+    if (fragments > MAX_TEXT_FRAGMENTS)
+        fragments = MAX_TEXT_FRAGMENTS;
     if (uxQueueSpacesAvailable(log_queue) < fragments) {
         xSemaphoreGive(state_mutex);
         return ESP_FAIL;
@@ -261,15 +263,16 @@ esp_err_t Blackbox::append_text(const char *fmt, ...) {
 
     for (uint8_t i = 0; i < fragments; i++) {
         Record raw;
-        raw.header.sof = CircularFlashBuffer::BLOCK_SOF;
-        raw.header.type = LogType::STRING;
+        raw.header.sof       = CircularFlashBuffer::BLOCK_SOF;
+        raw.header.type      = LogType::STRING;
         raw.header.timestamp = timestamp;
         memset(raw.payload.bytes, 0, PAYLOAD_SIZE);
 
         size_t offset = i * PAYLOAD_SIZE;
         if (i == fragments - 1) { // 最后一个碎片
             size_t remaining = len - offset;
-            if (remaining >= PAYLOAD_SIZE) remaining = PAYLOAD_SIZE - 1;
+            if (remaining >= PAYLOAD_SIZE)
+                remaining = PAYLOAD_SIZE - 1;
             memcpy(raw.payload.str, buf + offset, remaining);
             raw.payload.str[remaining] = '\0'; // 确保结尾有 NUL
         } else {
@@ -310,8 +313,8 @@ esp_err_t Blackbox::append_typed(LogType type, const uint8_t* payload, size_t le
     }
 
     Record raw;
-    raw.header.sof = CircularFlashBuffer::BLOCK_SOF;
-    raw.header.type = type;
+    raw.header.sof       = CircularFlashBuffer::BLOCK_SOF;
+    raw.header.type      = type;
     raw.header.timestamp = esp_timer_get_time() / 1000;
     memset(raw.payload.bytes, 0, PAYLOAD_SIZE);
     memcpy(raw.payload.bytes, payload, len);
@@ -377,7 +380,7 @@ esp_err_t Blackbox::erase_all() {
     esp_err_t err = wait_for_item(QueueItemType::ERASE_ALL);
     if (err == ESP_OK) {
         Record marker = make_text_record("[Blackbox]: reset");
-        err = queue_record(marker, portMAX_DELAY);
+        err           = queue_record(marker, portMAX_DELAY);
         if (err == ESP_OK) {
             err = wait_for_item(QueueItemType::BARRIER);
         }
@@ -393,24 +396,21 @@ esp_err_t Blackbox::erase_all() {
  */
 TextRecord Blackbox::read_text(uint32_t index) {
     TextRecord text = {};
-    Record fragments[MAX_TEXT_FRAGMENTS];
+    Record     fragments[MAX_TEXT_FRAGMENTS];
 
     // 读取第一条记录（末尾碎片，必然包含 NUL）
     fragments[0] = read(index);
-    if (fragments[0].header.sof != CircularFlashBuffer::BLOCK_SOF ||
-        fragments[0].header.type != LogType::STRING ||
+    if (fragments[0].header.sof != CircularFlashBuffer::BLOCK_SOF || fragments[0].header.type != LogType::STRING ||
         memchr(fragments[0].payload.str, '\0', PAYLOAD_SIZE) == nullptr) {
         return text;
     }
 
-    text.record_count = 1;
+    text.record_count  = 1;
     uint32_t raw_count = count();
     // 向前搜索更早的碎片（这些碎片不包含 NUL）
-    while (text.record_count < MAX_TEXT_FRAGMENTS &&
-           index + text.record_count < raw_count) {
+    while (text.record_count < MAX_TEXT_FRAGMENTS && index + text.record_count < raw_count) {
         Record previous = read(index + text.record_count);
-        if (previous.header.sof != CircularFlashBuffer::BLOCK_SOF ||
-            previous.header.type != LogType::STRING ||
+        if (previous.header.sof != CircularFlashBuffer::BLOCK_SOF || previous.header.type != LogType::STRING ||
             previous.header.timestamp != fragments[0].header.timestamp ||
             memchr(previous.payload.str, '\0', PAYLOAD_SIZE) != nullptr) {
             break; // 遇到非字符串或带 NUL 的记录，说明碎片结束
@@ -422,7 +422,7 @@ TextRecord Blackbox::read_text(uint32_t index) {
     // 按时间顺序（从旧到新）拼接字符串碎片
     for (uint8_t i = text.record_count; i > 0; --i) {
         const Record& fragment = fragments[i - 1];
-        size_t len = strnlen(fragment.payload.str, PAYLOAD_SIZE);
+        size_t        len      = strnlen(fragment.payload.str, PAYLOAD_SIZE);
         memcpy(text.str + offset, fragment.payload.str, len);
         offset += len;
     }

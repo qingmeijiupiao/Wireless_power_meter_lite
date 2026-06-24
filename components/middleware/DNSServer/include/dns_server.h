@@ -16,13 +16,13 @@
 namespace DNSServer {
 
 /** DNS默认监听端口 */
-constexpr uint16_t DNS_SERVER_PORT = 53;
+constexpr uint16_t DNS_SERVER_PORT           = 53;
 /** DNS单包最大长度，UDP DNS标准包通常不超过512字节 */
 constexpr uint16_t DNS_SERVER_PACKET_MAX_LEN = 512;
 /** DNS任务栈大小 */
-constexpr uint16_t DNS_SERVER_TASK_STACK = 3072;
+constexpr uint16_t DNS_SERVER_TASK_STACK     = 3072;
 /** DNS任务优先级 */
-constexpr uint8_t DNS_SERVER_TASK_PRIO = 3;
+constexpr uint8_t  DNS_SERVER_TASK_PRIO      = 3;
 
 /**
  * @brief 启动DNS劫持服务器
@@ -55,6 +55,6 @@ esp_err_t stop();
  */
 bool is_running();
 
-}
+} // namespace DNSServer
 
 #endif

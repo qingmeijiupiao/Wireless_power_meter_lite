@@ -13,19 +13,19 @@
 
 using namespace CircularFlashBuffer;
 
-static esp_partition_t* cfb_partition = nullptr;
-static size_t cfb_block_size = 0;
-static uint8_t cfb_blocks_per_page = 0;
+static esp_partition_t* cfb_partition       = nullptr;
+static size_t           cfb_block_size      = 0;
+static uint8_t          cfb_blocks_per_page = 0;
 
-static bool cfb_enable = true;
-static SemaphoreHandle_t cfb_mutex = nullptr;
+static bool              cfb_enable = true;
+static SemaphoreHandle_t cfb_mutex  = nullptr;
 
-static uint32_t now_write_page = 0;
-static uint8_t block_page_index = 0;
-static uint32_t block_count = 0;
+static uint32_t now_write_page      = 0;
+static uint8_t  block_page_index    = 0;
+static uint32_t block_count         = 0;
 static uint32_t max_retained_blocks = 0;
-static uint32_t total_pages = 0;
-static uint32_t total_sectors = 0;
+static uint32_t total_pages         = 0;
+static uint32_t total_sectors       = 0;
 
 static uint8_t page_buffer[PAGE_SIZE];
 
@@ -37,8 +37,8 @@ static esp_err_t erase_sector(uint32_t sector_index) {
 }
 
 static uint32_t count_valid_blocks_in_sector(uint32_t sector_index) {
-    uint8_t buffer[PAGE_SIZE];
-    uint32_t count = 0;
+    uint8_t        buffer[PAGE_SIZE];
+    uint32_t       count      = 0;
     const uint32_t first_page = sector_index * PAGES_PER_SECTOR;
 
     for (uint32_t page = 0; page < PAGES_PER_SECTOR; ++page) {
@@ -76,13 +76,13 @@ esp_err_t CircularFlashBuffer::init(const char* partition_name, size_t block_siz
         return ESP_ERR_INVALID_ARG;
     }
 
-    cfb_block_size = block_size;
+    cfb_block_size      = block_size;
     cfb_blocks_per_page = PAGE_SIZE / block_size;
     alignas(4) uint8_t buffer[PAGE_SIZE];
 
     // 2. 获取分区句柄
-    const esp_partition_t* _partition = esp_partition_find_first(
-        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, partition_name);
+    const esp_partition_t* _partition =
+        esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, partition_name);
     if (_partition == nullptr) {
         while (1) {
             ESP_LOGE("CircularFlashBuffer", "Partition not found: %s", partition_name);
@@ -91,9 +91,9 @@ esp_err_t CircularFlashBuffer::init(const char* partition_name, size_t block_siz
     }
 
     cfb_partition = (esp_partition_t*)_partition;
-    total_pages = cfb_partition->size / PAGE_SIZE;
+    total_pages   = cfb_partition->size / PAGE_SIZE;
     total_sectors = cfb_partition->size / SECTOR_SIZE;
-    
+
     if (total_sectors < 2) {
         return ESP_ERR_INVALID_SIZE;
     }
@@ -108,7 +108,7 @@ esp_err_t CircularFlashBuffer::init(const char* partition_name, size_t block_siz
     for (uint32_t page = 0; page < total_pages; ++page) {
         esp_partition_read(cfb_partition, page * PAGE_SIZE, buffer, PAGE_SIZE);
         if (!memcmp(buffer, page_buffer, PAGE_SIZE)) {
-            now_write_page = page;
+            now_write_page   = page;
             empty_page_found = true;
             break;
         }
@@ -124,21 +124,21 @@ esp_err_t CircularFlashBuffer::init(const char* partition_name, size_t block_siz
         // 情况 A：物理起始位置就是空的。
         // 关键临界点：当 Head 处于最后一个扇区时，0 号扇区会被预擦除。
         // 我们需要通过检查分区末尾的“连续性”来区分是“全新”还是“正在跨越物理边界”。
-        const uint32_t last_sector_start = (total_sectors - 1) * PAGES_PER_SECTOR;
+        const uint32_t last_sector_start     = (total_sectors - 1) * PAGES_PER_SECTOR;
         const uint32_t previous_sector_start = (total_sectors - 2) * PAGES_PER_SECTOR;
 
         esp_partition_read(cfb_partition, last_sector_start * PAGE_SIZE, buffer, PAGE_SIZE);
         bool last_sector_started = memcmp(buffer, page_buffer, PAGE_SIZE) != 0;
         esp_partition_read(cfb_partition, previous_sector_start * PAGE_SIZE, buffer, PAGE_SIZE);
         bool previous_sector_started = memcmp(buffer, page_buffer, PAGE_SIZE) != 0;
-        
+
         if (!previous_sector_started) {
             // 全新状态：倒数第二个扇区仍为空，不可能已经循环写到末尾。
-            now_write_page = 0;
+            now_write_page   = 0;
             block_page_index = 0;
         } else if (!last_sector_started) {
             // 刚进入最后一个扇区，0 号扇区已经预擦除，但末扇区还没有写入。
-            now_write_page = last_sector_start;
+            now_write_page   = last_sector_start;
             block_page_index = 0;
         } else {
             // 最后一个扇区已经开始写入。优先在扇区内定位可写页；若整个扇区
@@ -148,14 +148,14 @@ esp_err_t CircularFlashBuffer::init(const char* partition_name, size_t block_siz
                 esp_partition_read(cfb_partition, p * PAGE_SIZE, buffer, PAGE_SIZE);
                 uint8_t index = get_empty_block_index_from_page(buffer);
                 if (index != cfb_blocks_per_page) {
-                    now_write_page = p;
-                    block_page_index = index;
+                    now_write_page      = p;
+                    block_page_index    = index;
                     writable_page_found = true;
                     break;
                 }
             }
             if (!writable_page_found) {
-                now_write_page = 0;
+                now_write_page   = 0;
                 block_page_index = 0;
             }
         }
@@ -165,7 +165,7 @@ esp_err_t CircularFlashBuffer::init(const char* partition_name, size_t block_siz
         uint8_t index = get_empty_block_index_from_page(buffer);
         if (index != cfb_blocks_per_page) {
             // 前一页没写满，Head 就在那
-            now_write_page = now_write_page - 1;
+            now_write_page   = now_write_page - 1;
             block_page_index = index;
         } else {
             // 前一页刚好写满，Head 在当前空页开头
@@ -180,7 +180,7 @@ esp_err_t CircularFlashBuffer::init(const char* partition_name, size_t block_siz
         if (count_valid_blocks_in_sector(SENTINEL_SECTOR) == 0) {
             ESP_LOGW("CircularFlashBuffer", "Consistency error detected. Performing recovery erase...");
             esp_partition_erase_range(cfb_partition, 0, cfb_partition->size);
-            now_write_page = 0;
+            now_write_page   = 0;
             block_page_index = 0;
             memset(page_buffer, 0xFF, PAGE_SIZE);
         }
@@ -188,8 +188,8 @@ esp_err_t CircularFlashBuffer::init(const char* partition_name, size_t block_siz
 
     // 6. 计算有效块总数
     uint32_t blocks_per_sector = PAGES_PER_SECTOR * cfb_blocks_per_page;
-    uint32_t current_sector = now_write_page / PAGES_PER_SECTOR;
-    bool is_wrapped = current_sector >= total_sectors - 2;
+    uint32_t current_sector    = now_write_page / PAGES_PER_SECTOR;
+    bool     is_wrapped        = current_sector >= total_sectors - 2;
 
     if (!is_wrapped && now_write_page < total_pages - PAGES_PER_SECTOR) {
         // Head 已越过物理边界后，末扇区仍保留旧数据；只检查其第一页即可
@@ -205,7 +205,7 @@ esp_err_t CircularFlashBuffer::init(const char* partition_name, size_t block_siz
     } else {
         // 回绕阶段：有效数据 = (总扇区 - 2个预留/间隙扇区) * 扇区容量 + 当前扇区已写量
         uint32_t current_sector_offset = (now_write_page % PAGES_PER_SECTOR) * cfb_blocks_per_page + block_page_index;
-        block_count = (total_sectors - 2) * blocks_per_sector + current_sector_offset;
+        block_count                    = (total_sectors - 2) * blocks_per_sector + current_sector_offset;
     }
 
     if (block_count > max_retained_blocks) {
@@ -217,14 +217,16 @@ esp_err_t CircularFlashBuffer::init(const char* partition_name, size_t block_siz
     memcpy(page_buffer, buffer, PAGE_SIZE);
 
     cfb_mutex = xSemaphoreCreateBinary();
-    if (cfb_mutex == nullptr) return ESP_ERR_NO_MEM;
+    if (cfb_mutex == nullptr)
+        return ESP_ERR_NO_MEM;
     xSemaphoreGive(cfb_mutex);
 
     return ESP_OK;
 }
 
 esp_err_t CircularFlashBuffer::write_block(const uint8_t* data) {
-    if (data == nullptr || cfb_mutex == nullptr) return ESP_ERR_INVALID_STATE;
+    if (data == nullptr || cfb_mutex == nullptr)
+        return ESP_ERR_INVALID_STATE;
 
     xSemaphoreTake(cfb_mutex, portMAX_DELAY);
     if (!cfb_enable) {
@@ -233,7 +235,7 @@ esp_err_t CircularFlashBuffer::write_block(const uint8_t* data) {
     }
 
     // 1. 数据暂存至内存页缓冲区
-    size_t offset = block_page_index * cfb_block_size;
+    size_t  offset = block_page_index * cfb_block_size;
     uint8_t previous_block[PAGE_SIZE];
     memcpy(previous_block, page_buffer + offset, cfb_block_size);
     memcpy(page_buffer + offset, data, cfb_block_size);
@@ -261,10 +263,10 @@ esp_err_t CircularFlashBuffer::write_block(const uint8_t* data) {
 
         // 每当写完一个完整扇区 (4KB) 时，执行维护操作
         if (now_write_page % PAGES_PER_SECTOR == 0) {
-            uint32_t sector_index = now_write_page / PAGES_PER_SECTOR;
+            uint32_t sector_index       = now_write_page / PAGES_PER_SECTOR;
             // 预擦除“下下个”扇区，确保存储环路始终有一个“空白间隙”
             uint32_t erase_sector_index = (sector_index + 1) % total_sectors;
-            
+
             if (erase_sector(erase_sector_index) != ESP_OK) {
                 ESP_LOGE("CircularFlashBuffer", "Pre-erase failed at sector %lu", erase_sector_index);
                 xSemaphoreGive(cfb_mutex);
@@ -284,7 +286,8 @@ esp_err_t CircularFlashBuffer::write_block(const uint8_t* data) {
 }
 
 esp_err_t CircularFlashBuffer::read_block(uint32_t index, uint8_t* data) {
-    if (data == nullptr || cfb_mutex == nullptr) return ESP_ERR_INVALID_STATE;
+    if (data == nullptr || cfb_mutex == nullptr)
+        return ESP_ERR_INVALID_STATE;
     xSemaphoreTake(cfb_mutex, portMAX_DELAY);
 
     // 1. 范围校验：index = 0 表示最新的一条记录
@@ -295,38 +298,38 @@ esp_err_t CircularFlashBuffer::read_block(uint32_t index, uint8_t* data) {
 
     // 2. 定位“最新记录”所在的物理位置
     uint32_t last_page;
-    uint8_t last_offset;
+    uint8_t  last_offset;
 
     if (block_page_index == 0) {
         // 如果当前 Head 在页开头，那最新记录就在上一页的末尾
-        last_page = (now_write_page == 0) ? (total_pages - 1) : (now_write_page - 1);
+        last_page   = (now_write_page == 0) ? (total_pages - 1) : (now_write_page - 1);
         last_offset = cfb_blocks_per_page - 1;
     } else {
         // 否则就在当前页的前一个位置
-        last_page = now_write_page;
+        last_page   = now_write_page;
         last_offset = block_page_index - 1;
     }
 
     // 3. 根据 index 向后追溯物理地址
-    uint32_t target_page = last_page;
-    uint8_t target_offset = last_offset;
-    uint32_t remaining = index;
+    uint32_t target_page   = last_page;
+    uint8_t  target_offset = last_offset;
+    uint32_t remaining     = index;
 
     while (remaining > 0) {
         if (target_offset >= remaining) {
             // 偏移量在当前页内就够了
             target_offset -= remaining;
-            remaining = 0;
+            remaining      = 0;
         } else {
             // 需要跨页回溯
-            remaining -= (target_offset + 1);
-            target_page = (target_page == 0) ? (total_pages - 1) : (target_page - 1);
-            target_offset = cfb_blocks_per_page - 1;
+            remaining     -= (target_offset + 1);
+            target_page    = (target_page == 0) ? (total_pages - 1) : (target_page - 1);
+            target_offset  = cfb_blocks_per_page - 1;
         }
     }
 
     // 4. 从 Flash 读取目标页并提取数据
-    uint8_t buffer[PAGE_SIZE];
+    uint8_t   buffer[PAGE_SIZE];
     esp_err_t err = esp_partition_read(cfb_partition, target_page * PAGE_SIZE, buffer, PAGE_SIZE);
     if (err == ESP_OK) {
         memcpy(data, buffer + target_offset * cfb_block_size, cfb_block_size);
@@ -335,7 +338,6 @@ esp_err_t CircularFlashBuffer::read_block(uint32_t index, uint8_t* data) {
     xSemaphoreGive(cfb_mutex);
     return err;
 }
-
 
 esp_err_t CircularFlashBuffer::erase_all() {
     if (cfb_partition == nullptr || cfb_mutex == nullptr) {
@@ -353,9 +355,9 @@ esp_err_t CircularFlashBuffer::erase_all() {
     }
 
     // 2. 重置所有内部管理变量
-    now_write_page = 0;
+    now_write_page   = 0;
     block_page_index = 0;
-    block_count = 0;
+    block_count      = 0;
     memset(page_buffer, 0xFF, PAGE_SIZE);
 
     ESP_LOGI("CircularFlashBuffer", "Partition erased and pointers reset");

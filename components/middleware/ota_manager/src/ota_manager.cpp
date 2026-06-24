@@ -5,17 +5,17 @@
 namespace OtaManager {
 namespace {
 
-State state = State::IDLE;
-esp_ota_handle_t ota_handle = 0;
-size_t image_size = 0;
-size_t bytes_written = 0;
+State                  state            = State::IDLE;
+esp_ota_handle_t       ota_handle       = 0;
+size_t                 image_size       = 0;
+size_t                 bytes_written    = 0;
 const esp_partition_t* target_partition = nullptr;
 
 void reset_session() {
-    state = State::IDLE;
-    ota_handle = 0;
-    image_size = 0;
-    bytes_written = 0;
+    state            = State::IDLE;
+    ota_handle       = 0;
+    image_size       = 0;
+    bytes_written    = 0;
     target_partition = nullptr;
 }
 
@@ -45,15 +45,15 @@ esp_err_t begin(size_t requested_image_size) {
     }
 
     esp_ota_handle_t new_handle = 0;
-    esp_err_t err = esp_ota_begin(next_partition, requested_image_size, &new_handle);
+    esp_err_t        err        = esp_ota_begin(next_partition, requested_image_size, &new_handle);
     if (err != ESP_OK) {
         return err;
     }
 
-    state = State::WRITING;
-    ota_handle = new_handle;
-    image_size = requested_image_size;
-    bytes_written = 0;
+    state            = State::WRITING;
+    ota_handle       = new_handle;
+    image_size       = requested_image_size;
+    bytes_written    = 0;
     target_partition = next_partition;
     return ESP_OK;
 }
@@ -90,7 +90,7 @@ esp_err_t finish() {
         return err;
     }
 
-    state = State::VERIFIED;
+    state      = State::VERIFIED;
     ota_handle = 0;
     return ESP_OK;
 }
@@ -125,9 +125,9 @@ esp_err_t abort() {
 
 Status get_status() {
     return {
-        .state = state,
-        .image_size = image_size,
-        .bytes_written = bytes_written,
+        .state            = state,
+        .image_size       = image_size,
+        .bytes_written    = bytes_written,
         .target_partition = target_partition,
     };
 }

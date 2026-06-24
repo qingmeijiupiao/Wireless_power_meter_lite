@@ -25,10 +25,10 @@ constexpr uint8_t AP_IP_OCTET4 = 1;
  * @brief WiFiService 当前工作模式
  */
 enum class Mode : uint8_t {
-    OFF = 0,        /**< WiFi 射频尚未启动，仅用于初始化前或完整反初始化状态 */
-    ESPNOW_ONLY,    /**< 仅启动 STA 射频，供 ESP-NOW 通信使用 */
-    STA,            /**< STA 模式，已连接到外部路由器并通过路由器 IP 提供 Web 服务 */
-    AP_PROVISION,   /**< AP 配网模式，设备启动热点并开启 DNS 劫持 */
+    OFF = 0,      /**< WiFi 射频尚未启动，仅用于初始化前或完整反初始化状态 */
+    ESPNOW_ONLY,  /**< 仅启动 STA 射频，供 ESP-NOW 通信使用 */
+    STA,          /**< STA 模式，已连接到外部路由器并通过路由器 IP 提供 Web 服务 */
+    AP_PROVISION, /**< AP 配网模式，设备启动热点并开启 DNS 劫持 */
 };
 
 /**
@@ -37,18 +37,18 @@ enum class Mode : uint8_t {
  * @note password 会完整返回给内部调用方，Web API 不应直接暴露该字段。
  */
 struct Config {
-    char ssid[WIFI_SSID_MAX_LEN + 1];          /**< 已保存的 STA SSID，空字符串表示未配置 */
-    char password[WIFI_PASSWORD_MAX_LEN + 1];  /**< 已保存的 STA 密码，开放网络可为空 */
-    bool web_enabled_on_boot;                  /**< 启动时是否自动启用 WiFi/Web 相关功能 */
+    char ssid[WIFI_SSID_MAX_LEN + 1]         = {};    /**< 已保存的 STA SSID，空字符串表示未配置。 */
+    char password[WIFI_PASSWORD_MAX_LEN + 1] = {};    /**< 已保存的 STA 密码，开放网络可为空。 */
+    bool web_enabled_on_boot                 = false; /**< 启动时是否自动启用 WiFi/Web 相关功能。 */
 };
 
 constexpr size_t WIFI_SCAN_MAX_RESULTS = 12;
 
 struct ScanResult {
-    char ssid[WIFI_SSID_MAX_LEN + 1];
-    int8_t rssi;
-    uint8_t channel;
-    wifi_auth_mode_t authmode;
+    char             ssid[WIFI_SSID_MAX_LEN + 1] = {};
+    int8_t           rssi                        = 0;
+    uint8_t          channel                     = 0;
+    wifi_auth_mode_t authmode                    = WIFI_AUTH_OPEN;
 };
 
 /**

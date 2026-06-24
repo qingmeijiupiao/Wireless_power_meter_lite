@@ -16,15 +16,13 @@ ESPChipTemperatureSensor_t& ESPChipTemperatureSensor_t::instance() {
 
 esp_err_t ESPChipTemperatureSensor_t::init() {
     uint8_t default_range_index = 2;
-    current_range_index = default_range_index;
+    current_range_index         = default_range_index;
 
     absolute_max_temperature = temperature_sensor_attributes[0].range_max;
     absolute_min_temperature = temperature_sensor_attributes[TEMPERATURE_SENSOR_ATTR_RANGE_NUM - 1].range_min;
 
-    tsens_config = TEMPERATURE_SENSOR_CONFIG_DEFAULT(
-        temperature_sensor_attributes[default_range_index].range_min,
-        temperature_sensor_attributes[default_range_index].range_max
-    );
+    tsens_config = TEMPERATURE_SENSOR_CONFIG_DEFAULT(temperature_sensor_attributes[default_range_index].range_min,
+                                                     temperature_sensor_attributes[default_range_index].range_max);
 
     esp_err_t ret = temperature_sensor_install(reinterpret_cast<temperature_sensor_config_t*>(&tsens_config), &tsens);
     if (ret != ESP_OK) {
@@ -71,8 +69,7 @@ float ESPChipTemperatureSensor_t::getTemperature() {
         }
         ret = temperature_sensor_get_celsius(tsens, &temp_data);
         if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "sensor read after range switch failed: %s",
-                     esp_err_to_name(ret));
+            ESP_LOGE(TAG, "sensor read after range switch failed: %s", esp_err_to_name(ret));
         }
     }
 
@@ -99,10 +96,8 @@ esp_err_t ESPChipTemperatureSensor_t::switchRange(uint8_t range_index) {
     }
     tsens = nullptr;
 
-    tsens_config = TEMPERATURE_SENSOR_CONFIG_DEFAULT(
-        temperature_sensor_attributes[range_index].range_min,
-        temperature_sensor_attributes[range_index].range_max
-    );
+    tsens_config = TEMPERATURE_SENSOR_CONFIG_DEFAULT(temperature_sensor_attributes[range_index].range_min,
+                                                     temperature_sensor_attributes[range_index].range_max);
 
     ret = temperature_sensor_install(reinterpret_cast<temperature_sensor_config_t*>(&tsens_config), &tsens);
     if (ret != ESP_OK) {
@@ -115,8 +110,8 @@ esp_err_t ESPChipTemperatureSensor_t::switchRange(uint8_t range_index) {
         return ret;
     }
 
-    current_range_min = temperature_sensor_attributes[range_index].range_min;
-    current_range_max = temperature_sensor_attributes[range_index].range_max;
+    current_range_min   = temperature_sensor_attributes[range_index].range_min;
+    current_range_max   = temperature_sensor_attributes[range_index].range_max;
     current_range_index = range_index;
     return ESP_OK;
 }
@@ -129,7 +124,8 @@ int8_t ESPChipTemperatureSensor_t::checkswitchRange() {
         return -1;
     }
 
-    if (temp_data > current_range_max - range_threshold && current_range_index != TEMPERATURE_SENSOR_ATTR_RANGE_NUM - 1) {
+    if (temp_data > current_range_max - range_threshold &&
+        current_range_index != TEMPERATURE_SENSOR_ATTR_RANGE_NUM - 1) {
         ESP_LOGD(TAG, "temperature %.1f deg C is near the upper limit; switching to a higher range", temp_data);
         return 1;
     }

@@ -18,15 +18,14 @@ enum class DriverOwner : uint8_t {
 };
 
 DriverOwner driver_owner = DriverOwner::NONE;
-AckRequest active_ack = {};
+AckRequest  active_ack   = {};
 
 uint16_t timeout_for(const SendRequest& request) {
     if (request.options.ack_timeout_ms != 0) {
         return request.options.ack_timeout_ms;
     }
     PeerEntry* peer = find_peer(request.destination);
-    if (request.options.timeout_mode == TimeoutMode::ADAPTIVE &&
-        peer != nullptr && peer->metrics.ack_timeout_ms != 0) {
+    if (request.options.timeout_mode == TimeoutMode::ADAPTIVE && peer != nullptr && peer->metrics.ack_timeout_ms != 0) {
         return peer->metrics.ack_timeout_ms;
     }
     return default_reliable_options.ack_timeout_ms;
@@ -44,9 +43,7 @@ esp_err_t submit_pending(bool retry) {
         return ESP_ERR_INVALID_STATE;
     }
     // IDF 建议等待前一次发送完成回调后再提交下一帧，因此全组件只保留一个驱动在途帧。
-    esp_err_t ret = esp_now_send(pending.request.destination.bytes,
-                                 pending.frame,
-                                 pending.frame_size);
+    esp_err_t ret = esp_now_send(pending.request.destination.bytes, pending.frame, pending.frame_size);
     if (ret != ESP_OK) {
         increment_counter(&statistics.tx_submit_errors);
         return ret;
@@ -64,7 +61,7 @@ esp_err_t submit_pending(bool retry) {
         pending.first_send_tick = xTaskGetTickCount();
     }
     pending.waiting_ack = false;
-    driver_owner = DriverOwner::PENDING;
+    driver_owner        = DriverOwner::PENDING;
     return ESP_OK;
 }
 
@@ -77,25 +74,16 @@ void start_send(const SendRequest& request) {
         return;
     }
 
-    pending = {};
-    pending.active = true;
-    pending.request = request;
+    pending          = {};
+    pending.active   = true;
+    pending.request  = request;
     pending.sequence = next_sequence++;
     if (next_sequence == 0) {
         next_sequence = 1;
     }
-    const uint8_t flags = request.options.delivery == Delivery::RELIABLE
-                              ? FRAME_FLAG_RELIABLE
-                              : 0;
-    if (encode_frame(flags,
-                     request.message_id,
-                     pending.sequence,
-                     local_session_id,
-                     request.payload,
-                     request.payload_size,
-                     pending.frame,
-                     sizeof(pending.frame),
-                     &pending.frame_size) != ESP_OK) {
+    const uint8_t flags = request.options.delivery == Delivery::RELIABLE ? FRAME_FLAG_RELIABLE : 0;
+    if (encode_frame(flags, request.message_id, pending.sequence, local_session_id, request.payload,
+                     request.payload_size, pending.frame, sizeof(pending.frame), &pending.frame_size) != ESP_OK) {
         finish_pending(SendResult::SUBMIT_FAILED);
         return;
     }
@@ -111,26 +99,24 @@ void start_send(const SendRequest& request) {
 }
 
 void queue_ack(const MacAddress& destination, uint32_t session, uint32_t sequence) {
-    AckRequest request = {};
+    AckRequest request  = {};
     request.destination = destination;
-    request.session = session;
-    request.sequence = sequence;
+    request.session     = session;
+    request.sequence    = sequence;
     if (xQueueSend(ack_queue, &request, 0) != pdTRUE) {
         increment_counter(&statistics.tx_submit_errors);
     }
 }
 
 void submit_next_ack() {
-    if (driver_owner != DriverOwner::NONE ||
-        xQueueReceive(ack_queue, &active_ack, 0) != pdTRUE) {
+    if (driver_owner != DriverOwner::NONE || xQueueReceive(ack_queue, &active_ack, 0) != pdTRUE) {
         return;
     }
     // ACK 与业务包共用底层发送完成序列，通过 driver_owner 区分完成事件归属。
     uint8_t frame[FRAME_HEADER_SIZE] = {};
-    size_t frame_size = 0;
-    if (encode_frame(FRAME_FLAG_ACK, ACK_MESSAGE_ID,
-                     active_ack.session, active_ack.sequence,
-                     nullptr, 0, frame, sizeof(frame), &frame_size) != ESP_OK) {
+    size_t  frame_size               = 0;
+    if (encode_frame(FRAME_FLAG_ACK, ACK_MESSAGE_ID, active_ack.session, active_ack.sequence, nullptr, 0, frame,
+                     sizeof(frame), &frame_size) != ESP_OK) {
         return;
     }
     if (esp_now_send(active_ack.destination.bytes, frame, frame_size) == ESP_OK) {
@@ -149,14 +135,11 @@ void update_rtt(PeerEntry* peer) {
     if (peer == nullptr || pending.retransmitted) {
         return;
     }
-    uint32_t rtt = static_cast<uint32_t>(
-        (xTaskGetTickCount() - pending.first_send_tick) * portTICK_PERIOD_MS);
-    rtt = std::max<uint32_t>(1, rtt);
-    peer->metrics.last_rtt_ms = static_cast<uint16_t>(rtt);
-    peer->metrics.recent_rtt_ms[peer->metrics.recent_rtt_next] =
-        static_cast<uint16_t>(rtt);
-    peer->metrics.recent_rtt_next =
-        static_cast<uint8_t>((peer->metrics.recent_rtt_next + 1U) % 3U);
+    uint32_t rtt = static_cast<uint32_t>((xTaskGetTickCount() - pending.first_send_tick) * portTICK_PERIOD_MS);
+    rtt          = std::max<uint32_t>(1, rtt);
+    peer->metrics.last_rtt_ms                                  = static_cast<uint16_t>(rtt);
+    peer->metrics.recent_rtt_ms[peer->metrics.recent_rtt_next] = static_cast<uint16_t>(rtt);
+    peer->metrics.recent_rtt_next = static_cast<uint8_t>((peer->metrics.recent_rtt_next + 1U) % 3U);
     if (peer->metrics.recent_rtt_count < 3) {
         peer->metrics.recent_rtt_count++;
     }
@@ -166,20 +149,15 @@ void update_rtt(PeerEntry* peer) {
     if (peer->metrics.smoothed_rtt_ms == 0) {
         peer->metrics.smoothed_rtt_ms = static_cast<uint16_t>(rtt);
     } else {
-        peer->metrics.smoothed_rtt_ms = static_cast<uint16_t>(
-            (7U * peer->metrics.smoothed_rtt_ms + rtt) / 8U);
+        peer->metrics.smoothed_rtt_ms = static_cast<uint16_t>((7U * peer->metrics.smoothed_rtt_ms + rtt) / 8U);
     }
     peer->metrics.ack_timeout_ms = static_cast<uint16_t>(
-        std::clamp<uint32_t>(peer->metrics.smoothed_rtt_ms + 5U,
-                             MIN_ACK_TIMEOUT_MS,
-                             MAX_ACK_TIMEOUT_MS));
+        std::clamp<uint32_t>(peer->metrics.smoothed_rtt_ms + 5U, MIN_ACK_TIMEOUT_MS, MAX_ACK_TIMEOUT_MS));
 }
 
 void process_ack(const RxEvent& event, const ParsedFrame& frame) {
-    if (!pending.active ||
-        pending.request.options.delivery != Delivery::RELIABLE ||
-        pending.request.destination != event.source ||
-        pending.sequence != frame.correlation ||
+    if (!pending.active || pending.request.options.delivery != Delivery::RELIABLE ||
+        pending.request.destination != event.source || pending.sequence != frame.correlation ||
         local_session_id != frame.sequence) {
         increment_counter(&statistics.unexpected_acks);
         increment_counter(&statistics.timing_errors);
@@ -212,7 +190,7 @@ void process_received_event(const RxEvent& event) {
         return;
     }
 
-    PeerEntry* peer = find_peer(event.source);
+    PeerEntry* peer     = find_peer(event.source);
     const bool reliable = (frame.flags & FRAME_FLAG_RELIABLE) != 0;
     if (reliable) {
         if (event.destination.is_broadcast() || peer == nullptr) {
@@ -232,25 +210,25 @@ void process_received_event(const RxEvent& event) {
                 return;
             }
         }
-        peer->last_rx_session = frame.correlation;
+        peer->last_rx_session  = frame.correlation;
         peer->last_rx_sequence = frame.sequence;
-        peer->has_rx_sequence = true;
+        peer->has_rx_sequence  = true;
         queue_ack(event.source, frame.correlation, frame.sequence);
     }
 
-    Message message = {};
-    message.source = event.source;
-    message.destination = event.destination;
-    message.message_id = frame.message_id;
-    message.sequence = frame.sequence;
-    message.payload = frame.payload;
+    Message message      = {};
+    message.source       = event.source;
+    message.destination  = event.destination;
+    message.message_id   = frame.message_id;
+    message.sequence     = frame.sequence;
+    message.payload      = frame.payload;
     message.payload_size = frame.payload_size;
-    message.rssi = event.rssi;
-    message.channel = event.channel;
-    message.reliable = reliable;
+    message.rssi         = event.rssi;
+    message.channel      = event.channel;
+    message.reliable     = reliable;
 
     MessageHandler selected_handler = nullptr;
-    void* selected_context = nullptr;
+    void*          selected_context = nullptr;
     portENTER_CRITICAL(&state_lock);
     for (const auto& handler : handlers) {
         if (handler.used && handler.message_id == frame.message_id) {
@@ -292,14 +270,12 @@ void process_mac_result(const MacResultEvent& event) {
         return;
     }
 
-    pending.waiting_ack = true;
-    pending.deadline_tick = xTaskGetTickCount() +
-                            pdMS_TO_TICKS(timeout_for(pending.request));
+    pending.waiting_ack   = true;
+    pending.deadline_tick = xTaskGetTickCount() + pdMS_TO_TICKS(timeout_for(pending.request));
 }
 
 void process_timeout() {
-    if (!pending.active || !pending.waiting_ack ||
-        driver_owner != DriverOwner::NONE) {
+    if (!pending.active || !pending.waiting_ack || driver_owner != DriverOwner::NONE) {
         return;
     }
     const TickType_t now = xTaskGetTickCount();

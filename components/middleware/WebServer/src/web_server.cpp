@@ -19,34 +19,34 @@ namespace WebServer {
 static const char* TAG = "WebServer";
 
 struct Route {
-    bool used;
-    char uri[WEB_SERVER_URI_MAX_LEN];
-    Method method;
+    bool    used;
+    char    uri[WEB_SERVER_URI_MAX_LEN];
+    Method  method;
     Handler handler;
 };
 
 // HTTP服务器句柄与配置状态。当前实现假设路由在begin前注册完成。
-static httpd_handle_t server_handle = nullptr;
-static uint16_t server_port = 80;
-static bool captive_portal_enabled = false;
-static bool initialized = false;
+static httpd_handle_t server_handle          = nullptr;
+static uint16_t       server_port            = 80;
+static bool           captive_portal_enabled = false;
+static bool           initialized            = false;
 
 // 路由、中间件和请求上下文均使用静态存储，避免HTTP任务栈被大buffer占用。
-static Route routes[WEB_SERVER_MAX_ROUTES];
+static Route      routes[WEB_SERVER_MAX_ROUTES];
 static Middleware middlewares[WEB_SERVER_MAX_MIDDLEWARES];
-static Request active_request;
-static uint8_t route_count = 0;
-static uint8_t middleware_count = 0;
-static Handler not_found_handler = nullptr;
+static Request    active_request;
+static uint8_t    route_count       = 0;
+static uint8_t    middleware_count  = 0;
+static Handler    not_found_handler = nullptr;
 
 /**
  * @brief 清空路由表
  */
 static void clear_routes() {
     for (uint8_t i = 0; i < WEB_SERVER_MAX_ROUTES; i++) {
-        routes[i].used = false;
-        routes[i].uri[0] = '\0';
-        routes[i].method = Method::GET;
+        routes[i].used    = false;
+        routes[i].uri[0]  = '\0';
+        routes[i].method  = Method::GET;
         routes[i].handler = nullptr;
     }
     route_count = 0;
@@ -67,14 +67,22 @@ static void clear_middlewares() {
  */
 static httpd_method_t to_httpd_method(Method method) {
     switch (method) {
-        case Method::GET: return HTTP_GET;
-        case Method::POST: return HTTP_POST;
-        case Method::PUT: return HTTP_PUT;
-        case Method::DELETE_: return HTTP_DELETE;
-        case Method::PATCH: return HTTP_PATCH;
-        case Method::OPTIONS: return HTTP_OPTIONS;
-        case Method::HEAD: return HTTP_HEAD;
-        default: return HTTP_GET;
+    case Method::GET:
+        return HTTP_GET;
+    case Method::POST:
+        return HTTP_POST;
+    case Method::PUT:
+        return HTTP_PUT;
+    case Method::DELETE_:
+        return HTTP_DELETE;
+    case Method::PATCH:
+        return HTTP_PATCH;
+    case Method::OPTIONS:
+        return HTTP_OPTIONS;
+    case Method::HEAD:
+        return HTTP_HEAD;
+    default:
+        return HTTP_GET;
     }
 }
 
@@ -83,14 +91,22 @@ static httpd_method_t to_httpd_method(Method method) {
  */
 static Method from_httpd_method(httpd_method_t method) {
     switch (method) {
-        case HTTP_GET: return Method::GET;
-        case HTTP_POST: return Method::POST;
-        case HTTP_PUT: return Method::PUT;
-        case HTTP_DELETE: return Method::DELETE_;
-        case HTTP_PATCH: return Method::PATCH;
-        case HTTP_OPTIONS: return Method::OPTIONS;
-        case HTTP_HEAD: return Method::HEAD;
-        default: return Method::ANY;
+    case HTTP_GET:
+        return Method::GET;
+    case HTTP_POST:
+        return Method::POST;
+    case HTTP_PUT:
+        return Method::PUT;
+    case HTTP_DELETE:
+        return Method::DELETE_;
+    case HTTP_PATCH:
+        return Method::PATCH;
+    case HTTP_OPTIONS:
+        return Method::OPTIONS;
+    case HTTP_HEAD:
+        return Method::HEAD;
+    default:
+        return Method::ANY;
     }
 }
 
@@ -99,25 +115,44 @@ static Method from_httpd_method(httpd_method_t method) {
  */
 static const char* status_to_string(int status_code) {
     switch (status_code) {
-        case 200: return "200 OK";
-        case 201: return "201 Created";
-        case 202: return "202 Accepted";
-        case 204: return "204 No Content";
-        case 301: return "301 Moved Permanently";
-        case 302: return "302 Found";
-        case 400: return "400 Bad Request";
-        case 401: return "401 Unauthorized";
-        case 403: return "403 Forbidden";
-        case 404: return "404 Not Found";
-        case 405: return "405 Method Not Allowed";
-        case 408: return "408 Request Timeout";
-        case 409: return "409 Conflict";
-        case 413: return "413 Payload Too Large";
-        case 422: return "422 Unprocessable Content";
-        case 500: return "500 Internal Server Error";
-        case 501: return "501 Not Implemented";
-        case 503: return "503 Service Unavailable";
-        default: return "200 OK";
+    case 200:
+        return "200 OK";
+    case 201:
+        return "201 Created";
+    case 202:
+        return "202 Accepted";
+    case 204:
+        return "204 No Content";
+    case 301:
+        return "301 Moved Permanently";
+    case 302:
+        return "302 Found";
+    case 400:
+        return "400 Bad Request";
+    case 401:
+        return "401 Unauthorized";
+    case 403:
+        return "403 Forbidden";
+    case 404:
+        return "404 Not Found";
+    case 405:
+        return "405 Method Not Allowed";
+    case 408:
+        return "408 Request Timeout";
+    case 409:
+        return "409 Conflict";
+    case 413:
+        return "413 Payload Too Large";
+    case 422:
+        return "422 Unprocessable Content";
+    case 500:
+        return "500 Internal Server Error";
+    case 501:
+        return "501 Not Implemented";
+    case 503:
+        return "503 Service Unavailable";
+    default:
+        return "200 OK";
     }
 }
 
@@ -144,9 +179,9 @@ static void load_peer_ip(httpd_req_t* req, char* out, size_t out_size) {
     strncpy(out, "unknown", out_size - 1);
     out[out_size - 1] = '\0';
 
-    sockaddr_storage address = {};
-    socklen_t address_len = sizeof(address);
-    const int socket_fd = httpd_req_to_sockfd(req);
+    sockaddr_storage address     = {};
+    socklen_t        address_len = sizeof(address);
+    const int        socket_fd   = httpd_req_to_sockfd(req);
     if (socket_fd < 0 || getpeername(socket_fd, reinterpret_cast<sockaddr*>(&address), &address_len) != 0) {
         return;
     }
@@ -211,13 +246,14 @@ esp_err_t load_body(Request* request) {
     }
 
     request->body[received] = '\0';
-    request->body_len = received;
-    request->body_loaded = true;
+    request->body_len       = received;
+    request->body_loaded    = true;
     return ESP_OK;
 }
 
 esp_err_t stream_body(Request* request, char* buffer, size_t buffer_size, BodyChunkHandler chunk_handler) {
-    if (request == nullptr || request->raw == nullptr || buffer == nullptr || buffer_size == 0 || chunk_handler == nullptr) {
+    if (request == nullptr || request->raw == nullptr || buffer == nullptr || buffer_size == 0 ||
+        chunk_handler == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
     if (request->body_loaded) {
@@ -225,12 +261,12 @@ esp_err_t stream_body(Request* request, char* buffer, size_t buffer_size, BodyCh
     }
 
     constexpr uint8_t MAX_CONSECUTIVE_TIMEOUTS = 3;
-    size_t received = 0;
-    uint8_t consecutive_timeouts = 0;
+    size_t            received                 = 0;
+    uint8_t           consecutive_timeouts     = 0;
     while (received < request->raw->content_len) {
-        size_t remaining = request->raw->content_len - received;
+        size_t remaining  = request->raw->content_len - received;
         size_t chunk_size = remaining < buffer_size ? remaining : buffer_size;
-        int ret = httpd_req_recv(request->raw, buffer, chunk_size);
+        int    ret        = httpd_req_recv(request->raw, buffer, chunk_size);
         if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
             if (++consecutive_timeouts >= MAX_CONSECUTIVE_TIMEOUTS) {
                 return ESP_ERR_TIMEOUT;
@@ -242,14 +278,14 @@ esp_err_t stream_body(Request* request, char* buffer, size_t buffer_size, BodyCh
         }
 
         consecutive_timeouts = 0;
-        esp_err_t err = chunk_handler(buffer, static_cast<size_t>(ret));
+        esp_err_t err        = chunk_handler(buffer, static_cast<size_t>(ret));
         if (err != ESP_OK) {
             return err;
         }
         received += static_cast<size_t>(ret);
     }
 
-    request->body_len = received;
+    request->body_len    = received;
     request->body_loaded = true;
     return ESP_OK;
 }
@@ -260,8 +296,8 @@ esp_err_t stream_body(Request* request, char* buffer, size_t buffer_size, BodyCh
  */
 static esp_err_t dispatch(httpd_req_t* req) {
     Request* request = &active_request;
-    memset(request, 0, sizeof(*request));
-    request->raw = req;
+    *request = {};
+    request->raw    = req;
     request->method = from_httpd_method((httpd_method_t)req->method);
     copy_uri_without_query(req->uri, request->uri, sizeof(request->uri));
     load_peer_ip(req, request->peer_ip, sizeof(request->peer_ip));
@@ -307,11 +343,11 @@ static esp_err_t dispatch(httpd_req_t* req) {
  */
 static esp_err_t register_dispatcher(httpd_handle_t handle, Method method) {
     static const char uri_all[] = "/*";
-    httpd_uri_t uri = {};
-    uri.uri = uri_all;
-    uri.method = to_httpd_method(method);
-    uri.handler = dispatch;
-    uri.user_ctx = nullptr;
+    httpd_uri_t       uri       = {};
+    uri.uri                     = uri_all;
+    uri.method                  = to_httpd_method(method);
+    uri.handler                 = dispatch;
+    uri.user_ctx                = nullptr;
     return httpd_register_uri_handler(handle, &uri);
 }
 
@@ -323,8 +359,8 @@ esp_err_t init(uint16_t port) {
     clear_routes();
     clear_middlewares();
     captive_portal_enabled = false;
-    not_found_handler = nullptr;
-    initialized = true;
+    not_found_handler      = nullptr;
+    initialized            = true;
     return ESP_OK;
 }
 
@@ -336,12 +372,12 @@ esp_err_t begin() {
         return ESP_OK;
     }
 
-    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.server_port = server_port;
-    config.uri_match_fn = httpd_uri_match_wildcard;
+    httpd_config_t config   = HTTPD_DEFAULT_CONFIG();
+    config.server_port      = server_port;
+    config.uri_match_fn     = httpd_uri_match_wildcard;
     config.max_uri_handlers = 8;
     // 请求上下文已移到静态区，按实测峰值保留约 3KB 余量覆盖日志和业务 handler 调用链。
-    config.stack_size = 6144;
+    config.stack_size       = 6144;
 
     esp_err_t ret = httpd_start(&server_handle, &config);
     if (ret != ESP_OK) {
@@ -350,12 +386,18 @@ esp_err_t begin() {
     }
 
     ret = register_dispatcher(server_handle, Method::GET);
-    if (ret == ESP_OK) ret = register_dispatcher(server_handle, Method::POST);
-    if (ret == ESP_OK) ret = register_dispatcher(server_handle, Method::PUT);
-    if (ret == ESP_OK) ret = register_dispatcher(server_handle, Method::DELETE_);
-    if (ret == ESP_OK) ret = register_dispatcher(server_handle, Method::PATCH);
-    if (ret == ESP_OK) ret = register_dispatcher(server_handle, Method::OPTIONS);
-    if (ret == ESP_OK) ret = register_dispatcher(server_handle, Method::HEAD);
+    if (ret == ESP_OK)
+        ret = register_dispatcher(server_handle, Method::POST);
+    if (ret == ESP_OK)
+        ret = register_dispatcher(server_handle, Method::PUT);
+    if (ret == ESP_OK)
+        ret = register_dispatcher(server_handle, Method::DELETE_);
+    if (ret == ESP_OK)
+        ret = register_dispatcher(server_handle, Method::PATCH);
+    if (ret == ESP_OK)
+        ret = register_dispatcher(server_handle, Method::OPTIONS);
+    if (ret == ESP_OK)
+        ret = register_dispatcher(server_handle, Method::HEAD);
 
     if (ret != ESP_OK) {
         httpd_stop(server_handle);
@@ -409,11 +451,11 @@ esp_err_t on(const char* uri, Method method, Handler handler) {
     }
 
     Route* route = &routes[route_count];
-    route->used = true;
+    route->used  = true;
     strncpy(route->uri, uri, sizeof(route->uri) - 1);
     route->uri[sizeof(route->uri) - 1] = '\0';
-    route->method = method;
-    route->handler = handler;
+    route->method                      = method;
+    route->handler                     = handler;
     route_count++;
     return ESP_OK;
 }
@@ -527,4 +569,4 @@ esp_err_t get_query_value(Request* request, const char* key, char* value, size_t
     return httpd_query_key_value(request->query, key, value, value_size);
 }
 
-}
+} // namespace WebServer

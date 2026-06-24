@@ -29,11 +29,11 @@
 
 namespace WifiService {
 
-static constexpr char TAG[] = "WifiService";
-static constexpr uint8_t STA_CONNECT_MAX_ATTEMPTS = 2;
-static constexpr size_t RECONNECT_QUEUE_LENGTH = 8;
-static constexpr uint32_t RECONNECT_TASK_STACK_SIZE = 3072;
-static constexpr uint32_t RECONNECT_MAX_DELAY_MS = 30000;
+static constexpr char     TAG[]                      = "WifiService";
+static constexpr uint8_t  STA_CONNECT_MAX_ATTEMPTS   = 2;
+static constexpr size_t   RECONNECT_QUEUE_LENGTH     = 8;
+static constexpr uint32_t RECONNECT_TASK_STACK_SIZE  = 3072;
+static constexpr uint32_t RECONNECT_MAX_DELAY_MS     = 30000;
 static constexpr uint32_t RECONNECT_INITIAL_DELAY_MS = 1000;
 
 enum class ReconnectEvent : uint8_t {
@@ -47,28 +47,28 @@ static const char* source_or_unknown(const char* source) {
 }
 
 // NVS key 长度需小于 16 字节，存储于 HXC 默认命名空间。
-static HXC::NVS_DATA<char*> sta_ssid("wifi_ssid", "");
-static HXC::NVS_DATA<char*> sta_pass("wifi_pass", "");
+static HXC::NVS_DATA<char*>   sta_ssid("wifi_ssid", "");
+static HXC::NVS_DATA<char*>   sta_pass("wifi_pass", "");
 static HXC::NVS_DATA<uint8_t> web_boot("web_boot", 1);
 static HXC::NVS_DATA<uint8_t> espnow_channel("espnow_ch", 1);
 
 // 运行期状态由 WiFiService 统一维护，供 Shell 和 WebBackend 查询。
-static bool initialized = false;
-static Mode mode = Mode::OFF;
-static char ap_ssid[WIFI_SSID_MAX_LEN + 1] = {};
-static char last_error[64] = "none";
-static SemaphoreHandle_t scan_mutex = nullptr;
-static QueueHandle_t reconnect_queue = nullptr;
-static TimerHandle_t reconnect_timer = nullptr;
-static TaskHandle_t reconnect_task_handle = nullptr;
-static bool reconnect_enabled = false;
-static uint8_t reconnect_attempt = 0;
+static bool              initialized                    = false;
+static Mode              mode                           = Mode::OFF;
+static char              ap_ssid[WIFI_SSID_MAX_LEN + 1] = {};
+static char              last_error[64]                 = "none";
+static SemaphoreHandle_t scan_mutex                     = nullptr;
+static QueueHandle_t     reconnect_queue                = nullptr;
+static TimerHandle_t     reconnect_timer                = nullptr;
+static TaskHandle_t      reconnect_task_handle          = nullptr;
+static bool              reconnect_enabled              = false;
+static uint8_t           reconnect_attempt              = 0;
 
 static esp_err_t persist_sta_credentials(const char* ssid, const char* password) {
-    char previous_ssid[WIFI_SSID_MAX_LEN + 1] = {};
-    char previous_password[WIFI_PASSWORD_MAX_LEN + 1] = {};
-    char* cached_ssid = sta_ssid.read();
-    char* cached_password = sta_pass.read();
+    char  previous_ssid[WIFI_SSID_MAX_LEN + 1]         = {};
+    char  previous_password[WIFI_PASSWORD_MAX_LEN + 1] = {};
+    char* cached_ssid                                  = sta_ssid.read();
+    char* cached_password                              = sta_pass.read();
     if (cached_ssid != nullptr) {
         strncpy(previous_ssid, cached_ssid, sizeof(previous_ssid) - 1);
     }
@@ -86,29 +86,27 @@ static esp_err_t persist_sta_credentials(const char* ssid, const char* password)
     }
 
     const esp_err_t password_rollback_err = sta_pass.set(previous_password);
-    const esp_err_t ssid_rollback_err = sta_ssid.set(previous_ssid);
+    const esp_err_t ssid_rollback_err     = sta_ssid.set(previous_ssid);
     if (password_rollback_err != ESP_OK || ssid_rollback_err != ESP_OK) {
-        ESP_LOGE(TAG, "failed to rollback STA credentials: password=%s ssid=%s",
-                 esp_err_to_name(password_rollback_err),
+        ESP_LOGE(TAG, "failed to rollback STA credentials: password=%s ssid=%s", esp_err_to_name(password_rollback_err),
                  esp_err_to_name(ssid_rollback_err));
     }
     return err;
 }
 
 static void update_global_state_flags() {
-    auto& state = get_global_state();
+    auto& state                               = get_global_state();
     state.flags.bits.wifi_service_initialized = initialized;
-    state.flags.bits.wifi_enabled = mode != Mode::OFF;
-    state.flags.bits.wifi_sta_connected = mode == Mode::STA && WiFiManager::instance().is_connected();
-    state.flags.bits.wifi_ap_mode = mode == Mode::AP_PROVISION;
-    state.flags.bits.wifi_has_saved_sta = has_saved_sta();
+    state.flags.bits.wifi_enabled             = mode != Mode::OFF;
+    state.flags.bits.wifi_sta_connected       = mode == Mode::STA && WiFiManager::instance().is_connected();
+    state.flags.bits.wifi_ap_mode             = mode == Mode::AP_PROVISION;
+    state.flags.bits.wifi_has_saved_sta       = has_saved_sta();
     state.flags.bits.wifi_web_enabled_on_boot = is_web_enabled_on_boot();
 }
 
 static void enqueue_reconnect_event(ReconnectEvent event) {
     if (reconnect_queue == nullptr || xQueueSend(reconnect_queue, &event, 0) != pdTRUE) {
-        ESP_LOGW(TAG, "reconnect queue full, dropping event=%u",
-                 static_cast<unsigned>(event));
+        ESP_LOGW(TAG, "reconnect queue full, dropping event=%u", static_cast<unsigned>(event));
     }
 }
 
@@ -159,13 +157,11 @@ static void schedule_reconnect() {
         reconnect_attempt++;
     }
     if (xTimerChangePeriod(reconnect_timer, pdMS_TO_TICKS(delay_ms), 0) != pdPASS) {
-        ESP_LOGW(TAG, "failed to schedule STA reconnect attempt=%u",
-                 static_cast<unsigned>(reconnect_attempt));
+        ESP_LOGW(TAG, "failed to schedule STA reconnect attempt=%u", static_cast<unsigned>(reconnect_attempt));
         return;
     }
     ESP_LOGW(TAG, "STA disconnected, reconnect attempt=%u scheduled in %lu ms",
-             static_cast<unsigned>(reconnect_attempt),
-             static_cast<unsigned long>(delay_ms));
+             static_cast<unsigned>(reconnect_attempt), static_cast<unsigned long>(delay_ms));
 }
 
 static void reconnect_timer_callback(TimerHandle_t) {
@@ -187,7 +183,7 @@ static void reconnect_task(void*) {
 
         if (event == ReconnectEvent::STA_GOT_IP) {
             const bool restored = reconnect_attempt > 0;
-            reconnect_attempt = 0;
+            reconnect_attempt   = 0;
             xTimerStop(reconnect_timer, 0);
             update_global_state_flags();
             if (restored) {
@@ -209,8 +205,7 @@ static void reconnect_task(void*) {
             continue;
         }
 
-        ESP_LOGI(TAG, "starting STA reconnect attempt=%u",
-                 static_cast<unsigned>(reconnect_attempt));
+        ESP_LOGI(TAG, "starting STA reconnect attempt=%u", static_cast<unsigned>(reconnect_attempt));
         const esp_err_t ret = esp_wifi_connect();
         if (ret != ESP_OK) {
             ESP_LOGW(TAG, "STA reconnect request failed: %s", esp_err_to_name(ret));
@@ -255,13 +250,13 @@ static void make_ap_ssid() {
  * @brief 将 AP netif IP 设置为 WiFiService 编译期常量
  */
 static esp_err_t configure_ap_ip() {
-    IP_t ip = {};
+    IP_t ip   = {};
     ip.octet1 = AP_IP_OCTET1;
     ip.octet2 = AP_IP_OCTET2;
     ip.octet3 = AP_IP_OCTET3;
     ip.octet4 = AP_IP_OCTET4;
 
-    IP_t netmask = {};
+    IP_t netmask   = {};
     netmask.octet1 = 255;
     netmask.octet2 = 255;
     netmask.octet3 = 255;
@@ -287,8 +282,8 @@ esp_err_t init() {
         return ESP_ERR_NO_MEM;
     }
     reconnect_queue = xQueueCreate(RECONNECT_QUEUE_LENGTH, sizeof(ReconnectEvent));
-    reconnect_timer = xTimerCreate("wifi_reconnect", pdMS_TO_TICKS(RECONNECT_INITIAL_DELAY_MS),
-                                   pdFALSE, nullptr, reconnect_timer_callback);
+    reconnect_timer = xTimerCreate("wifi_reconnect", pdMS_TO_TICKS(RECONNECT_INITIAL_DELAY_MS), pdFALSE, nullptr,
+                                   reconnect_timer_callback);
     if (reconnect_queue == nullptr || reconnect_timer == nullptr) {
         if (reconnect_timer != nullptr) {
             xTimerDelete(reconnect_timer, 0);
@@ -302,39 +297,35 @@ esp_err_t init() {
         scan_mutex = nullptr;
         return ESP_ERR_NO_MEM;
     }
-    if (xTaskCreate(reconnect_task, "wifi_reconnect", RECONNECT_TASK_STACK_SIZE,
-                    nullptr, 3, &reconnect_task_handle) != pdPASS) {
+    if (xTaskCreate(reconnect_task, "wifi_reconnect", RECONNECT_TASK_STACK_SIZE, nullptr, 3, &reconnect_task_handle) !=
+        pdPASS) {
         xTimerDelete(reconnect_timer, 0);
         vQueueDelete(reconnect_queue);
         vSemaphoreDelete(scan_mutex);
         reconnect_timer = nullptr;
         reconnect_queue = nullptr;
-        scan_mutex = nullptr;
+        scan_mutex      = nullptr;
         return ESP_ERR_NO_MEM;
     }
-    esp_err_t ret = esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED,
-                                               network_event_handler, nullptr);
+    esp_err_t ret = esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, network_event_handler, nullptr);
     if (ret == ESP_OK) {
-        ret = esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
-                                         network_event_handler, nullptr);
+        ret = esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, network_event_handler, nullptr);
     }
     if (ret != ESP_OK) {
-        esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED,
-                                     network_event_handler);
+        esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, network_event_handler);
         vTaskDelete(reconnect_task_handle);
         xTimerDelete(reconnect_timer, 0);
         vQueueDelete(reconnect_queue);
         vSemaphoreDelete(scan_mutex);
         reconnect_task_handle = nullptr;
-        reconnect_timer = nullptr;
-        reconnect_queue = nullptr;
-        scan_mutex = nullptr;
+        reconnect_timer       = nullptr;
+        reconnect_queue       = nullptr;
+        scan_mutex            = nullptr;
         return ret;
     }
     initialized = true;
     update_global_state_flags();
-    DEVICE_EVENT_I(TAG, "wifi: init web_boot=%u saved_sta=%u",
-                   is_web_enabled_on_boot() ? 1U : 0U,
+    DEVICE_EVENT_I(TAG, "wifi: init web_boot=%u saved_sta=%u", is_web_enabled_on_boot() ? 1U : 0U,
                    has_saved_sta() ? 1U : 0U);
     return ESP_OK;
 }
@@ -359,8 +350,7 @@ bool is_web_enabled_on_boot() {
 esp_err_t set_web_enabled_on_boot(bool enabled, const char* source) {
     ESP_RETURN_ON_ERROR(web_boot.set(enabled ? 1 : 0), TAG, "persist web boot setting failed");
     update_global_state_flags();
-    DEVICE_EVENT_I(TAG, "wifi: config source=%s web_boot=%u",
-                   source_or_unknown(source), enabled ? 1U : 0U);
+    DEVICE_EVENT_I(TAG, "wifi: config source=%s web_boot=%u", source_or_unknown(source), enabled ? 1U : 0U);
     return ESP_OK;
 }
 
@@ -370,8 +360,7 @@ esp_err_t set_web_enabled_on_boot(bool enabled, const char* source) {
 esp_err_t clear_saved_sta(const char* source) {
     ESP_RETURN_ON_ERROR(persist_sta_credentials("", ""), TAG, "clear saved STA credentials failed");
     update_global_state_flags();
-    DEVICE_EVENT_I(TAG, "wifi: config source=%s saved_sta_cleared=1",
-                   source_or_unknown(source));
+    DEVICE_EVENT_I(TAG, "wifi: config source=%s saved_sta_cleared=1", source_or_unknown(source));
     return ESP_OK;
 }
 
@@ -387,9 +376,9 @@ bool has_saved_sta() {
  * @brief 读取当前配置快照
  */
 Config get_config() {
-    Config cfg = {};
-    char* ssid = sta_ssid.read();
-    char* pass = sta_pass.read();
+    Config cfg  = {};
+    char*  ssid = sta_ssid.read();
+    char*  pass = sta_pass.read();
     if (ssid != nullptr) {
         strncpy(cfg.ssid, ssid, sizeof(cfg.ssid) - 1);
     }
@@ -417,50 +406,37 @@ esp_err_t connect_sta(const char* ssid, const char* password, bool save, const c
 
     esp_err_t ret = ESP_FAIL;
     for (uint8_t attempt = 1; attempt <= STA_CONNECT_MAX_ATTEMPTS; ++attempt) {
-        ESP_LOGI(TAG, "STA connect attempt %u/%u: ssid=%s",
-                 static_cast<unsigned>(attempt),
-                 static_cast<unsigned>(STA_CONNECT_MAX_ATTEMPTS),
-                 ssid);
+        ESP_LOGI(TAG, "STA connect attempt %u/%u: ssid=%s", static_cast<unsigned>(attempt),
+                 static_cast<unsigned>(STA_CONNECT_MAX_ATTEMPTS), ssid);
         ret = WiFiManager::instance().connect_sta(ssid, password, true);
         if (ret != ESP_ERR_TIMEOUT || attempt == STA_CONNECT_MAX_ATTEMPTS) {
             break;
         }
-        ESP_LOGW(TAG, "STA connect attempt %u/%u timed out, retrying once",
-                 static_cast<unsigned>(attempt),
+        ESP_LOGW(TAG, "STA connect attempt %u/%u timed out, retrying once", static_cast<unsigned>(attempt),
                  static_cast<unsigned>(STA_CONNECT_MAX_ATTEMPTS));
     }
     if (ret == ESP_OK) {
         ESP_RETURN_ON_ERROR(require_espnow_active(), TAG, "ESP-NOW link inactive");
         const Mode old_mode = mode;
-        mode = Mode::STA;
-        reconnect_enabled = true;
+        mode                = Mode::STA;
+        reconnect_enabled   = true;
         update_global_state_flags();
         set_last_error("none");
 
         // 只有业务层明确要求保存时才写入 NVS，启动自动连接不会重复写 Flash。
         if (save) {
-            ESP_RETURN_ON_ERROR(persist_sta_credentials(ssid, password),
-                                TAG,
-                                "persist STA credentials failed");
+            ESP_RETURN_ON_ERROR(persist_sta_credentials(ssid, password), TAG, "persist STA credentials failed");
         }
         IP_t ip = WiFiManager::instance().get_ip();
-        DEVICE_STATE_I(TAG,
-                       "wifi: mode old=%u new=%u source=%s result=ok ssid=%s save=%u ip=%u.%u.%u.%u",
-                       static_cast<unsigned>(old_mode),
-                       static_cast<unsigned>(mode),
-                       source_or_unknown(source),
-                       ssid,
-                       save ? 1U : 0U,
-                       ip.octet1,
-                       ip.octet2,
-                       ip.octet3,
-                       ip.octet4);
+        DEVICE_STATE_I(TAG, "wifi: mode old=%u new=%u source=%s result=ok ssid=%s save=%u ip=%u.%u.%u.%u",
+                       static_cast<unsigned>(old_mode), static_cast<unsigned>(mode), source_or_unknown(source), ssid,
+                       save ? 1U : 0U, ip.octet1, ip.octet2, ip.octet3, ip.octet4);
         return ESP_OK;
     }
 
     set_last_error(esp_err_to_name(ret));
-    ESP_LOGW(TAG, "wifi: sta_connect source=%s ssid=%s save=%u result=failed err=%s",
-             source_or_unknown(source), ssid, save ? 1U : 0U, esp_err_to_name(ret));
+    ESP_LOGW(TAG, "wifi: sta_connect source=%s ssid=%s save=%u result=failed err=%s", source_or_unknown(source), ssid,
+             save ? 1U : 0U, esp_err_to_name(ret));
     return ret;
 }
 
@@ -478,17 +454,15 @@ esp_err_t start_provision_ap(const char* source) {
     ESP_RETURN_ON_ERROR(configure_ap_ip(), TAG, "set ap ip failed");
     ESP_RETURN_ON_ERROR(WiFiManager::instance().start_apsta(ap_ssid, ""), TAG, "start apsta failed");
     ESP_RETURN_ON_ERROR(require_espnow_active(), TAG, "ESP-NOW link inactive");
-    ESP_RETURN_ON_ERROR(DNSServer::start(AP_IP_OCTET1, AP_IP_OCTET2, AP_IP_OCTET3, AP_IP_OCTET4), TAG, "start dns failed");
+    ESP_RETURN_ON_ERROR(DNSServer::start(AP_IP_OCTET1, AP_IP_OCTET2, AP_IP_OCTET3, AP_IP_OCTET4), TAG,
+                        "start dns failed");
     WebServer::enable_captive_portal(true);
     const Mode old_mode = mode;
-    mode = Mode::AP_PROVISION;
+    mode                = Mode::AP_PROVISION;
     update_global_state_flags();
     set_last_error("none");
-    DEVICE_STATE_I(TAG, "wifi: mode old=%u new=%u source=%s result=ok ssid=%s",
-                   static_cast<unsigned>(old_mode),
-                   static_cast<unsigned>(mode),
-                   source_or_unknown(source),
-                   ap_ssid);
+    DEVICE_STATE_I(TAG, "wifi: mode old=%u new=%u source=%s result=ok ssid=%s", static_cast<unsigned>(old_mode),
+                   static_cast<unsigned>(mode), source_or_unknown(source), ap_ssid);
     return ESP_OK;
 }
 
@@ -503,19 +477,14 @@ esp_err_t start_espnow_only(const char* source) {
         channel = 1;
         ESP_RETURN_ON_ERROR(espnow_channel.set(channel), TAG, "persist default ESP-NOW channel failed");
     }
-    ESP_RETURN_ON_ERROR(WiFiManager::instance().start_sta_radio(channel),
-                        TAG,
-                        "start ESP-NOW-only radio failed");
+    ESP_RETURN_ON_ERROR(WiFiManager::instance().start_sta_radio(channel), TAG, "start ESP-NOW-only radio failed");
     ESP_RETURN_ON_ERROR(require_espnow_active(), TAG, "ESP-NOW link inactive");
     const Mode old_mode = mode;
-    mode = Mode::ESPNOW_ONLY;
+    mode                = Mode::ESPNOW_ONLY;
     update_global_state_flags();
     set_last_error("none");
-    DEVICE_STATE_I(TAG, "wifi: mode old=%u new=%u source=%s result=ok channel=%u",
-                   static_cast<unsigned>(old_mode),
-                   static_cast<unsigned>(mode),
-                   source_or_unknown(source),
-                   static_cast<unsigned>(channel));
+    DEVICE_STATE_I(TAG, "wifi: mode old=%u new=%u source=%s result=ok channel=%u", static_cast<unsigned>(old_mode),
+                   static_cast<unsigned>(mode), source_or_unknown(source), static_cast<unsigned>(channel));
     return ESP_OK;
 }
 
@@ -532,9 +501,9 @@ esp_err_t scan_ap_list(ScanResult* results, size_t max_results, size_t* out_coun
         return ESP_ERR_TIMEOUT;
     }
 
-    wifi_scan_config_t scan_cfg = {};
-    scan_cfg.show_hidden = false;
-    scan_cfg.scan_type = WIFI_SCAN_TYPE_ACTIVE;
+    wifi_scan_config_t scan_cfg   = {};
+    scan_cfg.show_hidden          = false;
+    scan_cfg.scan_type            = WIFI_SCAN_TYPE_ACTIVE;
     scan_cfg.scan_time.active.min = 80;
     scan_cfg.scan_time.active.max = 180;
 
@@ -546,7 +515,7 @@ esp_err_t scan_ap_list(ScanResult* results, size_t max_results, size_t* out_coun
     }
 
     uint16_t ap_num = 0;
-    ret = WiFiManager::instance().scan_get_ap_num(&ap_num);
+    ret             = WiFiManager::instance().scan_get_ap_num(&ap_num);
     if (ret != ESP_OK) {
         set_last_error(esp_err_to_name(ret));
         xSemaphoreGive(scan_mutex);
@@ -554,8 +523,8 @@ esp_err_t scan_ap_list(ScanResult* results, size_t max_results, size_t* out_coun
     }
 
     wifi_ap_record_t records[WIFI_SCAN_MAX_RESULTS] = {};
-    uint16_t fetch_num = ap_num > WIFI_SCAN_MAX_RESULTS ? WIFI_SCAN_MAX_RESULTS : ap_num;
-    ret = WiFiManager::instance().scan_get_ap_records(&fetch_num, records);
+    uint16_t         fetch_num                      = ap_num > WIFI_SCAN_MAX_RESULTS ? WIFI_SCAN_MAX_RESULTS : ap_num;
+    ret                                             = WiFiManager::instance().scan_get_ap_records(&fetch_num, records);
     if (ret != ESP_OK) {
         set_last_error(esp_err_to_name(ret));
         xSemaphoreGive(scan_mutex);
@@ -581,9 +550,9 @@ esp_err_t scan_ap_list(ScanResult* results, size_t max_results, size_t* out_coun
 
         strncpy(results[written].ssid, reinterpret_cast<const char*>(records[i].ssid), WIFI_SSID_MAX_LEN);
         results[written].ssid[WIFI_SSID_MAX_LEN] = '\0';
-        results[written].rssi = records[i].rssi;
-        results[written].channel = records[i].primary;
-        results[written].authmode = records[i].authmode;
+        results[written].rssi                    = records[i].rssi;
+        results[written].channel                 = records[i].primary;
+        results[written].authmode                = records[i].authmode;
         written++;
     }
 
@@ -600,8 +569,7 @@ esp_err_t start_default(const char* source) {
     ESP_RETURN_ON_ERROR(init(), TAG, "init failed");
 
     if (!is_web_enabled_on_boot()) {
-        DEVICE_EVENT_I(TAG, "wifi: startup source=%s web_enabled=0 fallback=espnow_only",
-                       source_or_unknown(source));
+        DEVICE_EVENT_I(TAG, "wifi: startup source=%s web_enabled=0 fallback=espnow_only", source_or_unknown(source));
         return start_espnow_only(source);
     }
 
@@ -626,8 +594,8 @@ esp_err_t stop(const char* source) {
     WebServer::enable_captive_portal(false);
     esp_err_t ret = start_espnow_only(source);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "wifi: web_stop source=%s fallback=espnow_only result=%s",
-                 source_or_unknown(source), esp_err_to_name(ret));
+        ESP_LOGE(TAG, "wifi: web_stop source=%s fallback=espnow_only result=%s", source_or_unknown(source),
+                 esp_err_to_name(ret));
     }
     return ret;
 }
@@ -668,7 +636,7 @@ const char* get_last_error() {
  */
 IP_t get_ip() {
     if (mode == Mode::AP_PROVISION) {
-        IP_t ip = {};
+        IP_t ip   = {};
         ip.octet1 = AP_IP_OCTET1;
         ip.octet2 = AP_IP_OCTET2;
         ip.octet3 = AP_IP_OCTET3;

@@ -20,8 +20,8 @@ namespace SCREEN {
  * 页面对象由注册表实现文件静态持有，避免动态分配并解除 UIManager 对具体页面类型的依赖。
  */
 struct PageRegistry {
-    Page*  const* pages; // 页面指针数组
-    size_t        count; // 页面数量
+    Page* const* pages = nullptr; // 页面指针数组
+    size_t       count = 0;       // 页面数量
 };
 
 /**

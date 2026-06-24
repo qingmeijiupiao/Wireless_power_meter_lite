@@ -20,12 +20,13 @@
 
 namespace WebBackend {
 
-static const char* TAG = "WebBackend";
-static bool initialized = false;
-static bool running = false;
+static const char* TAG         = "WebBackend";
+static bool        initialized = false;
+static bool        running     = false;
 
 /*
  * WebServer 使用单任务串行分发请求，因此响应生成和本地 OTA 上传可以共用
+ *
  * 一块缓冲；handler 返回前响应已经发送完成，后台任务不得保存该指针。
  */
 char web_scratch_buffer[WEB_SCRATCH_BUFFER_SIZE];
@@ -140,7 +141,8 @@ esp_err_t init() {
         if (WifiService::is_provisioning()) {
             return WebServer::send_html_gzip(request, provision_html_file.data, provision_html_file.size);
         }
-        return WebServer::send(request, 404, "application/json", "{\"error\":\"not found\"}\n", strlen("{\"error\":\"not found\"}\n"));
+        return WebServer::send(request, 404, "application/json", "{\"error\":\"not found\"}\n",
+                               strlen("{\"error\":\"not found\"}\n"));
     });
 
     initialized = true;
@@ -159,7 +161,7 @@ esp_err_t start() {
     }
     esp_err_t ret = WebServer::begin();
     if (ret == ESP_OK) {
-        running = true;
+        running                                           = true;
         get_global_state().flags.bits.web_backend_running = true;
         DEVICE_STATE_I(TAG, "web: lifecycle old=stopped new=running port=80 result=ok");
     }
@@ -197,8 +199,7 @@ esp_err_t start_with_wifi_service() {
     }
 
     IP_t ip = WifiService::get_ip();
-    DEVICE_EVENT_I(TAG, "web: endpoint ip=%u.%u.%u.%u port=80",
-                   ip.octet1, ip.octet2, ip.octet3, ip.octet4);
+    DEVICE_EVENT_I(TAG, "web: endpoint ip=%u.%u.%u.%u port=80", ip.octet1, ip.octet2, ip.octet3, ip.octet4);
 
     if (web_ret != ESP_OK) {
         return web_ret;
@@ -208,10 +209,10 @@ esp_err_t start_with_wifi_service() {
 
 /** @brief 停止 HTTP 服务并更新运行标志。 */
 esp_err_t stop() {
-    const bool was_running = running;
-    running = false;
+    const bool was_running                            = running;
+    running                                           = false;
     get_global_state().flags.bits.web_backend_running = false;
-    const esp_err_t ret = WebServer::stop();
+    const esp_err_t ret                               = WebServer::stop();
     if (was_running && ret == ESP_OK) {
         DEVICE_STATE_I(TAG, "web: lifecycle old=running new=stopped result=ok");
     }

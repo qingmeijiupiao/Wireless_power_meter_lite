@@ -18,28 +18,30 @@
 // ==========================================
 // 阈值参数定义 (单位: ms)
 // ==========================================
-constexpr uint32_t BTN_DEBOUNCE_MS     = 5;     /**< 消抖时间 */
-constexpr uint32_t BTN_LONG_MS         = 1000;  /**< 长按判定阈值 */
-constexpr uint32_t BTN_SUPER_LONG_MS   = 3000;  /**< 超长按阈值 */
-constexpr uint32_t BTN_DOUBLE_CLICK_MS = 250;   /**< 双击间隔阈值 */
-constexpr uint32_t BTN_SCAN_TICK_MS    = 10;    /**< 定时器轮询间隔 */
+constexpr uint32_t BTN_DEBOUNCE_MS     = 5;    /**< 消抖时间 */
+constexpr uint32_t BTN_LONG_MS         = 1000; /**< 长按判定阈值 */
+constexpr uint32_t BTN_SUPER_LONG_MS   = 3000; /**< 超长按阈值 */
+constexpr uint32_t BTN_DOUBLE_CLICK_MS = 250;  /**< 双击间隔阈值 */
+constexpr uint32_t BTN_SCAN_TICK_MS    = 10;   /**< 定时器轮询间隔 */
 
 /** 按键事件枚举 */
 enum class ButtonEvent {
-    SHORT_PRESS = 0,    /**< 短按 */
-    DOUBLE_CLICK,       /**< 双击 */
-    LONG_PRESS,         /**< 长按 */
-    SUPER_LONG_PRESS,   /**< 超长按 */
-    SHORT_THEN_LONG,    /**< 短按后长按 */
-    RELEASE,            /**< 松开 */
-    EVENT_MAX           /**< 枚举边界，用于数组长度 */
+    SHORT_PRESS = 0,  /**< 短按 */
+    DOUBLE_CLICK,     /**< 双击 */
+    LONG_PRESS,       /**< 长按 */
+    SUPER_LONG_PRESS, /**< 超长按 */
+    SHORT_THEN_LONG,  /**< 短按后长按 */
+    RELEASE,          /**< 松开 */
+    EVENT_MAX         /**< 枚举边界，用于数组长度 */
 };
 
 using ButtonCallback = std::function<void()>;
 
 class Button {
-public:
+  public:
+    /** @brief 构造未初始化的按键对象。 */
     Button();
+    /** @brief 停止定时器、任务并释放按键资源。 */
     ~Button();
 
     /**
@@ -63,32 +65,37 @@ public:
      */
     void unbind_event(ButtonEvent event);
 
-private:
+  private:
     // 内部状态集 (位域压缩)
     struct {
-        uint8_t click_count  : 3; /**< 点击次数统计 */
-        uint8_t is_long_sent : 1; /**< 是否已发送长按事件 */
-        uint8_t is_super_sent: 1; /**< 是否已发送超长按事件 */
+        uint8_t click_count   : 3; /**< 点击次数统计 */
+        uint8_t is_long_sent  : 1; /**< 是否已发送长按事件 */
+        uint8_t is_super_sent : 1; /**< 是否已发送超长按事件 */
     } _state;
 
     gpio_num_t _pin;
-    bool _active_low;
-    uint32_t _ticks;        /**< 按下持续时间计数 */
-    uint32_t _gap_ticks;    /**< 松开间隔时间计数 */
+    bool       _active_low;
+    uint32_t   _ticks;     /**< 按下持续时间计数 */
+    uint32_t   _gap_ticks; /**< 松开间隔时间计数 */
 
     /** 回调函数数组：通过枚举下标访问，替代 std::map */
-    ButtonCallback _callbacks[static_cast<int>(ButtonEvent::EVENT_MAX)]={nullptr};
-    
-    // 异步处理组件
-    TimerHandle_t _timer = nullptr;
-    QueueHandle_t _evt_queue = nullptr;
-    TaskHandle_t _task_handle = nullptr;
+    ButtonCallback _callbacks[static_cast<int>(ButtonEvent::EVENT_MAX)] = {nullptr};
 
+    // 异步处理组件
+    TimerHandle_t _timer       = nullptr;
+    QueueHandle_t _evt_queue   = nullptr;
+    TaskHandle_t  _task_handle = nullptr;
+
+    /** @brief 周期扫描定时器回调。 */
     static void _timer_callback(TimerHandle_t xTimer);
+    /** @brief 按键事件分发任务入口。 */
     static void _event_task(void* arg);
-    void _run_state_machine();
-    bool _is_pressed();
-    void _post_event(ButtonEvent evt);
+    /** @brief 根据当前电平推进按键状态机。 */
+    void        _run_state_machine();
+    /** @return true 表示当前 GPIO 电平对应按下状态。 */
+    bool        _is_pressed();
+    /** @brief 将识别出的按键事件投递到事件队列。 */
+    void        _post_event(ButtonEvent evt);
 };
 
 #endif

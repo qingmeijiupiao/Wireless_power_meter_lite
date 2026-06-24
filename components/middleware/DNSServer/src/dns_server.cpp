@@ -18,11 +18,11 @@ namespace DNSServer {
 
 static const char* TAG = "DNSServer";
 
-static TaskHandle_t dns_task_handle = nullptr;
-static int dns_socket = -1;
-static ip4_addr_t response_ip = {};
-static uint16_t listen_port = DNS_SERVER_PORT;
-static volatile bool running = false;
+static TaskHandle_t  dns_task_handle = nullptr;
+static int           dns_socket      = -1;
+static ip4_addr_t    response_ip     = {};
+static uint16_t      listen_port     = DNS_SERVER_PORT;
+static volatile bool running         = false;
 
 // DNS收发缓冲区静态分配，避免任务循环中动态申请内存。
 static uint8_t dns_buffer[DNS_SERVER_PACKET_MAX_LEN];
@@ -93,7 +93,7 @@ static int build_response(uint8_t* packet, int length) {
         return -1;
     }
 
-    uint16_t flags = read_u16(packet + 2);
+    uint16_t flags    = read_u16(packet + 2);
     uint16_t qd_count = read_u16(packet + 4);
     if (qd_count == 0) {
         return -1;
@@ -140,30 +140,30 @@ static void dns_task(void* arg) {
     dns_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
     if (dns_socket < 0) {
         ESP_LOGE(TAG, "socket create failed");
-        running = false;
+        running         = false;
         dns_task_handle = nullptr;
         vTaskDelete(nullptr);
         return;
     }
 
-    sockaddr_in server_addr = {};
-    server_addr.sin_family = AF_INET;
+    sockaddr_in server_addr     = {};
+    server_addr.sin_family      = AF_INET;
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    server_addr.sin_port = htons(listen_port);
+    server_addr.sin_port        = htons(listen_port);
 
     int ret = bind(dns_socket, (sockaddr*)&server_addr, sizeof(server_addr));
     if (ret < 0) {
         ESP_LOGE(TAG, "bind failed");
         closesocket(dns_socket);
-        dns_socket = -1;
-        running = false;
+        dns_socket      = -1;
+        running         = false;
         dns_task_handle = nullptr;
         vTaskDelete(nullptr);
         return;
     }
 
     timeval timeout = {};
-    timeout.tv_sec = 1;
+    timeout.tv_sec  = 1;
     timeout.tv_usec = 0;
     setsockopt(dns_socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
@@ -171,8 +171,8 @@ static void dns_task(void* arg) {
 
     while (running) {
         sockaddr_in source_addr = {};
-        socklen_t source_len = sizeof(source_addr);
-        int len = recvfrom(dns_socket, dns_buffer, sizeof(dns_buffer), 0, (sockaddr*)&source_addr, &source_len);
+        socklen_t   source_len  = sizeof(source_addr);
+        int         len = recvfrom(dns_socket, dns_buffer, sizeof(dns_buffer), 0, (sockaddr*)&source_addr, &source_len);
         if (len <= 0) {
             continue;
         }
@@ -198,11 +198,12 @@ esp_err_t start(ip4_addr_t captive_ip, uint16_t port) {
 
     response_ip = captive_ip;
     listen_port = port;
-    running = true;
+    running     = true;
 
-    BaseType_t ok = xTaskCreate(dns_task, "dns_server", DNS_SERVER_TASK_STACK, nullptr, DNS_SERVER_TASK_PRIO, &dns_task_handle);
+    BaseType_t ok =
+        xTaskCreate(dns_task, "dns_server", DNS_SERVER_TASK_STACK, nullptr, DNS_SERVER_TASK_PRIO, &dns_task_handle);
     if (ok != pdPASS) {
-        running = false;
+        running         = false;
         dns_task_handle = nullptr;
         return ESP_ERR_NO_MEM;
     }
@@ -237,4 +238,4 @@ bool is_running() {
     return running;
 }
 
-}
+} // namespace DNSServer

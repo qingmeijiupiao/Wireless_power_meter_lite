@@ -20,11 +20,11 @@
 namespace TimeService {
 namespace {
 
-constexpr char TAG[] = "TimeService";
-constexpr char TIMEZONE[] = "CST-8";
-constexpr size_t NTP_SERVER_COUNT = 5;
-constexpr size_t EVENT_QUEUE_LENGTH = 8;
-constexpr uint32_t WORKER_STACK_SIZE = 3072;
+constexpr char     TAG[]              = "TimeService";
+constexpr char     TIMEZONE[]         = "CST-8";
+constexpr size_t   NTP_SERVER_COUNT   = 5;
+constexpr size_t   EVENT_QUEUE_LENGTH = 8;
+constexpr uint32_t WORKER_STACK_SIZE  = 3072;
 
 // 事件回调只投递轻量消息，格式化日志和 SNTP 重启均在后台任务执行。
 enum class EventType : uint8_t {
@@ -33,16 +33,16 @@ enum class EventType : uint8_t {
 };
 
 struct Event {
-    EventType type;
+    EventType      type;
     struct timeval synced_time;
 };
 
-bool initialized = false;
-bool synchronized = false;
-time_t last_sync = 0;
-QueueHandle_t event_queue = nullptr;
-TaskHandle_t worker_task = nullptr;
-portMUX_TYPE state_lock = portMUX_INITIALIZER_UNLOCKED;
+bool          initialized  = false;
+bool          synchronized = false;
+time_t        last_sync    = 0;
+QueueHandle_t event_queue  = nullptr;
+TaskHandle_t  worker_task  = nullptr;
+portMUX_TYPE  state_lock   = portMUX_INITIALIZER_UNLOCKED;
 
 /**
  * @brief 非阻塞投递时间服务事件
@@ -52,8 +52,7 @@ portMUX_TYPE state_lock = portMUX_INITIALIZER_UNLOCKED;
  */
 void enqueue_event(const Event& event) {
     if (event_queue == nullptr || xQueueSend(event_queue, &event, 0) != pdTRUE) {
-        ESP_LOGW(TAG, "time: event_queue result=dropped type=%u",
-                 static_cast<unsigned>(event.type));
+        ESP_LOGW(TAG, "time: event_queue result=dropped type=%u", static_cast<unsigned>(event.type));
     }
 }
 
@@ -63,9 +62,9 @@ void sntp_event_handler(void*, esp_event_base_t, int32_t event_id, void* event_d
     }
 
     const auto* sync_event = static_cast<const esp_netif_sntp_time_sync_t*>(event_data);
-    Event event = {};
-    event.type = EventType::SYNCED;
-    event.synced_time = sync_event->tv;
+    Event       event      = {};
+    event.type             = EventType::SYNCED;
+    event.synced_time      = sync_event->tv;
     enqueue_event(event);
 }
 
@@ -75,7 +74,7 @@ void ip_event_handler(void*, esp_event_base_t, int32_t event_id, void*) {
     }
 
     Event event = {};
-    event.type = EventType::NETWORK_READY;
+    event.type  = EventType::NETWORK_READY;
     enqueue_event(event);
 }
 
@@ -87,28 +86,26 @@ void ip_event_handler(void*, esp_event_base_t, int32_t event_id, void*) {
  */
 void log_sync_event(const struct timeval& synced_time) {
     const time_t utc_seconds = synced_time.tv_sec;
-    struct tm utc = {};
-    struct tm local = {};
+    struct tm    utc         = {};
+    struct tm    local       = {};
     gmtime_r(&utc_seconds, &utc);
     localtime_r(&utc_seconds, &local);
 
-    char utc_text[24] = {};
+    char utc_text[24]   = {};
     char local_text[30] = {};
     strftime(utc_text, sizeof(utc_text), "%Y-%m-%dT%H:%M:%SZ", &utc);
     strftime(local_text, sizeof(local_text), "%Y-%m-%dT%H:%M:%S+08:00", &local);
 
     portENTER_CRITICAL(&state_lock);
     synchronized = true;
-    last_sync = utc_seconds;
+    last_sync    = utc_seconds;
     portEXIT_CRITICAL(&state_lock);
 
     DEVICE_STATE_I(TAG, "time: sync old=unsynchronized new=synchronized unix_s=%lld unix_us=%ld",
-                   static_cast<long long>(utc_seconds),
-                   static_cast<long>(synced_time.tv_usec));
-    DEVICE_EVENT_I(TAG, "time: utc unix_s=%lld iso=%s",
-                   static_cast<long long>(utc_seconds), utc_text);
-    DEVICE_EVENT_I(TAG, "time: local unix_s=%lld iso=%s timezone=%s",
-                   static_cast<long long>(utc_seconds), local_text, TIMEZONE);
+                   static_cast<long long>(utc_seconds), static_cast<long>(synced_time.tv_usec));
+    DEVICE_EVENT_I(TAG, "time: utc unix_s=%lld iso=%s", static_cast<long long>(utc_seconds), utc_text);
+    DEVICE_EVENT_I(TAG, "time: local unix_s=%lld iso=%s timezone=%s", static_cast<long long>(utc_seconds), local_text,
+                   TIMEZONE);
 }
 
 void time_service_task(void*) {
@@ -126,8 +123,7 @@ void time_service_task(void*) {
         // STA 恢复 IP 后主动重启请求，不等待下一次 lwIP 周期校时。
         const esp_err_t ret = esp_netif_sntp_start();
         if (ret != ESP_OK) {
-            ESP_LOGW(TAG, "time: sntp_restart source=network_recovery result=%s",
-                     esp_err_to_name(ret));
+            ESP_LOGW(TAG, "time: sntp_restart source=network_recovery result=%s", esp_err_to_name(ret));
         } else {
             DEVICE_EVENT_I(TAG, "time: sntp_restart source=network_recovery result=ok");
         }
@@ -159,15 +155,13 @@ esp_err_t init() {
     if (event_queue == nullptr) {
         return ESP_ERR_NO_MEM;
     }
-    if (xTaskCreate(time_service_task, "time_service", WORKER_STACK_SIZE,
-                    nullptr, 3, &worker_task) != pdPASS) {
+    if (xTaskCreate(time_service_task, "time_service", WORKER_STACK_SIZE, nullptr, 3, &worker_task) != pdPASS) {
         vQueueDelete(event_queue);
         event_queue = nullptr;
         return ESP_ERR_NO_MEM;
     }
 
-    ret = esp_event_handler_register(NETIF_SNTP_EVENT, NETIF_SNTP_TIME_SYNC,
-                                     sntp_event_handler, nullptr);
+    ret = esp_event_handler_register(NETIF_SNTP_EVENT, NETIF_SNTP_TIME_SYNC, sntp_event_handler, nullptr);
     if (ret != ESP_OK) {
         vTaskDelete(worker_task);
         vQueueDelete(event_queue);
@@ -175,11 +169,9 @@ esp_err_t init() {
         event_queue = nullptr;
         return ret;
     }
-    ret = esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
-                                     ip_event_handler, nullptr);
+    ret = esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, ip_event_handler, nullptr);
     if (ret != ESP_OK) {
-        esp_event_handler_unregister(NETIF_SNTP_EVENT, NETIF_SNTP_TIME_SYNC,
-                                     sntp_event_handler);
+        esp_event_handler_unregister(NETIF_SNTP_EVENT, NETIF_SNTP_TIME_SYNC, sntp_event_handler);
         vTaskDelete(worker_task);
         vQueueDelete(event_queue);
         worker_task = nullptr;
@@ -189,20 +181,14 @@ esp_err_t init() {
 
     // 仅组合标准 UTC 时间源，避免混用 leap-smear 与非 leap-smear 服务。
     esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG_MULTIPLE(
-        NTP_SERVER_COUNT,
-        ESP_SNTP_SERVER_LIST("0.pool.ntp.org",
-                             "time.cloudflare.com",
-                             "time.nist.gov",
-                             "1.pool.ntp.org",
-                             "2.pool.ntp.org"));
-    config.smooth_sync = true;
+        NTP_SERVER_COUNT, ESP_SNTP_SERVER_LIST("0.pool.ntp.org", "time.cloudflare.com", "time.nist.gov",
+                                               "1.pool.ntp.org", "2.pool.ntp.org"));
+    config.smooth_sync   = true;
     config.wait_for_sync = false;
-    ret = esp_netif_sntp_init(&config);
+    ret                  = esp_netif_sntp_init(&config);
     if (ret != ESP_OK) {
-        esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP,
-                                     ip_event_handler);
-        esp_event_handler_unregister(NETIF_SNTP_EVENT, NETIF_SNTP_TIME_SYNC,
-                                     sntp_event_handler);
+        esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, ip_event_handler);
+        esp_event_handler_unregister(NETIF_SNTP_EVENT, NETIF_SNTP_TIME_SYNC, sntp_event_handler);
         vTaskDelete(worker_task);
         vQueueDelete(event_queue);
         worker_task = nullptr;
@@ -211,8 +197,8 @@ esp_err_t init() {
     }
 
     initialized = true;
-    DEVICE_EVENT_I(TAG, "time: init timezone=%s ntp_servers=%u smooth_sync=1 result=ok",
-                   TIMEZONE, static_cast<unsigned>(NTP_SERVER_COUNT));
+    DEVICE_EVENT_I(TAG, "time: init timezone=%s ntp_servers=%u smooth_sync=1 result=ok", TIMEZONE,
+                   static_cast<unsigned>(NTP_SERVER_COUNT));
     return ESP_OK;
 }
 

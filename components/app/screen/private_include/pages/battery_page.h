@@ -16,14 +16,18 @@ namespace SCREEN {
  * @brief 电量页，显示实时测量值、输出状态、累计电量和计量时间。
  */
 class BatteryPage final : public Page {
-public:
-    PageId id() const override;
+  public:
+    /** @brief `id` 接口。 */
+    PageId      id() const override;
+    /** @brief `title` 接口。 */
     const char* title() const override;
-    uint32_t refresh_interval_ms() const override;
-    bool handle_button(ButtonId button, ButtonEvent event) override;
-    void render(RenderMode mode) override;
+    /** @brief `refresh_interval_ms` 接口。 */
+    uint32_t    refresh_interval_ms() const override;
+    /** @brief `handle_button` 接口。 */
+    bool        handle_button(ButtonId button, ButtonEvent event) override;
+    /** @brief `render` 接口。 */
+    void        render(RenderMode mode) override;
 };
-
 
 } // namespace SCREEN
 

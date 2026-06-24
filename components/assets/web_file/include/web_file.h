@@ -14,7 +14,7 @@ extern "C" {
  */
 struct EmbeddedFile {
     const char* data;
-    size_t size;
+    size_t      size;
 };
 
 extern const EmbeddedFile index_html_file;
@@ -28,7 +28,6 @@ extern const EmbeddedFile provision_html_file;
 extern const EmbeddedFile app_css_file;
 // extern const EmbeddedFile StyleCss;
 // extern const EmbeddedFile XtermJs;
-
 
 #ifdef __cplusplus
 }

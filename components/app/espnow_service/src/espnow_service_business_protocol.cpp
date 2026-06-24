@@ -11,11 +11,11 @@
 namespace EspNowService::Internal {
 namespace {
 
-constexpr size_t SWITCH_REQUEST_SIZE = 5;
+constexpr size_t SWITCH_REQUEST_SIZE  = 5;
 constexpr size_t SWITCH_RESPONSE_SIZE = 7;
-constexpr size_t REMOTE_BATTERY_SIZE = 1;
-constexpr size_t DATA_REQUEST_SIZE = 4;
-constexpr size_t DATA_MESSAGE_SIZE = 40;
+constexpr size_t REMOTE_BATTERY_SIZE  = 1;
+constexpr size_t DATA_REQUEST_SIZE    = 4;
+constexpr size_t DATA_MESSAGE_SIZE    = 40;
 
 } // namespace
 
@@ -38,9 +38,7 @@ size_t encode_switch_request(const SwitchRequest& request, uint8_t* output, size
  * @layout [0..3] request_id, [4] action, [5] result, [6] output_on
  * @return 成功时返回 7，参数或容量无效时返回 0
  */
-size_t encode_switch_response(const SwitchResponse& response,
-                              uint8_t* output,
-                              size_t capacity) {
+size_t encode_switch_response(const SwitchResponse& response, uint8_t* output, size_t capacity) {
     if (output == nullptr || capacity < SWITCH_RESPONSE_SIZE) {
         return 0;
     }
@@ -95,10 +93,8 @@ size_t encode_data_message(const DataMessage& message, uint8_t* output, size_t c
     output[5] = message.data.status_flags;
     EspNowLink::Codec::store_le<uint16_t>(output + 6, message.data.voltage_mv);
     EspNowLink::Codec::store_le<int32_t>(output + 8, message.data.current_ua);
-    EspNowLink::Codec::store_le<int16_t>(
-        output + 12, message.data.board_temperature_centi_c);
-    EspNowLink::Codec::store_le<int16_t>(
-        output + 14, message.data.chip_temperature_centi_c);
+    EspNowLink::Codec::store_le<int16_t>(output + 12, message.data.board_temperature_centi_c);
+    EspNowLink::Codec::store_le<int16_t>(output + 14, message.data.chip_temperature_centi_c);
     EspNowLink::Codec::store_le<int64_t>(output + 16, message.data.charge_uah);
     EspNowLink::Codec::store_le<int64_t>(output + 24, message.data.energy_uwh);
     EspNowLink::Codec::store_le<uint64_t>(output + 32, message.data.meter_time_ms);

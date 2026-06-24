@@ -19,7 +19,8 @@ namespace PowerOutput {
  * @note  仅在 ON 操作时检查，OFF 操作始终允许
  */
 class ProtectPolicy : public OutputPolicy {
-public:
+  public:
+    /** @brief `check` 接口。 */
     OutputResult check(OutputOperation op, bool current_state) override {
         if (op == OutputOperation::ON && protect_should_block_output()) {
             ESP_LOGW("ProtectPolicy", "protect active, cannot turn on");
@@ -28,9 +29,10 @@ public:
         return OutputResult::OK;
     }
 
+    /** @brief `on_state_applied` 接口。 */
     void on_state_applied(OutputOperation op, bool new_state) override {}
 };
 
-}
+} // namespace PowerOutput
 
 #endif

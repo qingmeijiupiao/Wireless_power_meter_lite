@@ -12,8 +12,13 @@
 #include "shell.h"
 namespace ShellCommand {
 
+/**
+ * @brief 初始化 Shell 并注册产品命令。
+ * @return ESP_OK 初始化成功；其他值表示 Shell 或命令注册失败。
+
+ */
 esp_err_t init();
 
-}
+} // namespace ShellCommand
 
 #endif

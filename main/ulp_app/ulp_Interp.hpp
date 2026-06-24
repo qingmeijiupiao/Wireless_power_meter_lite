@@ -14,12 +14,14 @@
  * @tparam OutputType 输出值类型，应为定点数整型（如 int32_t）
  * @tparam N 校准点数量，编译期确定
  */
-template<typename InputType, typename OutputType, int N>
-class UlpNonEquidistantInterp {
-public:
+template <typename InputType, typename OutputType, int N> class UlpNonEquidistantInterp {
+  public:
     enum class Monotonicity { INCREASING, DECREASING }; /**< 输入序列单调性 */
 
-    struct Point { InputType x; OutputType y; };        /**< 校准点结构体 */
+    struct Point {
+        InputType  x;
+        OutputType y;
+    }; /**< 校准点结构体 */
 
     /**
      * @brief 构造未加载校准数据的插值表。
@@ -37,12 +39,11 @@ public:
      */
     void load(Point (&pts)[N]) noexcept {
         for (int i = 0; i < N; ++i) {
-            inputs_[i] = pts[i].x;
+            inputs_[i]  = pts[i].x;
             outputs_[i] = pts[i].y;
         }
-        monotonicity_ = (inputs_[0] < inputs_[N - 1])
-            ? Monotonicity::INCREASING : Monotonicity::DECREASING;
-        loaded_ = true;
+        monotonicity_ = (inputs_[0] < inputs_[N - 1]) ? Monotonicity::INCREASING : Monotonicity::DECREASING;
+        loaded_       = true;
     }
 
     /**
@@ -54,12 +55,11 @@ public:
      */
     void load(InputType* xs, OutputType* ys) noexcept {
         for (int i = 0; i < N; ++i) {
-            inputs_[i] = xs[i];
+            inputs_[i]  = xs[i];
             outputs_[i] = ys[i];
         }
-        monotonicity_ = (inputs_[0] < inputs_[N - 1])
-            ? Monotonicity::INCREASING : Monotonicity::DECREASING;
-        loaded_ = true;
+        monotonicity_ = (inputs_[0] < inputs_[N - 1]) ? Monotonicity::INCREASING : Monotonicity::DECREASING;
+        loaded_       = true;
     }
 
     /**
@@ -72,7 +72,7 @@ public:
      */
     void set_point(int idx, InputType x, OutputType y) noexcept {
         if (idx >= 0 && idx < N) {
-            inputs_[idx] = x;
+            inputs_[idx]  = x;
             outputs_[idx] = y;
         }
     }
@@ -83,9 +83,8 @@ public:
      * @note 调用此函数前需确保所有校准点已通过 `set_point()` 设置完毕。
      */
     void finish_load() noexcept {
-        monotonicity_ = (inputs_[0] < inputs_[N - 1])
-            ? Monotonicity::INCREASING : Monotonicity::DECREASING;
-        loaded_ = true;
+        monotonicity_ = (inputs_[0] < inputs_[N - 1]) ? Monotonicity::INCREASING : Monotonicity::DECREASING;
+        loaded_       = true;
     }
 
     /**
@@ -93,7 +92,9 @@ public:
      *
      * @return true 已加载校准数据；false 尚未加载。
      */
-    bool is_loaded() const noexcept { return loaded_; }
+    bool is_loaded() const noexcept {
+        return loaded_;
+    }
 
     /**
      * @brief 对输入值执行分段线性插值。
@@ -105,8 +106,8 @@ public:
      */
     OutputType interpolate(InputType x) const noexcept {
         // 原点对称处理：负数输入取绝对值插值，结果取反
-        bool negative = (x < 0);
-        InputType ax = negative ? -x : x;
+        bool      negative = (x < 0);
+        InputType ax       = negative ? -x : x;
 
         // 截断边界处理（ax >= 0，校准点均为正数，只检查递增上界）
         if (ax >= inputs_[N - 1]) {
@@ -150,7 +151,7 @@ public:
         return monotonicity_ == Monotonicity::INCREASING ? inputs_[N - 1] : inputs_[0];
     }
 
-private:
+  private:
     /**
      * @brief 二分查找输入值所在区间。
      *
@@ -179,15 +180,17 @@ private:
             }
         }
         int i = lo - 1;
-        if (i < 0) i = 0;
-        if (i >= N - 1) i = N - 2;
+        if (i < 0)
+            i = 0;
+        if (i >= N - 1)
+            i = N - 2;
         return i;
     }
 
-    InputType  inputs_[N];                          /**< 校准点输入值数组 */
-    OutputType outputs_[N];                         /**< 校准点输出值数组 */
-    Monotonicity monotonicity_;                      /**< 输入序列单调性 */
-    bool loaded_;                                    /**< 校准数据是否已加载 */
+    InputType    inputs_[N];    /**< 校准点输入值数组 */
+    OutputType   outputs_[N];   /**< 校准点输出值数组 */
+    Monotonicity monotonicity_; /**< 输入序列单调性 */
+    bool         loaded_;       /**< 校准数据是否已加载 */
 };
 
 #endif

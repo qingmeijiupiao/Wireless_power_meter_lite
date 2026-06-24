@@ -32,10 +32,10 @@ enum class State : uint8_t {
 };
 
 struct Status {
-    State state;
-    size_t image_size;                    /**< begin() 接收的固件长度。 */
-    size_t bytes_written;                 /**< 当前会话累计写入字节数。 */
-    const esp_partition_t* target_partition;
+    State                  state            = State::IDLE;
+    size_t                 image_size       = 0;       /**< begin() 接收的固件长度。 */
+    size_t                 bytes_written    = 0;       /**< 当前会话累计写入字节数。 */
+    const esp_partition_t* target_partition = nullptr; /**< 当前 OTA 目标分区。 */
 };
 
 /**

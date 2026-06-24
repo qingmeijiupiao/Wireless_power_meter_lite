@@ -6,7 +6,7 @@
  */
 #include "pwm.h"
 
-static const char *TAG = "PWM";
+static const char* TAG = "PWM";
 
 uint8_t pwm_t::channel_used = 0;
 
@@ -17,8 +17,7 @@ pwm_t::~pwm_t() {
     }
 }
 
-esp_err_t pwm_t::init(gpio_num_t _gpio_num,
-                       uint32_t _freq_hz, ledc_timer_bit_t _duty_resolution) {
+esp_err_t pwm_t::init(gpio_num_t _gpio_num, uint32_t _freq_hz, ledc_timer_bit_t _duty_resolution) {
     if (initialized) {
         return ESP_OK;
     }
@@ -35,19 +34,19 @@ esp_err_t pwm_t::init(gpio_num_t _gpio_num,
         return ESP_ERR_NOT_FOUND;
     }
 
-    channel = (ledc_channel_t)ch;
-    timer = (ledc_timer_t)ch;
-    gpio_num = _gpio_num;
-    freq_hz = _freq_hz;
+    channel         = (ledc_channel_t)ch;
+    timer           = (ledc_timer_t)ch;
+    gpio_num        = _gpio_num;
+    freq_hz         = _freq_hz;
     duty_resolution = _duty_resolution;
 
     ledc_timer_config_t timer_conf = {
-        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .speed_mode      = LEDC_LOW_SPEED_MODE,
         .duty_resolution = duty_resolution,
-        .timer_num = timer,
-        .freq_hz = freq_hz,
-        .clk_cfg = LEDC_AUTO_CLK,
-        .deconfigure = false,
+        .timer_num       = timer,
+        .freq_hz         = freq_hz,
+        .clk_cfg         = LEDC_AUTO_CLK,
+        .deconfigure     = false,
     };
     esp_err_t ret = ledc_timer_config(&timer_conf);
     if (ret != ESP_OK) {
@@ -56,15 +55,15 @@ esp_err_t pwm_t::init(gpio_num_t _gpio_num,
     }
 
     ledc_channel_config_t chan_conf = {
-        .gpio_num = gpio_num,
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .channel = channel,
-        .intr_type = LEDC_INTR_DISABLE,
-        .timer_sel = timer,
-        .duty = 0,
-        .hpoint = 0,
-        .sleep_mode = LEDC_SLEEP_MODE_NO_ALIVE_NO_PD,
-        .flags = {},
+        .gpio_num    = gpio_num,
+        .speed_mode  = LEDC_LOW_SPEED_MODE,
+        .channel     = channel,
+        .intr_type   = LEDC_INTR_DISABLE,
+        .timer_sel   = timer,
+        .duty        = 0,
+        .hpoint      = 0,
+        .sleep_mode  = LEDC_SLEEP_MODE_NO_ALIVE_NO_PD,
+        .flags       = {},
         .deconfigure = false,
     };
     ret = ledc_channel_config(&chan_conf);
@@ -74,7 +73,7 @@ esp_err_t pwm_t::init(gpio_num_t _gpio_num,
     }
 
     channel_used |= (1 << ch);
-    initialized = true;
+    initialized   = true;
     return ESP_OK;
 }
 
@@ -90,10 +89,12 @@ esp_err_t pwm_t::set_duty_percent(float percent) {
     if (!initialized) {
         return ESP_ERR_INVALID_STATE;
     }
-    if (percent < 0.0f) percent = 0.0f;
-    if (percent > 100.0f) percent = 100.0f;
-    uint32_t duty = (uint32_t)(percent / 100.0f * (1 << duty_resolution));
-    esp_err_t ret = ledc_set_duty(LEDC_LOW_SPEED_MODE, channel, duty);
+    if (percent < 0.0f)
+        percent = 0.0f;
+    if (percent > 100.0f)
+        percent = 100.0f;
+    uint32_t  duty = (uint32_t)(percent / 100.0f * (1 << duty_resolution));
+    esp_err_t ret  = ledc_set_duty(LEDC_LOW_SPEED_MODE, channel, duty);
     if (ret != ESP_OK) {
         return ret;
     }

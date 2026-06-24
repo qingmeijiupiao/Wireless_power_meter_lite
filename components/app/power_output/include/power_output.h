@@ -16,16 +16,16 @@ namespace PowerOutput {
 
 /** 输出操作结果枚举 */
 enum class OutputResult : uint8_t {
-    OK = 0,                    /**< 操作成功 */
-    FAIL_NOT_INIT,             /**< 模块未初始化 */
-    FAIL_PROTECT_ACTIVE,       /**< 保护状态激活，阻止开启 */
-    FAIL_COOLDOWN_ACTIVE,      /**< 冷却时间未到，阻止操作 */
+    OK = 0,               /**< 操作成功 */
+    FAIL_NOT_INIT,        /**< 模块未初始化 */
+    FAIL_PROTECT_ACTIVE,  /**< 保护状态激活，阻止开启 */
+    FAIL_COOLDOWN_ACTIVE, /**< 冷却时间未到，阻止操作 */
 };
 
 /** 输出操作类型枚举 */
 enum class OutputOperation : uint8_t {
-    ON,                        /**< 开启操作 */
-    OFF,                       /**< 关闭操作 */
+    ON,  /**< 开启操作 */
+    OFF, /**< 关闭操作 */
 };
 
 /**
@@ -35,7 +35,8 @@ enum class OutputOperation : uint8_t {
  *        操作完成后调用 on_state_applied() 通知策略更新内部状态
  */
 class OutputPolicy {
-public:
+  public:
+    /** @brief `~OutputPolicy` 接口。 */
     virtual ~OutputPolicy() = default;
 
     /**
@@ -108,6 +109,6 @@ void add_on_change_callback(OnOutputChangeCallback cb);
  */
 void add_policy(OutputPolicy* policy);
 
-}
+} // namespace PowerOutput
 
 #endif

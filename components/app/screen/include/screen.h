@@ -18,14 +18,14 @@ namespace SCREEN {
 /** 默认开机画面显示时长，单位 ms。 */
 static constexpr uint32_t DEFAULT_START_LOGO_DURATION_MS = 2000;
 /** 开机画面最大显示时长，单位 ms。 */
-static constexpr uint32_t MAX_START_LOGO_DURATION_MS = 10000;
+static constexpr uint32_t MAX_START_LOGO_DURATION_MS     = 10000;
 
 /**
  * @brief UI 层识别的物理按键
  */
 enum class ButtonId : uint8_t {
-    Main,  /**< 正面主按键 */
-    Side,  /**< 侧边功能按键 */
+    Main, /**< 正面主按键 */
+    Side, /**< 侧边功能按键 */
 };
 
 /**
@@ -41,13 +41,17 @@ esp_err_t init_buttons();
 
 /**
  * @brief 获取持久化保存的开机画面显示时长。
- * @return 显示时长，单位 ms；返回 0 表示关闭开机画面。
+ * @return 显示时长，单位 ms；返回 0
+ * 表示关闭开机画面。
+
  */
 uint32_t get_start_logo_duration_ms();
 
 /**
  * @brief 设置并持久化开机画面显示时长。
  * @param duration_ms 显示时长，单位 ms；传入 0 表示关闭开机画面。
+
+ * *
  * @return ESP_OK 表示保存成功，其他值表示 NVS 写入失败。
  */
 esp_err_t set_start_logo_duration_ms(uint32_t duration_ms);

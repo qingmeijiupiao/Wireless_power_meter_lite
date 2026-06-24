@@ -11,8 +11,8 @@
 
 #define FONT_CHAR_NUM 95
 
-struct Font_t{
-    const uint8_t  font_height; //只支持等高字体，高度为font_height
+struct Font_t {
+    const uint8_t  font_height; // 只支持等高字体，高度为font_height
     const uint8_t* width_table;
     const uint8_t* font_data;
 };

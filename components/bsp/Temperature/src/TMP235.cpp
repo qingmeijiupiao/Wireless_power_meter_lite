@@ -36,8 +36,8 @@ int16_t TMP235_t::getTemperature() {
         }
         return 0;
     }
-    int adc_value_mv = 0;
-    esp_err_t ret = adc->read_voltage_mV(adc_value_mv);
+    int       adc_value_mv = 0;
+    esp_err_t ret          = adc->read_voltage_mV(adc_value_mv);
     if (ret != ESP_OK) {
         if (!fault_reported) {
             ESP_LOGE("TMP235", "ADC read failed: %s", esp_err_to_name(ret));
@@ -53,8 +53,7 @@ int16_t TMP235_t::getTemperature() {
         return avg_buf_count == 0 ? 0 : avg_sum / avg_buf_count;
     }
     if (fault_reported) {
-        DEVICE_STATE_I("TMP235",
-                       "temperature: sensor=board old=fault new=ready result=recovered voltage_mv=%d",
+        DEVICE_STATE_I("TMP235", "temperature: sensor=board old=fault new=ready result=recovered voltage_mv=%d",
                        adc_value_mv);
         fault_reported = false;
     }
@@ -67,10 +66,10 @@ int16_t TMP235_t::getTemperature() {
         raw_temp = (adc_value_mv - 1753) * 1000 / 106 + 12500;
     }
 
-    avg_sum -= avg_buf[avg_buf_idx];
-    avg_buf[avg_buf_idx] = raw_temp;
-    avg_sum += raw_temp;
-    avg_buf_idx = (avg_buf_idx + 1) % AVG_BUF_SIZE;
+    avg_sum              -= avg_buf[avg_buf_idx];
+    avg_buf[avg_buf_idx]  = raw_temp;
+    avg_sum              += raw_temp;
+    avg_buf_idx           = (avg_buf_idx + 1) % AVG_BUF_SIZE;
     if (avg_buf_count < AVG_BUF_SIZE) {
         avg_buf_count++;
     }

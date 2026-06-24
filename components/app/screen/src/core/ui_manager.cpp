@@ -27,11 +27,16 @@ const char* button_to_str(ButtonId button) {
 
 const char* event_to_str(ButtonEvent event) {
     switch (event) {
-        case ButtonEvent::SHORT_PRESS: return "short";
-        case ButtonEvent::DOUBLE_CLICK: return "double";
-        case ButtonEvent::LONG_PRESS: return "long";
-        case ButtonEvent::SUPER_LONG_PRESS: return "super_long";
-        default: return "unknown";
+    case ButtonEvent::SHORT_PRESS:
+        return "short";
+    case ButtonEvent::DOUBLE_CLICK:
+        return "double";
+    case ButtonEvent::LONG_PRESS:
+        return "long";
+    case ButtonEvent::SUPER_LONG_PRESS:
+        return "super_long";
+    default:
+        return "unknown";
     }
 }
 
@@ -62,7 +67,7 @@ bool UIManager::init() {
     }
     current_page_ = 0;
     current_page()->on_enter();
-    full_redraw_ = true;
+    full_redraw_    = true;
     last_render_ms_ = 0;
     return true;
 }
@@ -75,14 +80,14 @@ bool UIManager::post_button_event(ButtonId button, ButtonEvent event) {
 
     ButtonMessage msg = {
         .button = button,
-        .event = event,
+        .event  = event,
     };
     return xQueueSend(event_queue_, &msg, 0) == pdTRUE;
 }
 
 void UIManager::apply_saved_display_config() {
-    bool rotate_180 = ui_config_get_rotation_180();
-    uint8_t level = ui_config_get_backlight_level();
+    bool    rotate_180 = ui_config_get_rotation_180();
+    uint8_t level      = ui_config_get_backlight_level();
 
     // 页面仍使用 160x80 逻辑坐标，旋转映射交给 ST7735 驱动处理。
     ST7735::set_rotation(rotate_180 ? ST7735::Rotation::HorizontalMirror : ST7735::Rotation::Horizontal);
@@ -109,7 +114,7 @@ void UIManager::loop_once() {
 
     // 当前页面实现均为整屏绘制，因此每帧直接同步当前缓冲即可。
     ST7735::sync_buffers();
-    full_redraw_ = false;
+    full_redraw_    = false;
     last_render_ms_ = now_ms;
 }
 
@@ -181,7 +186,7 @@ void UIManager::next_page() {
     page->on_edit_exit();
     page->on_exit();
     const char* previous_title = page->title();
-    current_page_ = (current_page_ + 1) % static_cast<uint8_t>(PageId::Count);
+    current_page_              = (current_page_ + 1) % static_cast<uint8_t>(PageId::Count);
     current_page()->on_enter();
     ESP_LOGI(TAG, "page %s -> %s", previous_title, current_page()->title());
     full_redraw_ = true;

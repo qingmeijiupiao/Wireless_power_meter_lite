@@ -14,12 +14,15 @@
 #include "esp_log.h"
 
 class ESPChipTemperatureSensor_t {
-public:
+  public:
+    /** @brief `instance` 接口。 */
     static ESPChipTemperatureSensor_t& instance();
 
-    ESPChipTemperatureSensor_t(const ESPChipTemperatureSensor_t&) = delete;
+    /** @brief `ESPChipTemperatureSensor_t` 接口。 */
+    ESPChipTemperatureSensor_t(const ESPChipTemperatureSensor_t&)            = delete;
     ESPChipTemperatureSensor_t& operator=(const ESPChipTemperatureSensor_t&) = delete;
 
+    /** @brief `init` 接口。 */
     esp_err_t init();
 
     /**
@@ -28,21 +31,24 @@ public:
      */
     float getTemperature();
 
-private:
+  private:
+    /** @brief `ESPChipTemperatureSensor_t` 接口。 */
     ESPChipTemperatureSensor_t() = default;
 
+    /** @brief `switchRange` 接口。 */
     esp_err_t switchRange(uint8_t range_index);
-    int8_t checkswitchRange();
+    /** @brief `checkswitchRange` 接口。 */
+    int8_t    checkswitchRange();
 
-    temperature_sensor_handle_t tsens = nullptr;
-    int16_t current_range_min = 0;
-    int16_t current_range_max = 0;
-    uint8_t current_range_index = 0;
-    int16_t absolute_max_temperature = 0;
-    int16_t absolute_min_temperature = 0;
-    float temp_data = 0.0f;
-    temperature_sensor_config_t tsens_config = {};
-    bool fault_reported = false;
+    temperature_sensor_handle_t tsens                    = nullptr;
+    int16_t                     current_range_min        = 0;
+    int16_t                     current_range_max        = 0;
+    uint8_t                     current_range_index      = 0;
+    int16_t                     absolute_max_temperature = 0;
+    int16_t                     absolute_min_temperature = 0;
+    float                       temp_data                = 0.0f;
+    temperature_sensor_config_t tsens_config             = {};
+    bool                        fault_reported           = false;
 };
 
 #endif

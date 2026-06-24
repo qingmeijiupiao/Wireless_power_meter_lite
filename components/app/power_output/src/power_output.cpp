@@ -19,7 +19,7 @@ namespace PowerOutput {
 
 static constexpr char TAG[] = "PowerOutput";
 
-constexpr size_t MAX_POLICIES = 8;
+constexpr size_t MAX_POLICIES  = 8;
 constexpr size_t MAX_CALLBACKS = 8;
 
 // =====================================================================
@@ -27,15 +27,15 @@ constexpr size_t MAX_CALLBACKS = 8;
 // =====================================================================
 
 static CppGpioDriver<GPIO_NUM_NC, GpioMode::OUTPUT> _output_gpio;
-static bool _initialized = false;
+static bool                                         _initialized = false;
 
 static std::array<OnOutputChangeCallback, MAX_CALLBACKS> _change_callbacks;
-static size_t _callback_count = 0;
+static size_t                                            _callback_count = 0;
 
 static std::array<OutputPolicy*, MAX_POLICIES> _policies;
-static size_t _policy_count = 0;
+static size_t                                  _policy_count = 0;
 
-static ProtectPolicy _protect_policy;
+static ProtectPolicy  _protect_policy;
 static CooldownPolicy _cooldown_policy(OUTPUT_ON_COOLDOWN_MS, OUTPUT_OFF_COOLDOWN_MS);
 
 // =====================================================================
@@ -76,11 +76,16 @@ static const char* source_or_unknown(const char* source) {
 
 static const char* result_to_str(OutputResult result) {
     switch (result) {
-        case OutputResult::OK: return "ok";
-        case OutputResult::FAIL_NOT_INIT: return "not_initialized";
-        case OutputResult::FAIL_PROTECT_ACTIVE: return "protect_active";
-        case OutputResult::FAIL_COOLDOWN_ACTIVE: return "cooldown_active";
-        default: return "unknown";
+    case OutputResult::OK:
+        return "ok";
+    case OutputResult::FAIL_NOT_INIT:
+        return "not_initialized";
+    case OutputResult::FAIL_PROTECT_ACTIVE:
+        return "protect_active";
+    case OutputResult::FAIL_COOLDOWN_ACTIVE:
+        return "cooldown_active";
+    default:
+        return "unknown";
     }
 }
 
@@ -100,15 +105,15 @@ esp_err_t init(gpio_num_t output_gpio_num) {
         ESP_LOGE(TAG, "GPIO init failed on pin %d: %s", output_gpio_num, esp_err_to_name(ret));
         return ret;
     }
-    _output_gpio.set_on_change_callback([](bool value){
-        auto& state = get_global_state();
+    _output_gpio.set_on_change_callback([](bool value) {
+        auto& state                     = get_global_state();
         state.flags.bits.output_enabled = value;
     });
     _output_gpio.set(false);
 
     // 初始化策略链：保护策略 -> 冷却策略（按注册顺序依次检查）
     _cooldown_policy = CooldownPolicy(OUTPUT_ON_COOLDOWN_MS, OUTPUT_OFF_COOLDOWN_MS);
-    _policy_count = 0;
+    _policy_count    = 0;
     add_policy(&_protect_policy);
     add_policy(&_cooldown_policy);
 
@@ -129,8 +134,7 @@ esp_err_t init(gpio_num_t output_gpio_num) {
     });
 
     _initialized = true;
-    DEVICE_EVENT_I(TAG, "output: init gpio=%d on_cd_ms=%lu off_cd_ms=%lu",
-                   output_gpio_num,
+    DEVICE_EVENT_I(TAG, "output: init gpio=%d on_cd_ms=%lu off_cd_ms=%lu", output_gpio_num,
                    static_cast<unsigned long>(OUTPUT_ON_COOLDOWN_MS),
                    static_cast<unsigned long>(OUTPUT_OFF_COOLDOWN_MS));
     return ESP_OK;
@@ -142,9 +146,9 @@ esp_err_t deinit() {
         return ESP_OK;
     }
     apply_state(false);
-    _initialized = false;
+    _initialized    = false;
     _callback_count = 0;
-    _policy_count = 0;
+    _policy_count   = 0;
     DEVICE_STATE_I(TAG, "output: lifecycle old=initialized new=stopped state=0");
     return ESP_OK;
 }
@@ -162,7 +166,8 @@ OutputResult on(const char* source) {
     }
     OutputResult result = check_policies(OutputOperation::ON);
     if (result != OutputResult::OK) {
-        ESP_LOGW(TAG, "request source=%s op=on result=%s state=%u", source, result_to_str(result), get_state() ? 1U : 0U);
+        ESP_LOGW(TAG, "request source=%s op=on result=%s state=%u", source, result_to_str(result),
+                 get_state() ? 1U : 0U);
         return result;
     }
     apply_state(true);
@@ -179,7 +184,8 @@ OutputResult off(const char* source) {
     }
     OutputResult result = check_policies(OutputOperation::OFF);
     if (result != OutputResult::OK) {
-        ESP_LOGW(TAG, "request source=%s op=off result=%s state=%u", source, result_to_str(result), get_state() ? 1U : 0U);
+        ESP_LOGW(TAG, "request source=%s op=off result=%s state=%u", source, result_to_str(result),
+                 get_state() ? 1U : 0U);
         return result;
     }
     apply_state(false);
@@ -194,18 +200,18 @@ OutputResult toggle(const char* source) {
         ESP_LOGE(TAG, "request source=%s op=toggle result=not_initialized", source);
         return OutputResult::FAIL_NOT_INIT;
     }
-    OutputOperation op = get_state() ? OutputOperation::OFF : OutputOperation::ON;
-    OutputResult result = check_policies(op);
+    OutputOperation op     = get_state() ? OutputOperation::OFF : OutputOperation::ON;
+    OutputResult    result = check_policies(op);
     if (result != OutputResult::OK) {
-        ESP_LOGW(TAG, "request source=%s op=toggle target=%u result=%s state=%u",
-                 source, op == OutputOperation::ON ? 1U : 0U, result_to_str(result), get_state() ? 1U : 0U);
+        ESP_LOGW(TAG, "request source=%s op=toggle target=%u result=%s state=%u", source,
+                 op == OutputOperation::ON ? 1U : 0U, result_to_str(result), get_state() ? 1U : 0U);
         return result;
     }
     bool new_state = (op == OutputOperation::ON);
     apply_state(new_state);
     notify_policies_applied(op, new_state);
-    DEVICE_STATE_I(TAG, "output: state source=%s op=toggle old=%u new=%u result=ok",
-                   source, new_state ? 0U : 1U, new_state ? 1U : 0U);
+    DEVICE_STATE_I(TAG, "output: state source=%s op=toggle old=%u new=%u result=ok", source, new_state ? 0U : 1U,
+                   new_state ? 1U : 0U);
     return OutputResult::OK;
 }
 
@@ -233,4 +239,4 @@ void add_policy(OutputPolicy* policy) {
     }
 }
 
-}
+} // namespace PowerOutput

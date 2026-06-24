@@ -34,17 +34,17 @@ union GlobalStateFlags {
 };
 static_assert(sizeof(GlobalStateFlags) == 4, "GlobalStateFlags size must be 4 bytes");
 
-struct GlobalState{
-    GlobalStateFlags flags;
-    protect_states_t protect_states;
-    uint16_t voltage_mV; 
-    int32_t current_uA;
-    float meter_mah;
-    float meter_mwh;
-    int16_t board_temperature;  //单位为0.01摄氏度
-    int16_t chip_temperature;   //单位为0.01摄氏度
-    int16_t current_register_raw;
-    uint16_t voltage_register_raw;
+struct GlobalState {
+    GlobalStateFlags flags                = {};
+    protect_states_t protect_states       = {};
+    uint16_t         voltage_mV           = 0;
+    int32_t          current_uA           = 0;
+    float            meter_mah            = 0.0F;
+    float            meter_mwh            = 0.0F;
+    int16_t          board_temperature    = 0; /**< 板载温度，单位 0.01 摄氏度。 */
+    int16_t          chip_temperature     = 0; /**< 芯片温度，单位 0.01 摄氏度。 */
+    int16_t          current_register_raw = 0;
+    uint16_t         voltage_register_raw = 0;
 };
 static_assert(sizeof(GlobalState) == 28, "GlobalState size mismatch");
 
@@ -52,10 +52,10 @@ static_assert(sizeof(GlobalState) == 28, "GlobalState size mismatch");
  * @brief 同一批次发布的实时测量快照
  */
 struct GlobalMeasurementSnapshot {
-    uint16_t voltage_mV;          /**< 总线电压，单位 mV */
-    int32_t current_uA;           /**< 电流，单位 uA，符号表示方向 */
-    int16_t current_register_raw; /**< INA226 分流电压寄存器原始值 */
-    uint16_t voltage_register_raw;/**< INA226 总线电压寄存器原始值 */
+    uint16_t voltage_mV           = 0; /**< 总线电压，单位 mV。 */
+    int32_t  current_uA           = 0; /**< 电流，单位 uA，符号表示方向。 */
+    int16_t  current_register_raw = 0; /**< INA226 分流电压寄存器原始值。 */
+    uint16_t voltage_register_raw = 0; /**< INA226 总线电压寄存器原始值。 */
 };
 
 /**

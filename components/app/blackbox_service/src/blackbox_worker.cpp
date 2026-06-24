@@ -29,13 +29,12 @@ void blackbox_service_task(void*) {
         const CaptureDropStats dropped = take_capture_drop_stats();
         if (dropped.no_slot != 0 || dropped.ring_full != 0 || dropped.parse_failed != 0) {
             append_event("[W][BlackboxService] capture_drop no_slot=%lu ring_full=%lu parse_failed=%lu",
-                         static_cast<unsigned long>(dropped.no_slot),
-                         static_cast<unsigned long>(dropped.ring_full),
+                         static_cast<unsigned long>(dropped.no_slot), static_cast<unsigned long>(dropped.ring_full),
                          static_cast<unsigned long>(dropped.parse_failed));
         }
 
         const uint32_t interval_s = read_snapshot_interval_s();
-        const int64_t now_ms = esp_timer_get_time() / 1000;
+        const int64_t  now_ms     = esp_timer_get_time() / 1000;
         if (interval_s == 0) {
             last_periodic_snapshot_ms = now_ms;
         } else if (now_ms - last_periodic_snapshot_ms >= static_cast<int64_t>(interval_s) * 1000) {

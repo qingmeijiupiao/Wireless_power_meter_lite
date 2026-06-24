@@ -17,13 +17,17 @@ namespace SCREEN {
  * @brief 主页，显示实时电压、电流、功率、温度、输出和保护状态
  */
 class DashboardPage final : public Page {
-public:
-    PageId id() const override;
+  public:
+    /** @brief `id` 接口。 */
+    PageId      id() const override;
+    /** @brief `title` 接口。 */
     const char* title() const override;
-    uint32_t refresh_interval_ms() const override;
-    void render(RenderMode mode) override;
+    /** @brief `refresh_interval_ms` 接口。 */
+    uint32_t    refresh_interval_ms() const override;
+    /** @brief `render` 接口。 */
+    void        render(RenderMode mode) override;
 
-private:
+  private:
     /**
      * @brief 绘制主页右侧保护状态标签
      * @param x 标签左上角 X 坐标
@@ -33,7 +37,6 @@ private:
      */
     void draw_protect_tag(uint16_t x, uint16_t y, const char* text, ProtectState_t state);
 };
-
 
 } // namespace SCREEN
 

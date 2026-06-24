@@ -14,24 +14,23 @@
 
 namespace BlackboxService {
 
-constexpr uint8_t SNAPSHOT_VERSION = 1;
+constexpr uint8_t  SNAPSHOT_VERSION            = 1;
 constexpr uint32_t DEFAULT_SNAPSHOT_INTERVAL_S = 0;
-constexpr uint32_t MIN_SNAPSHOT_INTERVAL_MS = 100;
+constexpr uint32_t MIN_SNAPSHOT_INTERVAL_MS    = 100;
 
 struct SnapshotV1 {
-    uint8_t version;
+    uint8_t          version;
     GlobalStateFlags flags;
     protect_states_t protect_states;
-    uint16_t voltage_mV;
-    int32_t current_uA;
-    float meter_mwh;
-    int16_t board_temperature;
-    int16_t chip_temperature;
+    uint16_t         voltage_mV;
+    int32_t          current_uA;
+    float            meter_mwh;
+    int16_t          board_temperature;
+    int16_t          chip_temperature;
 } __attribute__((packed));
 
 static_assert(sizeof(SnapshotV1) == 20, "SnapshotV1 size mismatch");
-static_assert(sizeof(SnapshotV1) <= Blackbox::PAYLOAD_SIZE,
-              "SnapshotV1 exceeds blackbox payload size");
+static_assert(sizeof(SnapshotV1) <= Blackbox::PAYLOAD_SIZE, "SnapshotV1 exceeds blackbox payload size");
 
 /** @brief 初始化 ESP_LOG 捕获和周期快照后台任务。 */
 esp_err_t init();

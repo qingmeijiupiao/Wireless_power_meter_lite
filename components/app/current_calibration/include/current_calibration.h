@@ -13,12 +13,12 @@
 namespace CurrentCalib {
 
 constexpr params_t DEFAULT = {
-    .current_base_K = 1250, //默认电流参数K，对应采样电阻值2毫欧姆
-    .points = {},
-    .temperature_K = 0,
+    .current_base_K = 1250, // 默认电流参数K，对应采样电阻值2毫欧姆
+    .points         = {},
+    .temperature_K  = 0,
 };
 
 extern HXC::NVS_DATA<params_t> params_data;
 
-}
+} // namespace CurrentCalib
 #endif

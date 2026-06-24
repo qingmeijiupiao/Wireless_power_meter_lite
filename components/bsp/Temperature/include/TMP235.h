@@ -12,31 +12,36 @@
 #include "esp_err.h"
 
 class TMP235_t {
-public:
+  public:
+    /** @brief `instance` 接口。 */
     static TMP235_t& instance();
 
-    TMP235_t(const TMP235_t&) = delete;
+    /** @brief `TMP235_t` 接口。 */
+    TMP235_t(const TMP235_t&)            = delete;
     TMP235_t& operator=(const TMP235_t&) = delete;
 
+    /** @brief `init` 接口。 */
     esp_err_t init(adc_channel_t channel);
 
     /**
      * @brief :  获取TMP235温度
      * @return  {int16_t} 温度值，单位为0.01摄氏度，例如返回2534表示25.34摄氏度
-     *          TMP235分段线性: V<1500: T=(V-500)/10, 1500<=V<=1752.5: T=(V-1500)/10.1+100, V>1752.5: T=(V-1752.5)/10.6+125
+     *          TMP235分段线性: V<1500: T=(V-500)/10, 1500<=V<=1752.5: T=(V-1500)/10.1+100, V>1752.5:
+     * T=(V-1752.5)/10.6+125
      */
     int16_t getTemperature();
 
-private:
+  private:
+    /** @brief `TMP235_t` 接口。 */
     TMP235_t() = default;
 
-    adc_t* adc = nullptr;
-    static constexpr size_t AVG_BUF_SIZE = 64;
-    int16_t avg_buf[AVG_BUF_SIZE] = {};
-    size_t avg_buf_idx = 0;
-    size_t avg_buf_count = 0;
-    int32_t avg_sum = 0;
-    bool fault_reported = false;
+    adc_t*                  adc                   = nullptr;
+    static constexpr size_t AVG_BUF_SIZE          = 64;
+    int16_t                 avg_buf[AVG_BUF_SIZE] = {};
+    size_t                  avg_buf_idx           = 0;
+    size_t                  avg_buf_count         = 0;
+    int32_t                 avg_sum               = 0;
+    bool                    fault_reported        = false;
 };
 
 #endif

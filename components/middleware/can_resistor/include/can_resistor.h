@@ -12,7 +12,7 @@
 #include "esp_err.h"
 #include <functional>
 class CanResistor {
-public:
+  public:
     /**
      * @brief 获取 CAN 终端电阻控制器单例。
      * @return 控制器引用。
@@ -51,11 +51,14 @@ public:
      * @return ESP_OK 成功，其他值表示参数无效。
      */
     esp_err_t add_on_change_callback(std::function<void(bool)> callback);
-private:
-    CanResistor() = default;
-    CanResistor(const CanResistor&) = delete;
+
+  private:
+    /** @brief `CanResistor` 接口。 */
+    CanResistor()                              = default;
+    /** @brief `CanResistor` 接口。 */
+    CanResistor(const CanResistor&)            = delete;
     CanResistor& operator=(const CanResistor&) = delete;
-    bool initialized_ = false;
+    bool         initialized_                  = false;
 };
 
 #endif

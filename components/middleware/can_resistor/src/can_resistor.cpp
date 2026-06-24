@@ -9,8 +9,7 @@ namespace {
 constexpr const char* TAG = "CanResistor";
 
 CppGpioDriver<GPIO_NUM_NC, GpioMode::OUTPUT> resistor_gpio;
-HXC::NVS_DATA<uint8_t> saved_state("can_term", 0);
-
+HXC::NVS_DATA<uint8_t>                       saved_state("can_term", 0);
 
 } // namespace
 
@@ -49,7 +48,7 @@ esp_err_t CanResistor::set(bool enabled) {
     }
 
     const bool previous = resistor_gpio.get();
-    esp_err_t err = resistor_gpio.set(enabled);
+    esp_err_t  err      = resistor_gpio.set(enabled);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "GPIO write failed: %s", esp_err_to_name(err));
         return err;

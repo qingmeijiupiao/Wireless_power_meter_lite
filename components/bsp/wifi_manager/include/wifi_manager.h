@@ -24,7 +24,7 @@
  */
 typedef union {
     uint32_t addr;
-    uint8_t bytes[4];
+    uint8_t  bytes[4];
     struct {
         uint8_t octet1;
         uint8_t octet2;
@@ -41,7 +41,7 @@ typedef union {
  */
 typedef union {
     uint64_t val;
-    uint8_t bytes[6];
+    uint8_t  bytes[6];
     struct {
         uint8_t octet1;
         uint8_t octet2;
@@ -56,33 +56,33 @@ typedef union {
  * @brief WiFi连接状态枚举
  */
 typedef enum {
-    WIFI_STATE_DISCONNECTED = 0,    /**< 未连接/未启动 */
-    WIFI_STATE_STA_CONNECTED,       /**< STA模式已连接到AP并获取IP */
-    WIFI_STATE_AP_ACTIVE,           /**< AP模式已启动，可接受STA连接 */
+    WIFI_STATE_DISCONNECTED = 0, /**< 未连接/未启动 */
+    WIFI_STATE_STA_CONNECTED,    /**< STA模式已连接到AP并获取IP */
+    WIFI_STATE_AP_ACTIVE,        /**< AP模式已启动，可接受STA连接 */
 } wifi_state_t;
 
 /** SSID最大长度 */
-constexpr uint8_t WIFI_SSID_MAX_LEN = 32;
+constexpr uint8_t WIFI_SSID_MAX_LEN       = 32;
 /** 密码最大长度 */
-constexpr uint8_t WIFI_PASSWORD_MAX_LEN = 64;
+constexpr uint8_t WIFI_PASSWORD_MAX_LEN   = 64;
 /** AP模式最大允许连接数 */
-constexpr uint8_t WIFI_AP_MAX_CONN = 4;
+constexpr uint8_t WIFI_AP_MAX_CONN        = 4;
 /** STA连接超时时间(ms) */
-constexpr int WIFI_CONNECT_TIMEOUT_MS = 30000;
+constexpr int     WIFI_CONNECT_TIMEOUT_MS = 30000;
 
 /**
  * @brief WiFi管理单例类
- * 
+ *
  * 封装ESP-IDF WiFi驱动的初始化、STA/AP模式切换、
  * 连接/断开、扫描、状态查询等常用功能。
- * 
+ *
  * 使用示例:
  *   WiFiManager::instance().init();
  *   WiFiManager::instance().connect_sta("MySSID", "MyPass", true);
  *   IP_t ip = WiFiManager::instance().get_ip();
  */
 class WiFiManager {
-public:
+  public:
     enum class RadioEvent : uint8_t {
         BEFORE_STOP = 0,
         AFTER_START,
@@ -97,10 +97,11 @@ public:
     }
 
     /** @brief 禁止拷贝/移动构造与赋值 */
-    WiFiManager(const WiFiManager&) = delete;
+    WiFiManager(const WiFiManager&)            = delete;
     WiFiManager& operator=(const WiFiManager&) = delete;
-    WiFiManager(WiFiManager&&) = delete;
-    WiFiManager& operator=(WiFiManager&&) = delete;
+    /** @brief `WiFiManager` 接口。 */
+    WiFiManager(WiFiManager&&)                 = delete;
+    WiFiManager& operator=(WiFiManager&&)      = delete;
 
     /**
      * @brief 初始化WiFi子系统
@@ -142,7 +143,8 @@ public:
      * @param channel  WiFi信道，默认1
      * @return esp_err_t
      */
-    esp_err_t start_ap(const char* ssid, const char* password, uint8_t max_conn = WIFI_AP_MAX_CONN, uint8_t channel = 1);
+    esp_err_t start_ap(const char* ssid, const char* password, uint8_t max_conn = WIFI_AP_MAX_CONN,
+                       uint8_t channel = 1);
 
     /**
      * @brief 以AP+STA模式启动热点
@@ -153,7 +155,8 @@ public:
      * @param channel  WiFi信道，默认1
      * @return esp_err_t
      */
-    esp_err_t start_apsta(const char* ssid, const char* password, uint8_t max_conn = WIFI_AP_MAX_CONN, uint8_t channel = 1);
+    esp_err_t start_apsta(const char* ssid, const char* password, uint8_t max_conn = WIFI_AP_MAX_CONN,
+                          uint8_t channel = 1);
 
     /**
      * @brief 断开STA连接
@@ -203,6 +206,7 @@ public:
      * 回调中不得阻塞或再次切换 WiFi 模式。
      */
     esp_err_t register_radio_listener(RadioEventHandler handler, void* context);
+    /** @brief `unregister_radio_listener` 接口。 */
     esp_err_t unregister_radio_listener(RadioEventHandler handler, void* context);
 
     /**
@@ -294,7 +298,8 @@ public:
      * @param bssid     BSSID地址，bssid_set为true时有效
      * @return esp_err_t
      */
-    esp_err_t set_sta_config(const char* ssid, const char* password, bool bssid_set = false, const uint8_t* bssid = nullptr);
+    esp_err_t set_sta_config(const char* ssid, const char* password, bool bssid_set = false,
+                             const uint8_t* bssid = nullptr);
     /** @brief 获取当前STA配置 */
     esp_err_t get_sta_config(wifi_config_t* conf);
 
@@ -307,7 +312,8 @@ public:
      * @param max_conn 最大连接数
      * @return esp_err_t
      */
-    esp_err_t set_ap_config(const char* ssid, const char* password, uint8_t channel = 1, wifi_auth_mode_t authmode = WIFI_AUTH_WPA2_PSK, uint8_t max_conn = WIFI_AP_MAX_CONN);
+    esp_err_t set_ap_config(const char* ssid, const char* password, uint8_t channel = 1,
+                            wifi_auth_mode_t authmode = WIFI_AUTH_WPA2_PSK, uint8_t max_conn = WIFI_AP_MAX_CONN);
     /** @brief 获取当前AP配置 */
     esp_err_t get_ap_config(wifi_config_t* conf);
 
@@ -329,8 +335,10 @@ public:
      */
     esp_err_t set_mac(wifi_interface_t ifx, const uint8_t mac[6]);
 
-private:
+  private:
+    /** @brief `WiFiManager` 接口。 */
     WiFiManager();
+    /** @brief `~WiFiManager` 接口。 */
     ~WiFiManager();
 
     /** @brief WiFi事件统一回调（静态函数，通过arg访问实例） */
@@ -339,26 +347,29 @@ private:
     static void ip_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
 
     /** @brief 从netif刷新IP地址到ip_成员 */
-    void update_ip_from_netif();
+    void      update_ip_from_netif();
+    /** @brief `start_wifi_driver` 接口。 */
     esp_err_t start_wifi_driver();
+    /** @brief `stop_wifi_driver` 接口。 */
     esp_err_t stop_wifi_driver();
-    void notify_radio_event(RadioEvent event);
+    /** @brief `notify_radio_event` 接口。 */
+    void      notify_radio_event(RadioEvent event);
 
     struct RadioListener {
         RadioEventHandler handler;
-        void* context;
+        void*             context;
     };
 
     static constexpr size_t MAX_RADIO_LISTENERS = 4;
 
-    wifi_state_t state_;            /**< 当前WiFi状态 */
-    IP_t ip_;                       /**< 当前IP地址 */
-    bool initialized_;              /**< WiFi子系统是否已初始化 */
-    bool wifi_started_;             /**< WiFi驱动是否已启动(esp_wifi_start) */
-    esp_netif_t* sta_netif_;        /**< STA接口netif句柄 */
-    esp_netif_t* ap_netif_;         /**< AP接口netif句柄 */
-    EventGroupHandle_t event_group_;/**< FreeRTOS事件组，用于连接/扫描同步 */
-    RadioListener radio_listeners_[MAX_RADIO_LISTENERS];
+    wifi_state_t       state_;        /**< 当前WiFi状态 */
+    IP_t               ip_;           /**< 当前IP地址 */
+    bool               initialized_;  /**< WiFi子系统是否已初始化 */
+    bool               wifi_started_; /**< WiFi驱动是否已启动(esp_wifi_start) */
+    esp_netif_t*       sta_netif_;    /**< STA接口netif句柄 */
+    esp_netif_t*       ap_netif_;     /**< AP接口netif句柄 */
+    EventGroupHandle_t event_group_;  /**< FreeRTOS事件组，用于连接/扫描同步 */
+    RadioListener      radio_listeners_[MAX_RADIO_LISTENERS];
 };
 
 #endif

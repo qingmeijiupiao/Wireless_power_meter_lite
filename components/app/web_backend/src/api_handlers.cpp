@@ -34,9 +34,9 @@
 
 namespace WebBackend {
 
-static constexpr char TAG[] = "WebBackendApi";
+static constexpr char   TAG[]                = "WebBackendApi";
 static constexpr size_t LOG_RESPONSE_RAW_MAX = 2400;
-static char log_snapshot_buffer[LOG_RESPONSE_RAW_MAX + 1];
+static char             log_snapshot_buffer[LOG_RESPONSE_RAW_MAX + 1];
 
 static bool append_checked(char* out, size_t out_size, size_t* pos, const char* fmt, ...);
 
@@ -56,22 +56,32 @@ static void wifi_off_deferred_task(void*) {
 /** @brief 将 WiFiService 模式转换为 API 字符串。 */
 const char* mode_to_str(WifiService::Mode mode) {
     switch (mode) {
-        case WifiService::Mode::OFF: return "off";
-        case WifiService::Mode::ESPNOW_ONLY: return "espnow_only";
-        case WifiService::Mode::STA: return "sta";
-        case WifiService::Mode::AP_PROVISION: return "ap_provision";
-        default: return "unknown";
+    case WifiService::Mode::OFF:
+        return "off";
+    case WifiService::Mode::ESPNOW_ONLY:
+        return "espnow_only";
+    case WifiService::Mode::STA:
+        return "sta";
+    case WifiService::Mode::AP_PROVISION:
+        return "ap_provision";
+    default:
+        return "unknown";
     }
 }
 
 /** @brief 将 PowerOutput 结果转换为 API reason 字符串。 */
 static const char* output_result_to_str(PowerOutput::OutputResult result) {
     switch (result) {
-        case PowerOutput::OutputResult::OK: return "ok";
-        case PowerOutput::OutputResult::FAIL_NOT_INIT: return "not_initialized";
-        case PowerOutput::OutputResult::FAIL_PROTECT_ACTIVE: return "protect_active";
-        case PowerOutput::OutputResult::FAIL_COOLDOWN_ACTIVE: return "cooldown_active";
-        default: return "unknown";
+    case PowerOutput::OutputResult::OK:
+        return "ok";
+    case PowerOutput::OutputResult::FAIL_NOT_INIT:
+        return "not_initialized";
+    case PowerOutput::OutputResult::FAIL_PROTECT_ACTIVE:
+        return "protect_active";
+    case PowerOutput::OutputResult::FAIL_COOLDOWN_ACTIVE:
+        return "cooldown_active";
+    default:
+        return "unknown";
     }
 }
 
@@ -82,8 +92,8 @@ void ip_to_str(IP_t ip, char* out, size_t out_size) {
 
 /** @brief 将 MAC_t 转换为常见冒号分隔字符串。 */
 static void mac_to_str(MAC_t mac, char* out, size_t out_size) {
-    snprintf(out, out_size, "%02X:%02X:%02X:%02X:%02X:%02X",
-        mac.octet1, mac.octet2, mac.octet3, mac.octet4, mac.octet5, mac.octet6);
+    snprintf(out, out_size, "%02X:%02X:%02X:%02X:%02X:%02X", mac.octet1, mac.octet2, mac.octet3, mac.octet4, mac.octet5,
+             mac.octet6);
 }
 
 /** @brief 从统一 BUILD_TIME 中拆出 API 兼容的日期和时钟字段。 */
@@ -100,56 +110,44 @@ static void split_build_time(char* build_date, size_t build_date_size, char* bui
  * 该接口保持短响应，避免首页刷新时占用过多 HTTP 任务栈和发送缓冲。
  */
 esp_err_t state_handler(WebServer::Request* request) {
-    auto& state = get_global_state();
-    IP_t ip = WifiService::get_ip();
-    char ip_text[16] = {};
+    auto& state       = get_global_state();
+    IP_t  ip          = WifiService::get_ip();
+    char  ip_text[16] = {};
     ip_to_str(ip, ip_text, sizeof(ip_text));
 
-    float voltage_v = state.voltage_mV / 1000.0f;
-    float current_a = state.current_uA / 1000000.0f;
-    float abs_current_a = std::abs(state.current_uA) / 1000000.0f;
-    float board_temp_c = state.board_temperature / 100.0f;
-    float chip_temp_c = state.chip_temperature / 100.0f;
-    auto& protect = state.protect_states.states_bit;
-    const EnergyMeter::Snapshot meter = EnergyMeter::snapshot();
+    float                       voltage_v     = state.voltage_mV / 1000.0f;
+    float                       current_a     = state.current_uA / 1000000.0f;
+    float                       abs_current_a = std::abs(state.current_uA) / 1000000.0f;
+    float                       board_temp_c  = state.board_temperature / 100.0f;
+    float                       chip_temp_c   = state.chip_temperature / 100.0f;
+    auto&                       protect       = state.protect_states.states_bit;
+    const EnergyMeter::Snapshot meter         = EnergyMeter::snapshot();
 
     snprintf(response_buffer, sizeof(response_buffer),
-        "{"
-        "\"voltage_v\":%.3f,"
-        "\"current_a\":%.3f,"
-        "\"power_w\":%.3f,"
-        "\"board_temp_c\":%.2f,"
-        "\"chip_temp_c\":%.2f,"
-        "\"energy_mwh\":%.3f,"
-        "\"charge_mah\":%.3f,"
-        "\"meter_time_ms\":%" PRIu64 ","
-        "\"output_on\":%s,"
-        "\"protect_bypassed\":%s,"
-        "\"uptime_ms\":%lld,"
-        "\"protect\":{\"otp\":%u,\"ovp\":%u,\"uvp\":%u,\"ocp\":%u},"
-        "\"wifi\":{\"mode\":\"%s\",\"state\":%d,\"ip\":\"%s\",\"ap_ssid\":\"%s\",\"boot_enabled\":%s,\"last_error\":\"%s\"}"
-        "}\n",
-        voltage_v,
-        current_a,
-        voltage_v * abs_current_a,
-        board_temp_c,
-        chip_temp_c,
-        meter.energy_uwh / 1000.0,
-        meter.charge_uah / 1000.0,
-        meter.meter_time_ms,
-        state.flags.bits.output_enabled ? "true" : "false",
-        protect_is_bypassed() ? "true" : "false",
-        esp_timer_get_time() / 1000,
-        (unsigned)protect.temperature_protect_state,
-        (unsigned)protect.high_voltage_protect_state,
-        (unsigned)protect.low_voltage_protect_state,
-        (unsigned)protect.current_protect_state,
-        mode_to_str(WifiService::get_mode()),
-        (int)WifiService::get_wifi_state(),
-        ip_text,
-        WifiService::get_ap_ssid(),
-        WifiService::is_web_enabled_on_boot() ? "true" : "false",
-        WifiService::get_last_error());
+             "{"
+             "\"voltage_v\":%.3f,"
+             "\"current_a\":%.3f,"
+             "\"power_w\":%.3f,"
+             "\"board_temp_c\":%.2f,"
+             "\"chip_temp_c\":%.2f,"
+             "\"energy_mwh\":%.3f,"
+             "\"charge_mah\":%.3f,"
+             "\"meter_time_ms\":%" PRIu64 ","
+             "\"output_on\":%s,"
+             "\"protect_bypassed\":%s,"
+             "\"uptime_ms\":%lld,"
+             "\"protect\":{\"otp\":%u,\"ovp\":%u,\"uvp\":%u,\"ocp\":%u},"
+             "\"wifi\":{\"mode\":\"%s\",\"state\":%d,\"ip\":\"%s\",\"ap_ssid\":\"%s\",\"boot_enabled\":%s,\"last_"
+             "error\":\"%s\"}"
+             "}\n",
+             voltage_v, current_a, voltage_v * abs_current_a, board_temp_c, chip_temp_c, meter.energy_uwh / 1000.0,
+             meter.charge_uah / 1000.0, meter.meter_time_ms, state.flags.bits.output_enabled ? "true" : "false",
+             protect_is_bypassed() ? "true" : "false", esp_timer_get_time() / 1000,
+             (unsigned)protect.temperature_protect_state, (unsigned)protect.high_voltage_protect_state,
+             (unsigned)protect.low_voltage_protect_state, (unsigned)protect.current_protect_state,
+             mode_to_str(WifiService::get_mode()), (int)WifiService::get_wifi_state(), ip_text,
+             WifiService::get_ap_ssid(), WifiService::is_web_enabled_on_boot() ? "true" : "false",
+             WifiService::get_last_error());
 
     return WebServer::send_json(request, response_buffer);
 }
@@ -173,16 +171,17 @@ esp_err_t output_handler(WebServer::Request* request) {
         return ret;
     }
 
-    bool target = false;
-    bool has_state = json_get_bool(request->body, "state", &target);
-    PowerOutput::OutputResult result = PowerOutput::OutputResult::OK;
+    bool                      target    = false;
+    bool                      has_state = json_get_bool(request->body, "state", &target);
+    PowerOutput::OutputResult result    = PowerOutput::OutputResult::OK;
     if (json_has_key(request->body, "toggle")) {
         result = PowerOutput::toggle(TAG);
     } else if (has_state) {
         result = target ? PowerOutput::on(TAG) : PowerOutput::off(TAG);
     } else {
         ESP_LOGW(TAG, "output request rejected: missing state");
-        return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"missing_state\"}\n", strlen("{\"ok\":false,\"reason\":\"missing_state\"}\n"));
+        return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"missing_state\"}\n",
+                               strlen("{\"ok\":false,\"reason\":\"missing_state\"}\n"));
     }
 
     if (result == PowerOutput::OutputResult::OK) {
@@ -190,11 +189,9 @@ esp_err_t output_handler(WebServer::Request* request) {
     } else {
         ESP_LOGW(TAG, "output update rejected: reason=%s", output_result_to_str(result));
     }
-    snprintf(response_buffer, sizeof(response_buffer),
-        "{\"ok\":%s,\"reason\":\"%s\",\"output_on\":%s}\n",
-        result == PowerOutput::OutputResult::OK ? "true" : "false",
-        output_result_to_str(result),
-        PowerOutput::get_state() ? "true" : "false");
+    snprintf(response_buffer, sizeof(response_buffer), "{\"ok\":%s,\"reason\":\"%s\",\"output_on\":%s}\n",
+             result == PowerOutput::OutputResult::OK ? "true" : "false", output_result_to_str(result),
+             PowerOutput::get_state() ? "true" : "false");
     return WebServer::send_json(request, response_buffer);
 }
 
@@ -208,11 +205,12 @@ esp_err_t reboot_handler(WebServer::Request* request) {
     static esp_timer_handle_t reboot_timer = nullptr;
     if (reboot_timer == nullptr) {
         esp_timer_create_args_t args = {};
-        args.callback = reboot_timer_callback;
-        args.name = "web_reboot";
-        esp_err_t ret = esp_timer_create(&args, &reboot_timer);
+        args.callback                = reboot_timer_callback;
+        args.name                    = "web_reboot";
+        esp_err_t ret                = esp_timer_create(&args, &reboot_timer);
         if (ret != ESP_OK) {
-            snprintf(response_buffer, sizeof(response_buffer), "{\"ok\":false,\"reason\":\"%s\"}\n", esp_err_to_name(ret));
+            snprintf(response_buffer, sizeof(response_buffer), "{\"ok\":false,\"reason\":\"%s\"}\n",
+                     esp_err_to_name(ret));
             return WebServer::send_json(request, response_buffer);
         }
     }
@@ -224,36 +222,29 @@ esp_err_t reboot_handler(WebServer::Request* request) {
 
 /** @brief GET /api/system，返回固件版本、构建信息、MAC 和运行时间。 */
 esp_err_t system_handler(WebServer::Request* request) {
-    const esp_app_desc_t* app_desc = esp_app_get_description();
+    const esp_app_desc_t*  app_desc          = esp_app_get_description();
     const esp_partition_t* running_partition = OtaManager::get_running_partition();
-    char sta_mac[18] = {};
-    char ap_mac[18] = {};
-    char build_date[11] = {};
-    char build_clock[9] = {};
+    char                   sta_mac[18]       = {};
+    char                   ap_mac[18]        = {};
+    char                   build_date[11]    = {};
+    char                   build_clock[9]    = {};
     mac_to_str(WiFiManager::instance().get_mac(WIFI_IF_STA), sta_mac, sizeof(sta_mac));
     mac_to_str(WiFiManager::instance().get_mac(WIFI_IF_AP), ap_mac, sizeof(ap_mac));
     split_build_time(build_date, sizeof(build_date), build_clock, sizeof(build_clock));
     snprintf(detail_response_buffer, sizeof(detail_response_buffer),
-        "{"
-        "\"hardware_version\":%u,"
-        "\"firmware\":{\"major\":%u,\"minor\":%u,\"patch\":%u,\"project\":\"%s\",\"build\":\"%s\",\"build_date\":\"%s\",\"build_time\":\"%s\"},"
-        "\"app_partition\":{\"slot\":%u,\"label\":\"%s\"},"
-        "\"mac\":{\"sta\":\"%s\",\"ap\":\"%s\"},"
-        "\"uptime_ms\":%lld"
-        "}\n",
-        static_cast<unsigned>(get_hardware_version()),
-        static_cast<unsigned>(VERSION_MAJOR),
-        static_cast<unsigned>(VERSION_MINOR),
-        static_cast<unsigned>(VERSION_PATCH),
-        app_desc->project_name,
-        BUILD_TIME,
-        build_date,
-        build_clock,
-        static_cast<unsigned>(ota_partition_slot(running_partition)),
-        running_partition == nullptr ? "" : running_partition->label,
-        sta_mac,
-        ap_mac,
-        esp_timer_get_time() / 1000);
+             "{"
+             "\"hardware_version\":%u,"
+             "\"firmware\":{\"major\":%u,\"minor\":%u,\"patch\":%u,\"project\":\"%s\",\"build\":\"%s\",\"build_date\":"
+             "\"%s\",\"build_time\":\"%s\"},"
+             "\"app_partition\":{\"slot\":%u,\"label\":\"%s\"},"
+             "\"mac\":{\"sta\":\"%s\",\"ap\":\"%s\"},"
+             "\"uptime_ms\":%lld"
+             "}\n",
+             static_cast<unsigned>(get_hardware_version()), static_cast<unsigned>(VERSION_MAJOR),
+             static_cast<unsigned>(VERSION_MINOR), static_cast<unsigned>(VERSION_PATCH), app_desc->project_name,
+             BUILD_TIME, build_date, build_clock, static_cast<unsigned>(ota_partition_slot(running_partition)),
+             running_partition == nullptr ? "" : running_partition->label, sta_mac, ap_mac,
+             esp_timer_get_time() / 1000);
     return WebServer::send_json(request, detail_response_buffer);
 }
 
@@ -270,25 +261,25 @@ esp_err_t backlight_handler(WebServer::Request* request) {
         }
         uint32_t brightness = 0;
         if (!json_get_uint32(request->body, "brightness", &brightness) || brightness > 255) {
-            return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"invalid_brightness\"}\n", strlen("{\"ok\":false,\"reason\":\"invalid_brightness\"}\n"));
+            return WebServer::send(request, 400, "application/json",
+                                   "{\"ok\":false,\"reason\":\"invalid_brightness\"}\n",
+                                   strlen("{\"ok\":false,\"reason\":\"invalid_brightness\"}\n"));
         }
         ret = ST7735::set_backlight(static_cast<uint8_t>(brightness));
         if (ret == ESP_OK) {
-            DEVICE_EVENT_I(TAG, "ui: config source=web backlight=%lu ip=%s",
-                           static_cast<unsigned long>(brightness), request->peer_ip);
+            DEVICE_EVENT_I(TAG, "ui: config source=web backlight=%lu ip=%s", static_cast<unsigned long>(brightness),
+                           request->peer_ip);
         } else {
             ESP_LOGW(TAG, "backlight update failed: brightness=%lu reason=%s", brightness, esp_err_to_name(ret));
         }
-        snprintf(response_buffer, sizeof(response_buffer),
-            "{\"ok\":%s,\"reason\":\"%s\",\"brightness\":%u}\n",
-            ret == ESP_OK ? "true" : "false",
-            ret == ESP_OK ? "ok" : esp_err_to_name(ret),
-            static_cast<unsigned>(ST7735::get_backlight()));
+        snprintf(response_buffer, sizeof(response_buffer), "{\"ok\":%s,\"reason\":\"%s\",\"brightness\":%u}\n",
+                 ret == ESP_OK ? "true" : "false", ret == ESP_OK ? "ok" : esp_err_to_name(ret),
+                 static_cast<unsigned>(ST7735::get_backlight()));
         return WebServer::send_json(request, response_buffer);
     }
 
-    snprintf(response_buffer, sizeof(response_buffer),
-        "{\"brightness\":%u}\n", static_cast<unsigned>(ST7735::get_backlight()));
+    snprintf(response_buffer, sizeof(response_buffer), "{\"brightness\":%u}\n",
+             static_cast<unsigned>(ST7735::get_backlight()));
     return WebServer::send_json(request, response_buffer);
 }
 
@@ -303,35 +294,39 @@ esp_err_t start_logo_handler(WebServer::Request* request) {
         uint32_t duration_ms = 0;
         if (!json_get_uint32(request->body, "duration_ms", &duration_ms) ||
             duration_ms > SCREEN::MAX_START_LOGO_DURATION_MS) {
-            return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"invalid_duration_ms\"}\n", strlen("{\"ok\":false,\"reason\":\"invalid_duration_ms\"}\n"));
+            return WebServer::send(request, 400, "application/json",
+                                   "{\"ok\":false,\"reason\":\"invalid_duration_ms\"}\n",
+                                   strlen("{\"ok\":false,\"reason\":\"invalid_duration_ms\"}\n"));
         }
 
         ret = SCREEN::set_start_logo_duration_ms(duration_ms);
         if (ret != ESP_OK) {
-            snprintf(response_buffer, sizeof(response_buffer),
-                     "{\"ok\":false,\"reason\":\"%s\"}\n", esp_err_to_name(ret));
+            snprintf(response_buffer, sizeof(response_buffer), "{\"ok\":false,\"reason\":\"%s\"}\n",
+                     esp_err_to_name(ret));
             return WebServer::send(request, 500, "application/json", response_buffer, strlen(response_buffer));
         }
-        DEVICE_EVENT_I(TAG,
-                       "ui: config source=web start_logo_ms=%lu reboot_required=1 ip=%s",
+        DEVICE_EVENT_I(TAG, "ui: config source=web start_logo_ms=%lu reboot_required=1 ip=%s",
                        static_cast<unsigned long>(duration_ms), request->peer_ip);
     }
 
     const uint32_t duration_ms = SCREEN::get_start_logo_duration_ms();
     snprintf(response_buffer, sizeof(response_buffer),
-        "{\"ok\":true,\"duration_ms\":%lu,\"enabled\":%s,\"note\":\"changed value takes effect after reboot\"}\n",
-        static_cast<unsigned long>(duration_ms),
-        duration_ms > 0 ? "true" : "false");
+             "{\"ok\":true,\"duration_ms\":%lu,\"enabled\":%s,\"note\":\"changed value takes effect after reboot\"}\n",
+             static_cast<unsigned long>(duration_ms), duration_ms > 0 ? "true" : "false");
     return WebServer::send_json(request, response_buffer);
 }
 
 /** @brief 将保护状态枚举转换为前端可读字符串。 */
 static const char* protect_state_to_str(ProtectState_t state) {
     switch (state) {
-        case PROTECT_STATE_NORMAL: return "normal";
-        case PROTECT_STATE_WARNING: return "warning";
-        case PROTECT_STATE_PROTECT: return "protect";
-        default: return "unknown";
+    case PROTECT_STATE_NORMAL:
+        return "normal";
+    case PROTECT_STATE_WARNING:
+        return "warning";
+    case PROTECT_STATE_PROTECT:
+        return "protect";
+    default:
+        return "unknown";
     }
 }
 
@@ -350,13 +345,17 @@ esp_err_t protect_handler(WebServer::Request* request) {
         const bool has_enabled = json_has_key(request->body, "enabled");
         const bool has_channel = json_has_key(request->body, "channel");
         if (has_enabled && has_channel) {
-            return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"combined_update_not_allowed\"}\n", strlen("{\"ok\":false,\"reason\":\"combined_update_not_allowed\"}\n"));
+            return WebServer::send(request, 400, "application/json",
+                                   "{\"ok\":false,\"reason\":\"combined_update_not_allowed\"}\n",
+                                   strlen("{\"ok\":false,\"reason\":\"combined_update_not_allowed\"}\n"));
         }
         bool updated = false;
         if (has_enabled) {
             bool enabled = true;
             if (!json_get_bool(request->body, "enabled", &enabled)) {
-                return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"invalid_enabled\"}\n", strlen("{\"ok\":false,\"reason\":\"invalid_enabled\"}\n"));
+                return WebServer::send(request, 400, "application/json",
+                                       "{\"ok\":false,\"reason\":\"invalid_enabled\"}\n",
+                                       strlen("{\"ok\":false,\"reason\":\"invalid_enabled\"}\n"));
             }
             protect_set_bypassed(!enabled, TAG);
             ESP_LOGI(TAG, "protection updated: enabled=%s", enabled ? "true" : "false");
@@ -368,65 +367,62 @@ esp_err_t protect_handler(WebServer::Request* request) {
         }
 
         if (has_channel) {
-            uint32_t channel = 0;
-            uint32_t warning_milli = 0;
-            uint32_t warning_recovery_milli = 0;
-            uint32_t protect_milli = 0;
-            uint32_t protect_recovery_milli = 0;
-            protect_channel_info_t info = {};
-            if (!json_get_uint32(request->body, "channel", &channel) ||
-                channel >= protect_get_channel_count() ||
+            uint32_t               channel                = 0;
+            uint32_t               warning_milli          = 0;
+            uint32_t               warning_recovery_milli = 0;
+            uint32_t               protect_milli          = 0;
+            uint32_t               protect_recovery_milli = 0;
+            protect_channel_info_t info                   = {};
+            if (!json_get_uint32(request->body, "channel", &channel) || channel >= protect_get_channel_count() ||
                 !json_get_uint32(request->body, "warning_milli", &warning_milli) ||
                 !json_get_uint32(request->body, "warning_recovery_milli", &warning_recovery_milli) ||
                 !json_get_uint32(request->body, "protect_milli", &protect_milli) ||
                 !json_get_uint32(request->body, "protect_recovery_milli", &protect_recovery_milli) ||
                 !protect_get_channel_info(static_cast<uint8_t>(channel), &info)) {
-                return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"invalid_threshold_fields\"}\n", strlen("{\"ok\":false,\"reason\":\"invalid_threshold_fields\"}\n"));
+                return WebServer::send(request, 400, "application/json",
+                                       "{\"ok\":false,\"reason\":\"invalid_threshold_fields\"}\n",
+                                       strlen("{\"ok\":false,\"reason\":\"invalid_threshold_fields\"}\n"));
             }
 
-            protect_threshold_t threshold = info.threshold;
-            threshold.warning_threshold = warning_milli / 1000.0f;
+            protect_threshold_t threshold        = info.threshold;
+            threshold.warning_threshold          = warning_milli / 1000.0f;
             threshold.warning_recovery_threshold = warning_recovery_milli / 1000.0f;
-            threshold.protect_threshold = protect_milli / 1000.0f;
+            threshold.protect_threshold          = protect_milli / 1000.0f;
             threshold.protect_recovery_threshold = protect_recovery_milli / 1000.0f;
             if (protect_set_channel_threshold(static_cast<uint8_t>(channel), threshold, TAG) != ESP_OK) {
-                return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"invalid_threshold_order\"}\n", strlen("{\"ok\":false,\"reason\":\"invalid_threshold_order\"}\n"));
+                return WebServer::send(request, 400, "application/json",
+                                       "{\"ok\":false,\"reason\":\"invalid_threshold_order\"}\n",
+                                       strlen("{\"ok\":false,\"reason\":\"invalid_threshold_order\"}\n"));
             }
             updated = true;
         }
 
         if (!updated) {
-            return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"missing_update\"}\n", strlen("{\"ok\":false,\"reason\":\"missing_update\"}\n"));
+            return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"missing_update\"}\n",
+                                   strlen("{\"ok\":false,\"reason\":\"missing_update\"}\n"));
         }
     }
 
     size_t pos = 0;
-    bool ok = append_checked(detail_response_buffer, sizeof(detail_response_buffer), &pos,
-        "{\"enabled\":%s,\"bypassed\":%s,\"active_fault\":%s,\"should_block_output\":%s,\"channels\":[",
-        protect_is_bypassed() ? "false" : "true",
-        protect_is_bypassed() ? "true" : "false",
-        protect_has_active_fault() ? "true" : "false",
-        protect_should_block_output() ? "true" : "false");
+    bool   ok =
+        append_checked(detail_response_buffer, sizeof(detail_response_buffer), &pos,
+                       "{\"enabled\":%s,\"bypassed\":%s,\"active_fault\":%s,\"should_block_output\":%s,\"channels\":[",
+                       protect_is_bypassed() ? "false" : "true", protect_is_bypassed() ? "true" : "false",
+                       protect_has_active_fault() ? "true" : "false", protect_should_block_output() ? "true" : "false");
 
     for (uint8_t i = 0; ok && i < protect_get_channel_count(); ++i) {
         protect_channel_info_t info = {};
         if (!protect_get_channel_info(i, &info)) {
             continue;
         }
-        ok = append_checked(detail_response_buffer, sizeof(detail_response_buffer), &pos,
+        ok = append_checked(
+            detail_response_buffer, sizeof(detail_response_buffer), &pos,
             "%s{\"name\":\"%s\",\"unit\":\"%s\",\"value\":%.3f,\"state\":%u,\"state_text\":\"%s\","
             "\"warning\":%.3f,\"warning_recovery\":%.3f,\"protect\":%.3f,\"protect_recovery\":%.3f,\"trigger\":\"%s\"}",
-            i == 0 ? "" : ",",
-            info.name,
-            info.unit,
-            info.now_value,
-            static_cast<unsigned>(info.state),
-            protect_state_to_str(info.state),
-            info.threshold.warning_threshold,
-            info.threshold.warning_recovery_threshold,
-            info.threshold.protect_threshold,
-            info.threshold.protect_recovery_threshold,
-            info.threshold.is_asc ? ">=" : "<=");
+            i == 0 ? "" : ",", info.name, info.unit, info.now_value, static_cast<unsigned>(info.state),
+            protect_state_to_str(info.state), info.threshold.warning_threshold,
+            info.threshold.warning_recovery_threshold, info.threshold.protect_threshold,
+            info.threshold.protect_recovery_threshold, info.threshold.is_asc ? ">=" : "<=");
     }
 
     if (!ok || !append_checked(detail_response_buffer, sizeof(detail_response_buffer), &pos, "]}\n")) {
@@ -447,16 +443,20 @@ esp_err_t can_handler(WebServer::Request* request) {
         if (ret != ESP_OK) {
             return ret;
         }
-        uint32_t baudrate = 0;
-        uint32_t id = 0;
+        uint32_t       baudrate          = 0;
+        uint32_t       id                = 0;
         const uint32_t previous_baudrate = CanCallback::CAN_BAUDRATE.read();
         if (json_get_uint32(request->body, "baudrate", &baudrate)) {
             if (baudrate == 0) {
-                return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"invalid_baudrate\"}\n", strlen("{\"ok\":false,\"reason\":\"invalid_baudrate\"}\n"));
+                return WebServer::send(request, 400, "application/json",
+                                       "{\"ok\":false,\"reason\":\"invalid_baudrate\"}\n",
+                                       strlen("{\"ok\":false,\"reason\":\"invalid_baudrate\"}\n"));
             }
             ret = CanCallback::CAN_BAUDRATE.set(baudrate);
             if (ret != ESP_OK) {
-                return WebServer::send(request, 500, "application/json", "{\"ok\":false,\"reason\":\"persist_failed\"}\n", strlen("{\"ok\":false,\"reason\":\"persist_failed\"}\n"));
+                return WebServer::send(request, 500, "application/json",
+                                       "{\"ok\":false,\"reason\":\"persist_failed\"}\n",
+                                       strlen("{\"ok\":false,\"reason\":\"persist_failed\"}\n"));
             }
         }
         if (json_get_uint32(request->body, "id", &id)) {
@@ -465,46 +465,43 @@ esp_err_t can_handler(WebServer::Request* request) {
                 if (baudrate != 0) {
                     CanCallback::CAN_BAUDRATE.set(previous_baudrate);
                 }
-                return WebServer::send(request, 500, "application/json", "{\"ok\":false,\"reason\":\"persist_failed\"}\n", strlen("{\"ok\":false,\"reason\":\"persist_failed\"}\n"));
+                return WebServer::send(request, 500, "application/json",
+                                       "{\"ok\":false,\"reason\":\"persist_failed\"}\n",
+                                       strlen("{\"ok\":false,\"reason\":\"persist_failed\"}\n"));
             }
         }
     }
 
-    uint32_t can_id = CanCallback::CAN_ID;
+    uint32_t can_id   = CanCallback::CAN_ID;
     uint32_t baudrate = CanCallback::CAN_BAUDRATE;
     if (is_post) {
         DEVICE_EVENT_I(TAG, "can: config baud=%lu id=0x%lx source=web reboot_required=1",
-                       static_cast<unsigned long>(baudrate),
-                       static_cast<unsigned long>(can_id));
+                       static_cast<unsigned long>(baudrate), static_cast<unsigned long>(can_id));
     }
     snprintf(response_buffer, sizeof(response_buffer),
-        "{\"ok\":true,\"baudrate\":%lu,\"id\":%lu,\"id_hex\":\"0x%lX\",\"note\":\"changed values may require CAN reinitialization or reboot\"}\n",
-        baudrate,
-        can_id,
-        can_id);
+             "{\"ok\":true,\"baudrate\":%lu,\"id\":%lu,\"id_hex\":\"0x%lX\",\"note\":\"changed values may require CAN "
+             "reinitialization or reboot\"}\n",
+             baudrate, can_id, can_id);
     return WebServer::send_json(request, response_buffer);
 }
 
 /** @brief GET /api/calibration，返回电流校准参数快照。 */
 esp_err_t calibration_handler(WebServer::Request* request) {
-    auto params = CurrentCalib::params_data.read();
-    float sample_resistance_mohm = params.current_base_K == 0 ? 0.0f : 2500.0f / params.current_base_K;
-    size_t pos = 0;
-    bool ok = append_checked(detail_response_buffer, sizeof(detail_response_buffer), &pos,
-        "{\"current_base_k\":%u,\"sample_resistance_mohm\":%.3f,\"temperature_k\":%d,\"base_temperature_c\":%.2f,\"points\":[",
-        static_cast<unsigned>(params.current_base_K),
-        sample_resistance_mohm,
-        params.temperature_K,
-        CurrentCalib::BASE_TEMPERATURE / 100.0f);
+    auto   params                 = CurrentCalib::params_data.read();
+    float  sample_resistance_mohm = params.current_base_K == 0 ? 0.0f : 2500.0f / params.current_base_K;
+    size_t pos                    = 0;
+    bool   ok                     = append_checked(detail_response_buffer, sizeof(detail_response_buffer), &pos,
+                                                   "{\"current_base_k\":%u,\"sample_resistance_mohm\":%.3f,\"temperature_k\":%d,\"base_"
+                                                                         "temperature_c\":%.2f,\"points\":[",
+                                                   static_cast<unsigned>(params.current_base_K), sample_resistance_mohm, params.temperature_K,
+                                                   CurrentCalib::BASE_TEMPERATURE / 100.0f);
 
     for (size_t i = 0; ok && i < sizeof(params.points) / sizeof(params.points[0]); ++i) {
         ok = append_checked(detail_response_buffer, sizeof(detail_response_buffer), &pos,
-            "%s{\"index\":%u,\"register_value\":%d,\"no_offset_ma\":%d,\"offset_ua\":%d}",
-            i == 0 ? "" : ",",
-            static_cast<unsigned>(i),
-            params.points[i].register_value,
-            params.points[i].register_value * params.current_base_K / 1000,
-            params.points[i].offset_current_100uA * 100);
+                            "%s{\"index\":%u,\"register_value\":%d,\"no_offset_ma\":%d,\"offset_ua\":%d}",
+                            i == 0 ? "" : ",", static_cast<unsigned>(i), params.points[i].register_value,
+                            params.points[i].register_value * params.current_base_K / 1000,
+                            params.points[i].offset_current_100uA * 100);
     }
 
     if (!ok || !append_checked(detail_response_buffer, sizeof(detail_response_buffer), &pos, "]}\n")) {
@@ -519,55 +516,51 @@ esp_err_t diagnostics_handler(WebServer::Request* request) {
     if (!state.flags.bits.lp_ina226_initialized) {
         ESP_LOGW(TAG, "INA226 diagnostics unavailable");
     }
-    twai_node_status_t can_status = {};
-    twai_node_record_t can_statistics = {};
-    HXC_TWAI* can = CanCallback::is_available() ? &CanCallback::get_can_bus() : nullptr;
-    const bool can_info_available = can != nullptr && can->get_info(&can_status, &can_statistics) == ESP_OK;
+    twai_node_status_t can_status         = {};
+    twai_node_record_t can_statistics     = {};
+    HXC_TWAI*          can                = CanCallback::is_available() ? &CanCallback::get_can_bus() : nullptr;
+    const bool         can_info_available = can != nullptr && can->get_info(&can_status, &can_statistics) == ESP_OK;
     snprintf(response_buffer, sizeof(response_buffer),
-        "{\"ina226\":{\"current_register_raw\":%d,\"voltage_register_raw\":%u,\"available\":%s},\"can\":{\"info_available\":%s,\"state\":%u,\"tx_error_count\":%u,\"rx_error_count\":%u,\"bus_error_count\":%lu,\"bus_off_count\":%lu,\"tx_failed_count\":%lu,\"rx_overflow_count\":%lu}}\n",
-        state.current_register_raw,
-        state.voltage_register_raw,
-        state.flags.bits.lp_ina226_initialized ? "true" : "false",
-        can_info_available ? "true" : "false",
-        static_cast<unsigned>(can_status.state),
-        static_cast<unsigned>(can_status.tx_error_count),
-        static_cast<unsigned>(can_status.rx_error_count),
-        static_cast<unsigned long>(can_statistics.bus_err_num),
-        can == nullptr ? 0UL : static_cast<unsigned long>(can->get_bus_off_count()),
-        can == nullptr ? 0UL : static_cast<unsigned long>(can->get_tx_failed_count()),
-        can == nullptr ? 0UL : static_cast<unsigned long>(can->get_rx_overflow_count()));
+             "{\"ina226\":{\"current_register_raw\":%d,\"voltage_register_raw\":%u,\"available\":%s},\"can\":{\"info_"
+             "available\":%s,\"state\":%u,\"tx_error_count\":%u,\"rx_error_count\":%u,\"bus_error_count\":%lu,\"bus_"
+             "off_count\":%lu,\"tx_failed_count\":%lu,\"rx_overflow_count\":%lu}}\n",
+             state.current_register_raw, state.voltage_register_raw,
+             state.flags.bits.lp_ina226_initialized ? "true" : "false", can_info_available ? "true" : "false",
+             static_cast<unsigned>(can_status.state), static_cast<unsigned>(can_status.tx_error_count),
+             static_cast<unsigned>(can_status.rx_error_count), static_cast<unsigned long>(can_statistics.bus_err_num),
+             can == nullptr ? 0UL : static_cast<unsigned long>(can->get_bus_off_count()),
+             can == nullptr ? 0UL : static_cast<unsigned long>(can->get_tx_failed_count()),
+             can == nullptr ? 0UL : static_cast<unsigned long>(can->get_rx_overflow_count()));
     return WebServer::send_json(request, response_buffer);
 }
 
 /** @brief GET /api/wifi/status，返回 WiFi、Web 和 ESP-NOW 共用射频状态。 */
 esp_err_t wifi_status_handler(WebServer::Request* request) {
-    IP_t ip = WifiService::get_ip();
-    char ip_text[16] = {};
-    char sta_mac[18] = {};
-    char ap_mac[18] = {};
-    uint8_t channel = 0;
+    IP_t    ip          = WifiService::get_ip();
+    char    ip_text[16] = {};
+    char    sta_mac[18] = {};
+    char    ap_mac[18]  = {};
+    uint8_t channel     = 0;
     ip_to_str(ip, ip_text, sizeof(ip_text));
     mac_to_str(WiFiManager::instance().get_mac(WIFI_IF_STA), sta_mac, sizeof(sta_mac));
     mac_to_str(WiFiManager::instance().get_mac(WIFI_IF_AP), ap_mac, sizeof(ap_mac));
-    auto cfg = WifiService::get_config();
+    auto                       cfg       = WifiService::get_config();
     EspNowLink::LinkStatistics now_stats = {};
     EspNowLink::get_statistics(&now_stats);
-    char peer_json[192] = {};
-    size_t peer_json_pos = 0;
+    char   peer_json[192]      = {};
+    size_t peer_json_pos       = 0;
     peer_json[peer_json_pos++] = '[';
-    const size_t peer_count = EspNowLink::get_saved_peer_count();
+    const size_t peer_count    = EspNowLink::get_saved_peer_count();
     for (size_t i = 0; i < peer_count && i < 3; ++i) {
         EspNowLink::SavedPeer peer = {};
         if (EspNowLink::get_saved_peer(i, &peer) != ESP_OK) {
             continue;
         }
-        const int written = snprintf(
-            peer_json + peer_json_pos, sizeof(peer_json) - peer_json_pos,
-            "%s{\"mac\":\"%02X:%02X:%02X:%02X:%02X:%02X\",\"channel\":%u}",
-            peer_json_pos == 1 ? "" : ",",
-            peer.address.bytes[0], peer.address.bytes[1], peer.address.bytes[2],
-            peer.address.bytes[3], peer.address.bytes[4], peer.address.bytes[5],
-            static_cast<unsigned>(peer.last_channel));
+        const int written =
+            snprintf(peer_json + peer_json_pos, sizeof(peer_json) - peer_json_pos,
+                     "%s{\"mac\":\"%02X:%02X:%02X:%02X:%02X:%02X\",\"channel\":%u}", peer_json_pos == 1 ? "" : ",",
+                     peer.address.bytes[0], peer.address.bytes[1], peer.address.bytes[2], peer.address.bytes[3],
+                     peer.address.bytes[4], peer.address.bytes[5], static_cast<unsigned>(peer.last_channel));
         if (written < 0 || static_cast<size_t>(written) >= sizeof(peer_json) - peer_json_pos) {
             break;
         }
@@ -575,45 +568,46 @@ esp_err_t wifi_status_handler(WebServer::Request* request) {
     }
     snprintf(peer_json + peer_json_pos, sizeof(peer_json) - peer_json_pos, "]");
     const bool channel_available = WifiService::get_channel(&channel) == ESP_OK;
-    snprintf(response_buffer, sizeof(response_buffer),
-        "{\"mode\":\"%s\",\"state\":%d,\"ip\":\"%s\",\"saved_ssid\":\"%s\",\"ap_ssid\":\"%s\",\"rssi\":%d,\"signal_percent\":%u,\"channel\":%u,\"channel_available\":%s,\"sta_mac\":\"%s\",\"ap_mac\":\"%s\",\"boot_enabled\":%s,\"espnow_active\":%s,\"espnow_pairing\":%s,\"espnow_peer_count\":%u,\"espnow_peers\":%s,\"espnow_tx\":%lu,\"espnow_no_ack\":%lu,\"espnow_invalid\":%lu,\"espnow_timing\":%lu,\"last_error\":\"%s\"}\n",
-        mode_to_str(WifiService::get_mode()),
-        (int)WifiService::get_wifi_state(),
-        ip_text,
-        cfg.ssid,
-        WifiService::get_ap_ssid(),
-        static_cast<int>(WifiService::get_rssi()),
-        static_cast<unsigned>(WifiService::get_signal_percent()),
-        static_cast<unsigned>(channel),
-        channel_available ? "true" : "false",
-        sta_mac,
-        ap_mac,
-        cfg.web_enabled_on_boot ? "true" : "false",
-        EspNowLink::is_active() ? "true" : "false",
-        EspNowLink::is_pairing() ? "true" : "false",
-        static_cast<unsigned>(peer_count),
-        peer_json,
-        static_cast<unsigned long>(now_stats.tx_packets),
-        static_cast<unsigned long>(now_stats.ack_timeouts),
-        static_cast<unsigned long>(now_stats.rx_invalid_packets),
-        static_cast<unsigned long>(now_stats.timing_errors),
-        WifiService::get_last_error());
+    snprintf(
+        response_buffer, sizeof(response_buffer),
+        "{\"mode\":\"%s\",\"state\":%d,\"ip\":\"%s\",\"saved_ssid\":\"%s\",\"ap_ssid\":\"%s\",\"rssi\":%d,\"signal_"
+        "percent\":%u,\"channel\":%u,\"channel_available\":%s,\"sta_mac\":\"%s\",\"ap_mac\":\"%s\",\"boot_enabled\":%s,"
+        "\"espnow_active\":%s,\"espnow_pairing\":%s,\"espnow_peer_count\":%u,\"espnow_peers\":%s,\"espnow_tx\":%lu,"
+        "\"espnow_no_ack\":%lu,\"espnow_invalid\":%lu,\"espnow_timing\":%lu,\"last_error\":\"%s\"}\n",
+        mode_to_str(WifiService::get_mode()), (int)WifiService::get_wifi_state(), ip_text, cfg.ssid,
+        WifiService::get_ap_ssid(), static_cast<int>(WifiService::get_rssi()),
+        static_cast<unsigned>(WifiService::get_signal_percent()), static_cast<unsigned>(channel),
+        channel_available ? "true" : "false", sta_mac, ap_mac, cfg.web_enabled_on_boot ? "true" : "false",
+        EspNowLink::is_active() ? "true" : "false", EspNowLink::is_pairing() ? "true" : "false",
+        static_cast<unsigned>(peer_count), peer_json, static_cast<unsigned long>(now_stats.tx_packets),
+        static_cast<unsigned long>(now_stats.ack_timeouts), static_cast<unsigned long>(now_stats.rx_invalid_packets),
+        static_cast<unsigned long>(now_stats.timing_errors), WifiService::get_last_error());
     return WebServer::send_json(request, response_buffer);
 }
 
 /** @brief 将 ESP-IDF WiFi 鉴权枚举转换为前端显示字符串。 */
 static const char* authmode_to_str(wifi_auth_mode_t authmode) {
     switch (authmode) {
-        case WIFI_AUTH_OPEN: return "open";
-        case WIFI_AUTH_WEP: return "wep";
-        case WIFI_AUTH_WPA_PSK: return "wpa";
-        case WIFI_AUTH_WPA2_PSK: return "wpa2";
-        case WIFI_AUTH_WPA_WPA2_PSK: return "wpa_wpa2";
-        case WIFI_AUTH_WPA2_ENTERPRISE: return "wpa2_enterprise";
-        case WIFI_AUTH_WPA3_PSK: return "wpa3";
-        case WIFI_AUTH_WPA2_WPA3_PSK: return "wpa2_wpa3";
-        case WIFI_AUTH_WAPI_PSK: return "wapi";
-        default: return "unknown";
+    case WIFI_AUTH_OPEN:
+        return "open";
+    case WIFI_AUTH_WEP:
+        return "wep";
+    case WIFI_AUTH_WPA_PSK:
+        return "wpa";
+    case WIFI_AUTH_WPA2_PSK:
+        return "wpa2";
+    case WIFI_AUTH_WPA_WPA2_PSK:
+        return "wpa_wpa2";
+    case WIFI_AUTH_WPA2_ENTERPRISE:
+        return "wpa2_enterprise";
+    case WIFI_AUTH_WPA3_PSK:
+        return "wpa3";
+    case WIFI_AUTH_WPA2_WPA3_PSK:
+        return "wpa2_wpa3";
+    case WIFI_AUTH_WAPI_PSK:
+        return "wapi";
+    default:
+        return "unknown";
     }
 }
 
@@ -679,32 +673,31 @@ static bool append_checked(char* out, size_t out_size, size_t* pos, const char* 
 
 /** @brief GET /api/logs，按 since 参数增量读取 Web 实时日志。 */
 esp_err_t logs_api_handler(WebServer::Request* request) {
-    char since_text[24] = {};
-    uint64_t since = 0;
+    char     since_text[24] = {};
+    uint64_t since          = 0;
     if (WebServer::get_query_value(request, "since", since_text, sizeof(since_text)) == ESP_OK) {
         since = strtoull(since_text, nullptr, 10);
     }
 
-    uint64_t from_seq = 0;
-    uint64_t next_seq = 0;
+    uint64_t from_seq   = 0;
+    uint64_t next_seq   = 0;
     uint64_t latest_seq = 0;
-    bool dropped = false;
-    size_t len = read_log_ring(since, log_snapshot_buffer, sizeof(log_snapshot_buffer), &from_seq, &next_seq, &latest_seq, &dropped);
+    bool     dropped    = false;
+    size_t   len        = read_log_ring(since, log_snapshot_buffer, sizeof(log_snapshot_buffer), &from_seq, &next_seq,
+                                        &latest_seq, &dropped);
 
     size_t pos = 0;
-    bool ok = append_checked(detail_response_buffer, sizeof(detail_response_buffer), &pos,
-        "{\"from\":%" PRIu64 ",\"seq\":%" PRIu64 ",\"latest\":%" PRIu64 ",\"dropped\":%s,\"bytes\":%u,\"text\":\"",
-        from_seq,
-        next_seq,
-        latest_seq,
-        dropped ? "true" : "false",
-        static_cast<unsigned>(len));
+    bool   ok  = append_checked(detail_response_buffer, sizeof(detail_response_buffer), &pos,
+                                "{\"from\":%" PRIu64 ",\"seq\":%" PRIu64 ",\"latest\":%" PRIu64
+                                ",\"dropped\":%s,\"bytes\":%u,\"text\":\"",
+                                from_seq, next_seq, latest_seq, dropped ? "true" : "false", static_cast<unsigned>(len));
     if (ok) {
         pos = append_json_escaped(detail_response_buffer, sizeof(detail_response_buffer), pos, log_snapshot_buffer);
-        ok = append_checked(detail_response_buffer, sizeof(detail_response_buffer), &pos, "\"}\n");
+        ok  = append_checked(detail_response_buffer, sizeof(detail_response_buffer), &pos, "\"}\n");
     }
     if (!ok) {
-        snprintf(detail_response_buffer, sizeof(detail_response_buffer), "{\"error\":\"response_too_large\",\"seq\":%" PRIu64 "}\n", next_seq);
+        snprintf(detail_response_buffer, sizeof(detail_response_buffer),
+                 "{\"error\":\"response_too_large\",\"seq\":%" PRIu64 "}\n", next_seq);
     }
     return WebServer::send_json(request, detail_response_buffer);
 }
@@ -718,36 +711,35 @@ esp_err_t logs_clear_handler(WebServer::Request* request) {
 /** @brief GET /api/wifi/scan，扫描附近 AP 并返回有限数量结果。 */
 esp_err_t wifi_scan_handler(WebServer::Request* request) {
     WifiService::ScanResult results[WifiService::WIFI_SCAN_MAX_RESULTS] = {};
-    size_t count = 0;
-    esp_err_t ret = WifiService::scan_ap_list(results, WifiService::WIFI_SCAN_MAX_RESULTS, &count);
+    size_t                  count                                       = 0;
+    esp_err_t               ret = WifiService::scan_ap_list(results, WifiService::WIFI_SCAN_MAX_RESULTS, &count);
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "WiFi scan failed: reason=%s", esp_err_to_name(ret));
-        snprintf(scan_response_buffer, sizeof(scan_response_buffer),
-            "{\"ok\":false,\"reason\":\"%s\",\"aps\":[]}\n", esp_err_to_name(ret));
+        snprintf(scan_response_buffer, sizeof(scan_response_buffer), "{\"ok\":false,\"reason\":\"%s\",\"aps\":[]}\n",
+                 esp_err_to_name(ret));
         return WebServer::send_json(request, scan_response_buffer);
     }
 
     size_t pos = 0;
-    bool ok = append_checked(scan_response_buffer, sizeof(scan_response_buffer), &pos,
-        "{\"ok\":true,\"count\":%u,\"aps\":[", static_cast<unsigned>(count));
+    bool   ok  = append_checked(scan_response_buffer, sizeof(scan_response_buffer), &pos,
+                                "{\"ok\":true,\"count\":%u,\"aps\":[", static_cast<unsigned>(count));
 
     for (size_t i = 0; ok && i < count && pos < sizeof(scan_response_buffer) - 1; ++i) {
-        ok = append_checked(scan_response_buffer, sizeof(scan_response_buffer), &pos,
-            "%s{\"ssid\":\"", i == 0 ? "" : ",");
+        ok = append_checked(scan_response_buffer, sizeof(scan_response_buffer), &pos, "%s{\"ssid\":\"",
+                            i == 0 ? "" : ",");
         if (!ok) {
             break;
         }
         pos = append_json_escaped(scan_response_buffer, sizeof(scan_response_buffer), pos, results[i].ssid);
-        ok = append_checked(scan_response_buffer, sizeof(scan_response_buffer), &pos,
-            "\",\"rssi\":%d,\"channel\":%u,\"auth\":\"%s\",\"secure\":%s}",
-            results[i].rssi,
-            static_cast<unsigned>(results[i].channel),
-            authmode_to_str(results[i].authmode),
-            results[i].authmode == WIFI_AUTH_OPEN ? "false" : "true");
+        ok  = append_checked(scan_response_buffer, sizeof(scan_response_buffer), &pos,
+                             "\",\"rssi\":%d,\"channel\":%u,\"auth\":\"%s\",\"secure\":%s}", results[i].rssi,
+                             static_cast<unsigned>(results[i].channel), authmode_to_str(results[i].authmode),
+                            results[i].authmode == WIFI_AUTH_OPEN ? "false" : "true");
     }
 
     if (!ok || !append_checked(scan_response_buffer, sizeof(scan_response_buffer), &pos, "]}\n")) {
-        snprintf(scan_response_buffer, sizeof(scan_response_buffer), "{\"ok\":false,\"reason\":\"response_too_large\",\"aps\":[]}\n");
+        snprintf(scan_response_buffer, sizeof(scan_response_buffer),
+                 "{\"ok\":false,\"reason\":\"response_too_large\",\"aps\":[]}\n");
     }
     return WebServer::send_json(request, scan_response_buffer);
 }
@@ -763,11 +755,12 @@ esp_err_t wifi_connect_handler(WebServer::Request* request) {
         return ret;
     }
 
-    char ssid[WIFI_SSID_MAX_LEN + 1] = {};
+    char ssid[WIFI_SSID_MAX_LEN + 1]         = {};
     char password[WIFI_PASSWORD_MAX_LEN + 1] = {};
     if (!json_get_string(request->body, "ssid", ssid, sizeof(ssid))) {
         ESP_LOGW(TAG, "WiFi connect rejected: missing SSID");
-        return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"missing_ssid\"}\n", strlen("{\"ok\":false,\"reason\":\"missing_ssid\"}\n"));
+        return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"missing_ssid\"}\n",
+                               strlen("{\"ok\":false,\"reason\":\"missing_ssid\"}\n"));
     }
     json_get_string(request->body, "password", password, sizeof(password));
 
@@ -779,15 +772,12 @@ esp_err_t wifi_connect_handler(WebServer::Request* request) {
         ESP_LOGI(TAG, "WiFi connected: ssid=%s", ssid);
     }
 
-    IP_t ip = WifiService::get_ip();
+    IP_t ip          = WifiService::get_ip();
     char ip_text[16] = {};
     ip_to_str(ip, ip_text, sizeof(ip_text));
-    snprintf(response_buffer, sizeof(response_buffer),
-        "{\"ok\":%s,\"reason\":\"%s\",\"ip\":\"%s\",\"mode\":\"%s\"}\n",
-        ret == ESP_OK ? "true" : "false",
-        ret == ESP_OK ? "ok" : esp_err_to_name(ret),
-        ip_text,
-        mode_to_str(WifiService::get_mode()));
+    snprintf(response_buffer, sizeof(response_buffer), "{\"ok\":%s,\"reason\":\"%s\",\"ip\":\"%s\",\"mode\":\"%s\"}\n",
+             ret == ESP_OK ? "true" : "false", ret == ESP_OK ? "ok" : esp_err_to_name(ret), ip_text,
+             mode_to_str(WifiService::get_mode()));
     return WebServer::send_json(request, response_buffer);
 }
 
@@ -799,32 +789,23 @@ esp_err_t wifi_ap_handler(WebServer::Request* request) {
     } else {
         ESP_LOGW(TAG, "WiFi provision AP start failed: reason=%s", esp_err_to_name(ret));
     }
-    IP_t ip = WifiService::get_ip();
+    IP_t ip          = WifiService::get_ip();
     char ip_text[16] = {};
     ip_to_str(ip, ip_text, sizeof(ip_text));
     snprintf(response_buffer, sizeof(response_buffer),
-        "{\"ok\":%s,\"reason\":\"%s\",\"ap_ssid\":\"%s\",\"ip\":\"%s\"}\n",
-        ret == ESP_OK ? "true" : "false",
-        ret == ESP_OK ? "ok" : esp_err_to_name(ret),
-        WifiService::get_ap_ssid(),
-        ip_text);
+             "{\"ok\":%s,\"reason\":\"%s\",\"ap_ssid\":\"%s\",\"ip\":\"%s\"}\n", ret == ESP_OK ? "true" : "false",
+             ret == ESP_OK ? "ok" : esp_err_to_name(ret), WifiService::get_ap_ssid(), ip_text);
     return WebServer::send_json(request, response_buffer);
 }
 
 /** @brief POST /api/wifi/off，关闭 IP 网络并切换到 ESPNOW_ONLY。 */
 esp_err_t wifi_off_handler(WebServer::Request* request) {
-    const BaseType_t task_result = xTaskCreate(wifi_off_deferred_task,
-                                               "wifi_web_off",
-                                               3072,
-                                               nullptr,
-                                               3,
-                                               nullptr);
-    const bool scheduled = task_result == pdPASS;
+    const BaseType_t task_result = xTaskCreate(wifi_off_deferred_task, "wifi_web_off", 3072, nullptr, 3, nullptr);
+    const bool       scheduled   = task_result == pdPASS;
     snprintf(response_buffer, sizeof(response_buffer),
-        "{\"ok\":%s,\"reason\":\"%s\",\"target_mode\":\"espnow_only\",\"espnow_active\":%s}\n",
-        scheduled ? "true" : "false",
-        scheduled ? "scheduled" : "no_memory",
-        EspNowLink::is_active() ? "true" : "false");
+             "{\"ok\":%s,\"reason\":\"%s\",\"target_mode\":\"espnow_only\",\"espnow_active\":%s}\n",
+             scheduled ? "true" : "false", scheduled ? "scheduled" : "no_memory",
+             EspNowLink::is_active() ? "true" : "false");
     return WebServer::send_json(request, response_buffer);
 }
 
@@ -836,15 +817,12 @@ esp_err_t wifi_on_handler(WebServer::Request* request) {
     } else {
         ESP_LOGW(TAG, "WiFi service start failed: reason=%s", esp_err_to_name(ret));
     }
-    IP_t ip = WifiService::get_ip();
+    IP_t ip          = WifiService::get_ip();
     char ip_text[16] = {};
     ip_to_str(ip, ip_text, sizeof(ip_text));
-    snprintf(response_buffer, sizeof(response_buffer),
-        "{\"ok\":%s,\"reason\":\"%s\",\"mode\":\"%s\",\"ip\":\"%s\"}\n",
-        ret == ESP_OK ? "true" : "false",
-        ret == ESP_OK ? "ok" : esp_err_to_name(ret),
-        mode_to_str(WifiService::get_mode()),
-        ip_text);
+    snprintf(response_buffer, sizeof(response_buffer), "{\"ok\":%s,\"reason\":\"%s\",\"mode\":\"%s\",\"ip\":\"%s\"}\n",
+             ret == ESP_OK ? "true" : "false", ret == ESP_OK ? "ok" : esp_err_to_name(ret),
+             mode_to_str(WifiService::get_mode()), ip_text);
     return WebServer::send_json(request, response_buffer);
 }
 
@@ -857,7 +835,8 @@ esp_err_t wifi_boot_handler(WebServer::Request* request) {
     bool enabled = true;
     if (!json_get_bool(request->body, "enabled", &enabled)) {
         ESP_LOGW(TAG, "WiFi boot config rejected: missing enabled");
-        return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"missing_enabled\"}\n", strlen("{\"ok\":false,\"reason\":\"missing_enabled\"}\n"));
+        return WebServer::send(request, 400, "application/json", "{\"ok\":false,\"reason\":\"missing_enabled\"}\n",
+                               strlen("{\"ok\":false,\"reason\":\"missing_enabled\"}\n"));
     }
     ret = WifiService::set_web_enabled_on_boot(enabled, TAG);
     if (ret == ESP_OK) {
@@ -865,11 +844,9 @@ esp_err_t wifi_boot_handler(WebServer::Request* request) {
     } else {
         ESP_LOGW(TAG, "WiFi boot config update failed: reason=%s", esp_err_to_name(ret));
     }
-    snprintf(response_buffer, sizeof(response_buffer),
-        "{\"ok\":%s,\"reason\":\"%s\",\"boot_enabled\":%s}\n",
-        ret == ESP_OK ? "true" : "false",
-        ret == ESP_OK ? "ok" : esp_err_to_name(ret),
-        WifiService::is_web_enabled_on_boot() ? "true" : "false");
+    snprintf(response_buffer, sizeof(response_buffer), "{\"ok\":%s,\"reason\":\"%s\",\"boot_enabled\":%s}\n",
+             ret == ESP_OK ? "true" : "false", ret == ESP_OK ? "ok" : esp_err_to_name(ret),
+             WifiService::is_web_enabled_on_boot() ? "true" : "false");
     return WebServer::send_json(request, response_buffer);
 }
 
@@ -881,10 +858,8 @@ esp_err_t wifi_clear_handler(WebServer::Request* request) {
     } else {
         ESP_LOGW(TAG, "clear saved WiFi credentials failed: reason=%s", esp_err_to_name(ret));
     }
-    snprintf(response_buffer, sizeof(response_buffer),
-        "{\"ok\":%s,\"reason\":\"%s\"}\n",
-        ret == ESP_OK ? "true" : "false",
-        ret == ESP_OK ? "ok" : esp_err_to_name(ret));
+    snprintf(response_buffer, sizeof(response_buffer), "{\"ok\":%s,\"reason\":\"%s\"}\n",
+             ret == ESP_OK ? "true" : "false", ret == ESP_OK ? "ok" : esp_err_to_name(ret));
     return WebServer::send_json(request, response_buffer);
 }
 
@@ -897,17 +872,15 @@ esp_err_t espnow_pair_handler(WebServer::Request* request) {
 
     ret = EspNowLink::enter_pairing_mode(0);
     if (ret == ESP_OK) {
-        DEVICE_EVENT_I(TAG,
-                       "espnow: pairing source=web action=start unlimited=1 result=ok");
+        DEVICE_EVENT_I(TAG, "espnow: pairing source=web action=start unlimited=1 result=ok");
     } else {
         ESP_LOGW(TAG, "ESP-NOW pairing start failed: reason=%s", esp_err_to_name(ret));
     }
-    snprintf(response_buffer, sizeof(response_buffer),
+    snprintf(
+        response_buffer, sizeof(response_buffer),
         "{\"ok\":%s,\"reason\":\"%s\",\"pairing\":%s,\"peer_count\":%u,\"single_device\":true,\"unlimited\":true}\n",
-        ret == ESP_OK ? "true" : "false",
-        ret == ESP_OK ? "ok" : esp_err_to_name(ret),
-        EspNowLink::is_pairing() ? "true" : "false",
-        static_cast<unsigned>(EspNowLink::get_saved_peer_count()));
+        ret == ESP_OK ? "true" : "false", ret == ESP_OK ? "ok" : esp_err_to_name(ret),
+        EspNowLink::is_pairing() ? "true" : "false", static_cast<unsigned>(EspNowLink::get_saved_peer_count()));
     return WebServer::send_json(request, response_buffer);
 }
 
@@ -915,9 +888,8 @@ esp_err_t espnow_pair_handler(WebServer::Request* request) {
 esp_err_t espnow_pair_stop_handler(WebServer::Request* request) {
     EspNowLink::leave_pairing_mode();
     DEVICE_EVENT_I(TAG, "espnow: pairing source=web action=stop result=ok");
-    snprintf(response_buffer, sizeof(response_buffer),
-        "{\"ok\":true,\"pairing\":false,\"peer_count\":%u}\n",
-        static_cast<unsigned>(EspNowLink::get_saved_peer_count()));
+    snprintf(response_buffer, sizeof(response_buffer), "{\"ok\":true,\"pairing\":false,\"peer_count\":%u}\n",
+             static_cast<unsigned>(EspNowLink::get_saved_peer_count()));
     return WebServer::send_json(request, response_buffer);
 }
 
@@ -931,12 +903,9 @@ esp_err_t espnow_pair_clear_handler(WebServer::Request* request) {
         ESP_LOGW(TAG, "clear ESP-NOW paired peers failed: reason=%s", esp_err_to_name(ret));
     }
     snprintf(response_buffer, sizeof(response_buffer),
-        "{\"ok\":%s,\"reason\":\"%s\",\"pairing\":false,\"peer_count\":%u}\n",
-        ret == ESP_OK ? "true" : "false",
-        ret == ESP_OK ? "ok" : esp_err_to_name(ret),
-        static_cast<unsigned>(EspNowLink::get_saved_peer_count()));
+             "{\"ok\":%s,\"reason\":\"%s\",\"pairing\":false,\"peer_count\":%u}\n", ret == ESP_OK ? "true" : "false",
+             ret == ESP_OK ? "ok" : esp_err_to_name(ret), static_cast<unsigned>(EspNowLink::get_saved_peer_count()));
     return WebServer::send_json(request, response_buffer);
 }
-
 
 } // namespace WebBackend

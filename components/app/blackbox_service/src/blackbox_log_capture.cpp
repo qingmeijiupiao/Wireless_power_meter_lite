@@ -16,27 +16,27 @@ namespace Internal {
 namespace {
 
 constexpr size_t LOG_LINE_BUFFER_SIZE = 256;
-constexpr size_t LOG_EVENT_RING_SIZE = 32;
-constexpr size_t CAPTURE_SLOT_COUNT = 4;
+constexpr size_t LOG_EVENT_RING_SIZE  = 32;
+constexpr size_t CAPTURE_SLOT_COUNT   = 4;
 
 struct CaptureSlot {
-    bool busy;
-    char raw[LOG_LINE_BUFFER_SIZE];
-    char clean[LOG_LINE_BUFFER_SIZE];
-    char output[LOG_LINE_BUFFER_SIZE];
+    bool     busy;
+    char     raw[LOG_LINE_BUFFER_SIZE];
+    char     clean[LOG_LINE_BUFFER_SIZE];
+    char     output[LOG_LINE_BUFFER_SIZE];
     LogEvent event;
 };
 
-portMUX_TYPE event_ring_lock = portMUX_INITIALIZER_UNLOCKED;
-LogEvent event_ring[LOG_EVENT_RING_SIZE];
-size_t event_ring_read = 0;
-size_t event_ring_write = 0;
-size_t event_ring_used = 0;
-vprintf_like_t previous_log_vprintf = nullptr;
-CaptureSlot capture_slots[CAPTURE_SLOT_COUNT] = {};
-uint32_t dropped_no_slot = 0;
-uint32_t dropped_ring_full = 0;
-uint32_t dropped_parse_failed = 0;
+portMUX_TYPE   event_ring_lock = portMUX_INITIALIZER_UNLOCKED;
+LogEvent       event_ring[LOG_EVENT_RING_SIZE];
+size_t         event_ring_read                   = 0;
+size_t         event_ring_write                  = 0;
+size_t         event_ring_used                   = 0;
+vprintf_like_t previous_log_vprintf              = nullptr;
+CaptureSlot    capture_slots[CAPTURE_SLOT_COUNT] = {};
+uint32_t       dropped_no_slot                   = 0;
+uint32_t       dropped_ring_full                 = 0;
+uint32_t       dropped_parse_failed              = 0;
 
 bool is_internal_tag(const char* tag, size_t len) {
     constexpr const char* INTERNAL_TAGS[] = {
@@ -91,7 +91,7 @@ void strip_ansi(const char* input, char* output, size_t output_size) {
 }
 
 PersistPolicy marker_policy(const char** message) {
-    constexpr size_t TEXT_MARKER_LEN = sizeof(DIAGNOSTIC_LOG_TEXT_MARKER) - 1;
+    constexpr size_t TEXT_MARKER_LEN     = sizeof(DIAGNOSTIC_LOG_TEXT_MARKER) - 1;
     constexpr size_t SNAPSHOT_MARKER_LEN = sizeof(DIAGNOSTIC_LOG_SNAPSHOT_MARKER) - 1;
     if (strncmp(*message, DIAGNOSTIC_LOG_TEXT_MARKER, TEXT_MARKER_LEN) == 0) {
         *message += TEXT_MARKER_LEN;
@@ -105,10 +105,10 @@ PersistPolicy marker_policy(const char** message) {
 }
 
 bool remove_marker_from_output(const char* raw, char* output, size_t output_size) {
-    const char* marker = DIAGNOSTIC_LOG_TEXT_MARKER;
+    const char* marker     = DIAGNOSTIC_LOG_TEXT_MARKER;
     const char* marker_pos = strstr(raw, marker);
     if (marker_pos == nullptr) {
-        marker = DIAGNOSTIC_LOG_SNAPSHOT_MARKER;
+        marker     = DIAGNOSTIC_LOG_SNAPSHOT_MARKER;
         marker_pos = strstr(raw, marker);
     }
     if (marker_pos == nullptr) {
@@ -148,7 +148,7 @@ bool format_log_event(const char* raw, CaptureSlot* slot, bool* marked) {
     message += 2;
 
     PersistPolicy policy = marker_policy(&message);
-    *marked = policy != PersistPolicy::NONE;
+    *marked              = policy != PersistPolicy::NONE;
     if (level == 'W' || level == 'E') {
         policy = PersistPolicy::TEXT_AND_SNAPSHOT;
     } else if (policy == PersistPolicy::NONE) {
@@ -161,14 +161,8 @@ bool format_log_event(const char* raw, CaptureSlot* slot, bool* marked) {
     }
 
     slot->event.policy = policy;
-    snprintf(slot->event.text,
-             sizeof(slot->event.text),
-             "[%c][%.*s] %.*s",
-             level,
-             static_cast<int>(tag_len),
-             tag,
-             static_cast<int>(message_len),
-             message);
+    snprintf(slot->event.text, sizeof(slot->event.text), "[%c][%.*s] %.*s", level, static_cast<int>(tag_len), tag,
+             static_cast<int>(message_len), message);
     return true;
 }
 
@@ -176,7 +170,7 @@ void push_log_event(const LogEvent& event) {
     portENTER_CRITICAL(&event_ring_lock);
     if (event_ring_used < LOG_EVENT_RING_SIZE) {
         event_ring[event_ring_write] = event;
-        event_ring_write = (event_ring_write + 1) % LOG_EVENT_RING_SIZE;
+        event_ring_write             = (event_ring_write + 1) % LOG_EVENT_RING_SIZE;
         ++event_ring_used;
     } else {
         ++dropped_ring_full;
@@ -225,13 +219,12 @@ int blackbox_log_vprintf(const char* fmt, va_list args) {
         return output_original(fmt, args);
     }
 
-    slot->event = {};
-    bool marked = false;
+    slot->event         = {};
+    bool       marked   = false;
     const bool captured = format_log_event(slot->raw, slot, &marked);
 
     int ret = 0;
-    if (marked &&
-        remove_marker_from_output(slot->raw, slot->output, sizeof(slot->output))) {
+    if (marked && remove_marker_from_output(slot->raw, slot->output, sizeof(slot->output))) {
         ret = output_clean_line(slot->output);
     } else {
         ret = output_original(fmt, args);
@@ -256,7 +249,7 @@ bool pop_log_event(LogEvent* event) {
         portEXIT_CRITICAL(&event_ring_lock);
         return false;
     }
-    *event = event_ring[event_ring_read];
+    *event          = event_ring[event_ring_read];
     event_ring_read = (event_ring_read + 1) % LOG_EVENT_RING_SIZE;
     --event_ring_used;
     portEXIT_CRITICAL(&event_ring_lock);
@@ -266,12 +259,12 @@ bool pop_log_event(LogEvent* event) {
 CaptureDropStats take_capture_drop_stats() {
     portENTER_CRITICAL(&event_ring_lock);
     const CaptureDropStats stats = {
-        .no_slot = dropped_no_slot,
-        .ring_full = dropped_ring_full,
+        .no_slot      = dropped_no_slot,
+        .ring_full    = dropped_ring_full,
         .parse_failed = dropped_parse_failed,
     };
-    dropped_no_slot = 0;
-    dropped_ring_full = 0;
+    dropped_no_slot      = 0;
+    dropped_ring_full    = 0;
     dropped_parse_failed = 0;
     portEXIT_CRITICAL(&event_ring_lock);
     return stats;

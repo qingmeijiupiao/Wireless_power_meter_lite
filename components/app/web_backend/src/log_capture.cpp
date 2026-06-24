@@ -21,26 +21,34 @@ namespace WebBackend {
  * 实时日志只保存在 RAM 中，不写 Flash。
  * 这样可以让 Web 页面看到最近日志，同时避免频繁写入影响 Flash 寿命。
  */
-static constexpr size_t LOG_RING_SIZE = 8 * 1024;
+static constexpr size_t LOG_RING_SIZE    = 8 * 1024;
 static constexpr size_t LOG_LINE_MAX_LEN = 256;
-static char log_ring[LOG_RING_SIZE];
-static portMUX_TYPE log_ring_lock = portMUX_INITIALIZER_UNLOCKED;
-static size_t log_ring_write_pos = 0;
-static size_t log_ring_used = 0;
-static uint64_t log_ring_seq = 0;
-static vprintf_like_t original_log_vprintf = nullptr;
-static bool log_capture_installed = false;
+static char             log_ring[LOG_RING_SIZE];
+static portMUX_TYPE     log_ring_lock         = portMUX_INITIALIZER_UNLOCKED;
+static size_t           log_ring_write_pos    = 0;
+static size_t           log_ring_used         = 0;
+static uint64_t         log_ring_seq          = 0;
+static vprintf_like_t   original_log_vprintf  = nullptr;
+static bool             log_capture_installed = false;
 
 static const char* method_to_str(WebServer::Method method) {
     switch (method) {
-        case WebServer::Method::GET: return "GET";
-        case WebServer::Method::POST: return "POST";
-        case WebServer::Method::PUT: return "PUT";
-        case WebServer::Method::DELETE_: return "DELETE";
-        case WebServer::Method::PATCH: return "PATCH";
-        case WebServer::Method::OPTIONS: return "OPTIONS";
-        case WebServer::Method::HEAD: return "HEAD";
-        default: return "ANY";
+    case WebServer::Method::GET:
+        return "GET";
+    case WebServer::Method::POST:
+        return "POST";
+    case WebServer::Method::PUT:
+        return "PUT";
+    case WebServer::Method::DELETE_:
+        return "DELETE";
+    case WebServer::Method::PATCH:
+        return "PATCH";
+    case WebServer::Method::OPTIONS:
+        return "OPTIONS";
+    case WebServer::Method::HEAD:
+        return "HEAD";
+    default:
+        return "ANY";
     }
 }
 
@@ -53,7 +61,7 @@ static void log_ring_write(const char* text, size_t len) {
     portENTER_CRITICAL(&log_ring_lock);
     for (size_t i = 0; i < len; ++i) {
         log_ring[log_ring_write_pos] = text[i];
-        log_ring_write_pos = (log_ring_write_pos + 1) % LOG_RING_SIZE;
+        log_ring_write_pos           = (log_ring_write_pos + 1) % LOG_RING_SIZE;
         if (log_ring_used < LOG_RING_SIZE) {
             log_ring_used++;
         }
@@ -80,7 +88,7 @@ static int log_capture_vprintf(const char* fmt, va_list args) {
     va_list copy_args;
     va_copy(copy_args, args);
     char line[LOG_LINE_MAX_LEN];
-    int len = vsnprintf(line, sizeof(line), fmt, copy_args);
+    int  len = vsnprintf(line, sizeof(line), fmt, copy_args);
     va_end(copy_args);
 
     if (len > 0) {
@@ -98,7 +106,7 @@ void install_log_capture() {
     if (log_capture_installed) {
         return;
     }
-    original_log_vprintf = esp_log_set_vprintf(log_capture_vprintf);
+    original_log_vprintf  = esp_log_set_vprintf(log_capture_vprintf);
     log_capture_installed = true;
 }
 
@@ -106,8 +114,8 @@ void install_log_capture() {
 void clear_log_ring() {
     portENTER_CRITICAL(&log_ring_lock);
     log_ring_write_pos = 0;
-    log_ring_used = 0;
-    log_ring_seq = 0;
+    log_ring_used      = 0;
+    log_ring_seq       = 0;
     portEXIT_CRITICAL(&log_ring_lock);
 }
 
@@ -117,17 +125,19 @@ void clear_log_ring() {
  * Web 前端轮询 `/api/logs?since=<seq>` 时使用增量读取。
  * 若客户端太久没读，旧日志已被覆盖，dropped 会被置为 true。
  */
-size_t read_log_ring(uint64_t since, char* out, size_t out_size, uint64_t* from_seq, uint64_t* next_seq, uint64_t* latest_seq, bool* dropped) {
-    if (out == nullptr || out_size == 0 || from_seq == nullptr || next_seq == nullptr || latest_seq == nullptr || dropped == nullptr) {
+size_t read_log_ring(uint64_t since, char* out, size_t out_size, uint64_t* from_seq, uint64_t* next_seq,
+                     uint64_t* latest_seq, bool* dropped) {
+    if (out == nullptr || out_size == 0 || from_seq == nullptr || next_seq == nullptr || latest_seq == nullptr ||
+        dropped == nullptr) {
         return 0;
     }
 
     portENTER_CRITICAL(&log_ring_lock);
-    uint64_t oldest_seq = log_ring_seq > log_ring_used ? log_ring_seq - log_ring_used : 0;
-    uint64_t start_seq = since;
-    bool was_dropped = false;
+    uint64_t oldest_seq  = log_ring_seq > log_ring_used ? log_ring_seq - log_ring_used : 0;
+    uint64_t start_seq   = since;
+    bool     was_dropped = false;
     if (start_seq < oldest_seq) {
-        start_seq = oldest_seq;
+        start_seq   = oldest_seq;
         was_dropped = true;
     }
     if (start_seq > log_ring_seq) {
@@ -140,20 +150,19 @@ size_t read_log_ring(uint64_t since, char* out, size_t out_size, uint64_t* from_
     }
 
     size_t oldest_pos = (log_ring_write_pos + LOG_RING_SIZE - log_ring_used) % LOG_RING_SIZE;
-    size_t offset = static_cast<size_t>(start_seq - oldest_seq);
-    size_t pos = (oldest_pos + offset) % LOG_RING_SIZE;
+    size_t offset     = static_cast<size_t>(start_seq - oldest_seq);
+    size_t pos        = (oldest_pos + offset) % LOG_RING_SIZE;
     for (size_t i = 0; i < available; ++i) {
         out[i] = log_ring[(pos + i) % LOG_RING_SIZE];
     }
     out[available] = '\0';
-    *from_seq = start_seq;
-    *next_seq = start_seq + available;
-    *latest_seq = log_ring_seq;
-    *dropped = was_dropped;
+    *from_seq      = start_seq;
+    *next_seq      = start_seq + available;
+    *latest_seq    = log_ring_seq;
+    *dropped       = was_dropped;
     portEXIT_CRITICAL(&log_ring_lock);
     return available;
 }
-
 
 /** @brief 请求日志中间件，实时日志接口本身不再记录以避免递归刷屏。 */
 esp_err_t log_middleware(WebServer::Request* request) {
@@ -161,13 +170,10 @@ esp_err_t log_middleware(WebServer::Request* request) {
         return ESP_OK;
     }
     const char* method = method_to_str(request->method);
-    ESP_LOGI("WebBackend", "request ip=%s method=%s uri=%s",
-             request->peer_ip, method, request->uri);
-    if (request->method != WebServer::Method::GET &&
-        request->method != WebServer::Method::HEAD &&
+    ESP_LOGI("WebBackend", "request ip=%s method=%s uri=%s", request->peer_ip, method, request->uri);
+    if (request->method != WebServer::Method::GET && request->method != WebServer::Method::HEAD &&
         request->method != WebServer::Method::OPTIONS) {
-        DEVICE_EVENT_I("WebBackend", "web: action ip=%s method=%s uri=%s",
-                       request->peer_ip, method, request->uri);
+        DEVICE_EVENT_I("WebBackend", "web: action ip=%s method=%s uri=%s", request->peer_ip, method, request->uri);
     }
     return ESP_OK;
 }

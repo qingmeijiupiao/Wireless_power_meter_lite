@@ -70,5 +70,4 @@ esp_err_t provision_handler(WebServer::Request* request) {
     return WebServer::send_html_gzip(request, provision_html_file.data, provision_html_file.size);
 }
 
-
 } // namespace WebBackend

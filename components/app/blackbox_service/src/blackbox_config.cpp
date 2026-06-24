@@ -12,8 +12,8 @@ namespace Internal {
 namespace {
 
 HXC::NVS_DATA<uint32_t> snapshot_interval_nvs("bb_snap_s", DEFAULT_SNAPSHOT_INTERVAL_S);
-portMUX_TYPE config_lock = portMUX_INITIALIZER_UNLOCKED;
-uint32_t snapshot_interval_s = DEFAULT_SNAPSHOT_INTERVAL_S;
+portMUX_TYPE            config_lock         = portMUX_INITIALIZER_UNLOCKED;
+uint32_t                snapshot_interval_s = DEFAULT_SNAPSHOT_INTERVAL_S;
 
 } // namespace
 

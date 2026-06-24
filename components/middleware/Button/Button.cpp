@@ -5,11 +5,10 @@ namespace {
 constexpr uint32_t BUTTON_EVENT_TASK_STACK_SIZE = 2048;
 }
 
-Button::Button()
-    : _pin(GPIO_NUM_NC), _active_low(true), _ticks(0), _gap_ticks(0) {
-    
-    _state.click_count = 0;
-    _state.is_long_sent = 0;
+Button::Button() : _pin(GPIO_NUM_NC), _active_low(true), _ticks(0), _gap_ticks(0) {
+
+    _state.click_count   = 0;
+    _state.is_long_sent  = 0;
     _state.is_super_sent = 0;
 }
 
@@ -27,16 +26,16 @@ Button::~Button() {
 }
 
 esp_err_t Button::setup(gpio_num_t gpio_num, bool active_low) {
-    _pin = gpio_num;
+    _pin        = gpio_num;
     _active_low = active_low;
 
     gpio_config_t io_conf = {};
-    io_conf.intr_type = GPIO_INTR_DISABLE;
-    io_conf.mode = GPIO_MODE_INPUT;
-    io_conf.pin_bit_mask = (1ULL << _pin);
-    io_conf.pull_down_en = active_low ? GPIO_PULLDOWN_DISABLE : GPIO_PULLDOWN_ENABLE;
-    io_conf.pull_up_en = active_low ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE;
-    esp_err_t ret = gpio_config(&io_conf);
+    io_conf.intr_type     = GPIO_INTR_DISABLE;
+    io_conf.mode          = GPIO_MODE_INPUT;
+    io_conf.pin_bit_mask  = (1ULL << _pin);
+    io_conf.pull_down_en  = active_low ? GPIO_PULLDOWN_DISABLE : GPIO_PULLDOWN_ENABLE;
+    io_conf.pull_up_en    = active_low ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE;
+    esp_err_t ret         = gpio_config(&io_conf);
     if (ret != ESP_OK) {
         ESP_LOGE("Button", "GPIO %d config failed: %s", gpio_num, esp_err_to_name(ret));
         return ret;
@@ -47,14 +46,13 @@ esp_err_t Button::setup(gpio_num_t gpio_num, bool active_low) {
         ESP_LOGE("Button", "Failed to create event queue");
         return ESP_ERR_NO_MEM;
     }
-    
+
     // 2. 独立任务只负责消费事件并调用轻量回调，避免占用不必要的常驻栈。
-    if (xTaskCreate(_event_task, "btn_task", BUTTON_EVENT_TASK_STACK_SIZE,
-                    this, 3, &_task_handle) != pdPASS) {
+    if (xTaskCreate(_event_task, "btn_task", BUTTON_EVENT_TASK_STACK_SIZE, this, 3, &_task_handle) != pdPASS) {
         ESP_LOGE("Button", "Failed to create event task");
         return ESP_ERR_NO_MEM;
     }
-    
+
     // 3. 创建扫描定时器
     _timer = xTimerCreate("btn_tmr", pdMS_TO_TICKS(BTN_SCAN_TICK_MS), pdTRUE, this, _timer_callback);
     if (_timer == nullptr) {
@@ -66,7 +64,7 @@ esp_err_t Button::setup(gpio_num_t gpio_num, bool active_low) {
         return ESP_ERR_INVALID_STATE;
     }
     ESP_LOGI("Button", "Scan timer start");
-    
+
     return ESP_OK;
 }
 
@@ -92,17 +90,24 @@ void Button::_post_event(ButtonEvent evt) {
 }
 
 void Button::_event_task(void* arg) {
-    Button* self = static_cast<Button*>(arg);
+    Button*     self = static_cast<Button*>(arg);
     ButtonEvent evt;
-    auto event_index_to_name = [](int idx) {
+    auto        event_index_to_name = [](int idx) {
         switch (idx) {
-            case 0: return "SHORT_PRESS";
-            case 1: return "DOUBLE_CLICK";
-            case 2: return "LONG_PRESS";
-            case 3: return "SUPER_LONG_PRESS";
-            case 4: return "SHORT_THEN_LONG";
-            case 5: return "RELEASE";
-            default: return "UNKNOWN_EVENT";
+        case 0:
+            return "SHORT_PRESS";
+        case 1:
+            return "DOUBLE_CLICK";
+        case 2:
+            return "LONG_PRESS";
+        case 3:
+            return "SUPER_LONG_PRESS";
+        case 4:
+            return "SHORT_THEN_LONG";
+        case 5:
+            return "RELEASE";
+        default:
+            return "UNKNOWN_EVENT";
         }
     };
     while (true) {
@@ -112,7 +117,7 @@ void Button::_event_task(void* arg) {
             ESP_LOGD("Button", "Detected %s", event_index_to_name(index));
             // 内部直接区分状态执行回调
             if (self->_callbacks[index]) {
-                self->_callbacks[index](); 
+                self->_callbacks[index]();
             }
         }
     }
@@ -131,8 +136,8 @@ void Button::_run_state_machine() {
     bool now_pressed = _is_pressed();
 
     if (now_pressed) {
-        _ticks += BTN_SCAN_TICK_MS;
-        _gap_ticks = 0; // 按下期间，强制重置空闲计时
+        _ticks     += BTN_SCAN_TICK_MS;
+        _gap_ticks  = 0; // 按下期间，强制重置空闲计时
 
         // 1. 长按 & 短按再长按 判定
         if (_ticks >= BTN_LONG_MS && !_state.is_long_sent) {
@@ -142,17 +147,17 @@ void Button::_run_state_machine() {
                 _post_event(ButtonEvent::LONG_PRESS);
             }
             _state.is_long_sent = 1;
-            
+
             // 【关键修复】触发长按类事件后，必须清空之前的连击计数
             // 否则松手后会错误触发 SHORT_PRESS 或 DOUBLE_CLICK
-            _state.click_count = 0; 
+            _state.click_count = 0;
         }
 
         // 2. 超长按判定
         if (_ticks >= BTN_SUPER_LONG_MS && !_state.is_super_sent) {
             _post_event(ButtonEvent::SUPER_LONG_PRESS);
             _state.is_super_sent = 1;
-            _state.click_count = 0; // 保底清空
+            _state.click_count   = 0; // 保底清空
         }
     } else {
         // 3. 松开瞬间的边缘检测
@@ -165,10 +170,10 @@ void Button::_run_state_machine() {
                 }
                 _post_event(ButtonEvent::RELEASE);
             }
-            
+
             // 仅在确认完全松开的瞬间重置按压状态
-            _ticks = 0;
-            _state.is_long_sent = 0;
+            _ticks               = 0;
+            _state.is_long_sent  = 0;
             _state.is_super_sent = 0;
         }
 
@@ -182,7 +187,7 @@ void Button::_run_state_machine() {
                     _post_event(ButtonEvent::DOUBLE_CLICK); // 处理双击及以上情况
                 }
                 _state.click_count = 0; // 判定完毕，计数清零
-                _gap_ticks = 0;
+                _gap_ticks         = 0;
             }
         }
     }

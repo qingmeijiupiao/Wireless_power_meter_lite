@@ -24,26 +24,25 @@ namespace EspNowService {
 namespace Internal {
 namespace {
 
-template<typename Handler>
-struct CallbackSlot {
+template <typename Handler> struct CallbackSlot {
     Handler handler;
-    void* context;
+    void*   context;
 };
 
 constexpr char TAG[] = "EspNowService";
 
-portMUX_TYPE callback_lock = portMUX_INITIALIZER_UNLOCKED;
-CallbackSlot<SwitchResponseHandler> switch_response_slot = {};
-CallbackSlot<DataReceivedHandler> data_received_slot = {};
-RemoteSwitchStatus remote_switch_status = {};
-EspNowLink::MacAddress remote_switch_address = {};
+portMUX_TYPE                        callback_lock         = portMUX_INITIALIZER_UNLOCKED;
+CallbackSlot<SwitchResponseHandler> switch_response_slot  = {};
+CallbackSlot<DataReceivedHandler>   data_received_slot    = {};
+RemoteSwitchStatus                  remote_switch_status  = {};
+EspNowLink::MacAddress              remote_switch_address = {};
 
 // 固定长度协议。接收时必须严格匹配，禁止接受截断包或带尾随字段的未知版本。
-constexpr size_t SWITCH_REQUEST_SIZE = 5;
+constexpr size_t SWITCH_REQUEST_SIZE  = 5;
 constexpr size_t SWITCH_RESPONSE_SIZE = 7;
-constexpr size_t REMOTE_BATTERY_SIZE = 1;
-constexpr size_t DATA_REQUEST_SIZE = 4;
-constexpr size_t DATA_MESSAGE_SIZE = 40;
+constexpr size_t REMOTE_BATTERY_SIZE  = 1;
+constexpr size_t DATA_REQUEST_SIZE    = 4;
+constexpr size_t DATA_MESSAGE_SIZE    = 40;
 
 /**
  * @brief 原子读取应用回调及其上下文
@@ -51,8 +50,7 @@ constexpr size_t DATA_MESSAGE_SIZE = 40;
  * setter 可能由其他任务调用。这里只在临界区内复制两个指针，真正执行用户回调时已经
  * 退出临界区，避免用户代码延长关中断时间。
  */
-template<typename Handler>
-CallbackSlot<Handler> callback_snapshot(const CallbackSlot<Handler>& slot) {
+template <typename Handler> CallbackSlot<Handler> callback_snapshot(const CallbackSlot<Handler>& slot) {
     portENTER_CRITICAL(&callback_lock);
     const CallbackSlot<Handler> result = slot;
     portEXIT_CRITICAL(&callback_lock);
@@ -60,8 +58,7 @@ CallbackSlot<Handler> callback_snapshot(const CallbackSlot<Handler>& slot) {
 }
 
 /** @brief 原子更新应用回调；清除 handler 时同步清除失效的 context。 */
-template<typename Handler>
-void set_callback(CallbackSlot<Handler>* slot, Handler handler, void* context) {
+template <typename Handler> void set_callback(CallbackSlot<Handler>* slot, Handler handler, void* context) {
     portENTER_CRITICAL(&callback_lock);
     slot->handler = handler;
     slot->context = handler == nullptr ? nullptr : context;
@@ -71,7 +68,7 @@ void set_callback(CallbackSlot<Handler>* slot, Handler handler, void* context) {
 /** @brief 构造业务请求/响应统一使用的可靠单播选项。 */
 EspNowLink::SendOptions reliable_options() {
     EspNowLink::SendOptions options = {};
-    options.delivery = EspNowLink::Delivery::RELIABLE;
+    options.delivery                = EspNowLink::Delivery::RELIABLE;
     return options;
 }
 
@@ -84,7 +81,7 @@ bool is_reliable_unicast(const EspNowLink::Message& message) {
 void mark_remote_switch_connected(const EspNowLink::MacAddress& source) {
     portENTER_CRITICAL(&callback_lock);
     if (!remote_switch_status.connected || remote_switch_address != source) {
-        remote_switch_status = {};
+        remote_switch_status  = {};
         remote_switch_address = source;
     }
     remote_switch_status.connected = true;
@@ -103,13 +100,11 @@ void mark_remote_switch_connected(const EspNowLink::MacAddress& source) {
  */
 void on_switch_request(const EspNowLink::Message& message, void*) {
     // 先验证传输语义、固定长度和值域，再访问 payload 中的对应字段。
-    if (!is_reliable_unicast(message) ||
-        message.payload_size != SWITCH_REQUEST_SIZE ||
+    if (!is_reliable_unicast(message) || message.payload_size != SWITCH_REQUEST_SIZE ||
         message.payload[4] > static_cast<uint8_t>(SwitchAction::TOGGLE)) {
         return;
     }
-    const uint32_t request_id =
-        EspNowLink::Codec::load_le<uint32_t>(message.payload);
+    const uint32_t request_id = EspNowLink::Codec::load_le<uint32_t>(message.payload);
     if (request_id == 0) {
         return;
     }
@@ -117,66 +112,57 @@ void on_switch_request(const EspNowLink::Message& message, void*) {
     mark_remote_switch_connected(message.source);
 
     // 执行产品动作，并将 PowerOutput 的内部结果映射为稳定的线上业务结果。
-    SwitchResponse response = {};
-    response.request_id = request_id;
-    response.action = action;
-    const int64_t started_us = esp_timer_get_time();
+    SwitchResponse response                 = {};
+    response.request_id                     = request_id;
+    response.action                         = action;
+    const int64_t             started_us    = esp_timer_get_time();
     PowerOutput::OutputResult output_result = PowerOutput::OutputResult::FAIL_NOT_INIT;
     switch (action) {
-        case SwitchAction::OFF:
-            output_result = PowerOutput::off(TAG);
-            break;
-        case SwitchAction::ON:
-            output_result = PowerOutput::on(TAG);
-            break;
-        case SwitchAction::TOGGLE:
-            output_result = PowerOutput::toggle(TAG);
-            break;
+    case SwitchAction::OFF:
+        output_result = PowerOutput::off(TAG);
+        break;
+    case SwitchAction::ON:
+        output_result = PowerOutput::on(TAG);
+        break;
+    case SwitchAction::TOGGLE:
+        output_result = PowerOutput::toggle(TAG);
+        break;
     }
     switch (output_result) {
-        case PowerOutput::OutputResult::OK:
-            response.result = SwitchResult::OK;
-            break;
-        case PowerOutput::OutputResult::FAIL_NOT_INIT:
-            response.result = SwitchResult::NOT_READY;
-            break;
-        case PowerOutput::OutputResult::FAIL_PROTECT_ACTIVE:
-        case PowerOutput::OutputResult::FAIL_COOLDOWN_ACTIVE:
-            response.result = SwitchResult::REJECTED;
-            break;
-        default:
-            response.result = SwitchResult::INTERNAL_ERROR;
-            break;
+    case PowerOutput::OutputResult::OK:
+        response.result = SwitchResult::OK;
+        break;
+    case PowerOutput::OutputResult::FAIL_NOT_INIT:
+        response.result = SwitchResult::NOT_READY;
+        break;
+    case PowerOutput::OutputResult::FAIL_PROTECT_ACTIVE:
+    case PowerOutput::OutputResult::FAIL_COOLDOWN_ACTIVE:
+        response.result = SwitchResult::REJECTED;
+        break;
+    default:
+        response.result = SwitchResult::INTERNAL_ERROR;
+        break;
     }
     response.output_on = PowerOutput::get_state();
 
     // 业务处理耗时和来源 MAC 同时写日志与黑匣子，便于定位远程控制失败。
     char mac[18] = {};
-    snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
-             message.source.bytes[0], message.source.bytes[1],
-             message.source.bytes[2], message.source.bytes[3],
-             message.source.bytes[4], message.source.bytes[5]);
+    snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X", message.source.bytes[0], message.source.bytes[1],
+             message.source.bytes[2], message.source.bytes[3], message.source.bytes[4], message.source.bytes[5]);
     const int64_t elapsed_us = esp_timer_get_time() - started_us;
-    DEVICE_EVENT_I(
-        TAG,
-        "espnow: switch peer=%s action=%u result=%u output=%u process_us=%lld",
-        mac, static_cast<unsigned>(action),
-        static_cast<unsigned>(response.result),
-        response.output_on ? 1U : 0U,
-        static_cast<long long>(elapsed_us));
+    DEVICE_EVENT_I(TAG, "espnow: switch peer=%s action=%u result=%u output=%u process_us=%lld", mac,
+                   static_cast<unsigned>(action), static_cast<unsigned>(response.result), response.output_on ? 1U : 0U,
+                   static_cast<long long>(elapsed_us));
 
     // 响应复用请求 ID；可靠发送的链路 ACK 由 espnow_link 自动处理。
-    uint8_t payload[7] = {};
-    const size_t size = encode_switch_response(response, payload, sizeof(payload));
-    EspNowLink::send(
-        message.source, MSG_SWITCH_RESPONSE, payload, size, reliable_options());
+    uint8_t      payload[7] = {};
+    const size_t size       = encode_switch_response(response, payload, sizeof(payload));
+    EspNowLink::send(message.source, MSG_SWITCH_RESPONSE, payload, size, reliable_options());
 }
 
 /** @brief 接收当前遥控器在控制包之后发送的尽力电量上报。 */
 void on_remote_battery(const EspNowLink::Message& message, void*) {
-    if (message.reliable ||
-        message.destination.is_broadcast() ||
-        message.payload_size != REMOTE_BATTERY_SIZE ||
+    if (message.reliable || message.destination.is_broadcast() || message.payload_size != REMOTE_BATTERY_SIZE ||
         message.payload[0] > 100) {
         return;
     }
@@ -185,19 +171,16 @@ void on_remote_battery(const EspNowLink::Message& message, void*) {
     portENTER_CRITICAL(&callback_lock);
     if (remote_switch_status.connected && remote_switch_address == message.source) {
         remote_switch_status.battery_percent = message.payload[0];
-        remote_switch_status.battery_valid = true;
-        accepted = true;
+        remote_switch_status.battery_valid   = true;
+        accepted                             = true;
     }
     portEXIT_CRITICAL(&callback_lock);
 
     if (accepted) {
-        DEVICE_EVENT_I(
-            TAG,
-            "espnow: remote_battery peer=%02X:%02X:%02X:%02X:%02X:%02X percent=%u",
-            message.source.bytes[0], message.source.bytes[1],
-            message.source.bytes[2], message.source.bytes[3],
-            message.source.bytes[4], message.source.bytes[5],
-            static_cast<unsigned>(message.payload[0]));
+        DEVICE_EVENT_I(TAG, "espnow: remote_battery peer=%02X:%02X:%02X:%02X:%02X:%02X percent=%u",
+                       message.source.bytes[0], message.source.bytes[1], message.source.bytes[2],
+                       message.source.bytes[3], message.source.bytes[4], message.source.bytes[5],
+                       static_cast<unsigned>(message.payload[0]));
     }
 }
 
@@ -208,27 +191,20 @@ void on_remote_battery(const EspNowLink::Message& message, void*) {
  * payload 在回调返回后失效，因此先解码为值类型，再调用应用通知。
  */
 void on_switch_response(const EspNowLink::Message& message, void*) {
-    if (!is_reliable_unicast(message) ||
-        message.payload_size != SWITCH_RESPONSE_SIZE ||
+    if (!is_reliable_unicast(message) || message.payload_size != SWITCH_RESPONSE_SIZE ||
         message.payload[4] > static_cast<uint8_t>(SwitchAction::TOGGLE) ||
-        message.payload[5] > static_cast<uint8_t>(SwitchResult::INTERNAL_ERROR) ||
-        message.payload[6] > 1) {
+        message.payload[5] > static_cast<uint8_t>(SwitchResult::INTERNAL_ERROR) || message.payload[6] > 1) {
         return;
     }
-    const uint32_t request_id =
-        EspNowLink::Codec::load_le<uint32_t>(message.payload);
+    const uint32_t request_id = EspNowLink::Codec::load_le<uint32_t>(message.payload);
     if (request_id == 0) {
         return;
     }
 
     const auto slot = callback_snapshot(switch_response_slot);
     if (slot.handler != nullptr) {
-        slot.handler(message.source,
-                     request_id,
-                     static_cast<SwitchAction>(message.payload[4]),
-                     static_cast<SwitchResult>(message.payload[5]),
-                     message.payload[6] != 0,
-                     slot.context);
+        slot.handler(message.source, request_id, static_cast<SwitchAction>(message.payload[4]),
+                     static_cast<SwitchResult>(message.payload[5]), message.payload[6] != 0, slot.context);
     }
 }
 
@@ -239,50 +215,41 @@ void on_switch_response(const EspNowLink::Message& message, void*) {
  * power_output，同一次请求内读取并编码为一个固定 40 字节快照。
  */
 void on_data_request(const EspNowLink::Message& message, void*) {
-    if (!is_reliable_unicast(message) ||
-        message.payload_size != DATA_REQUEST_SIZE) {
+    if (!is_reliable_unicast(message) || message.payload_size != DATA_REQUEST_SIZE) {
         return;
     }
-    const uint32_t request_id =
-        EspNowLink::Codec::load_le<uint32_t>(message.payload);
+    const uint32_t request_id = EspNowLink::Codec::load_le<uint32_t>(message.payload);
     if (request_id == 0) {
         return;
     }
 
-    DataMessage response = {};
-    response.request_id = request_id;
-    const int64_t started_us = esp_timer_get_time();
-    const auto& state = get_global_state();
-    const EnergyMeter::Snapshot meter = EnergyMeter::snapshot();
-    response.available = true;
-    response.data.voltage_mv = state.voltage_mV;
-    response.data.current_ua = state.current_uA;
+    DataMessage response                    = {};
+    response.request_id                     = request_id;
+    const int64_t               started_us  = esp_timer_get_time();
+    const auto&                 state       = get_global_state();
+    const EnergyMeter::Snapshot meter       = EnergyMeter::snapshot();
+    response.available                      = true;
+    response.data.voltage_mv                = state.voltage_mV;
+    response.data.current_ua                = state.current_uA;
     response.data.board_temperature_centi_c = state.board_temperature;
-    response.data.chip_temperature_centi_c = state.chip_temperature;
-    response.data.charge_uah = meter.charge_uah;
-    response.data.energy_uwh = meter.energy_uwh;
-    response.data.meter_time_ms = meter.meter_time_ms;
-    response.data.status_flags =
-        PowerOutput::get_state() ? DEVICE_STATUS_OUTPUT_ON : 0;
+    response.data.chip_temperature_centi_c  = state.chip_temperature;
+    response.data.charge_uah                = meter.charge_uah;
+    response.data.energy_uwh                = meter.energy_uwh;
+    response.data.meter_time_ms             = meter.meter_time_ms;
+    response.data.status_flags              = PowerOutput::get_state() ? DEVICE_STATUS_OUTPUT_ON : 0;
 
     // 数据生成耗时用于识别业务回调是否拖慢 espnow_link 分发任务。
     char mac[18] = {};
-    snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
-             message.source.bytes[0], message.source.bytes[1],
-             message.source.bytes[2], message.source.bytes[3],
-             message.source.bytes[4], message.source.bytes[5]);
+    snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X", message.source.bytes[0], message.source.bytes[1],
+             message.source.bytes[2], message.source.bytes[3], message.source.bytes[4], message.source.bytes[5]);
     const int64_t elapsed_us = esp_timer_get_time() - started_us;
-    DEVICE_EVENT_I(
-        TAG,
-        "espnow: data_request peer=%s voltage_mv=%u current_ua=%ld process_us=%lld",
-        mac, response.data.voltage_mv,
-        static_cast<long>(response.data.current_ua),
-        static_cast<long long>(elapsed_us));
+    DEVICE_EVENT_I(TAG, "espnow: data_request peer=%s voltage_mv=%u current_ua=%ld process_us=%lld", mac,
+                   response.data.voltage_mv, static_cast<long>(response.data.current_ua),
+                   static_cast<long long>(elapsed_us));
     // 即使未来数据暂不可用，也应发送 available=false 的同格式响应，而不是静默超时。
-    uint8_t payload[40] = {};
-    const size_t size = encode_data_message(response, payload, sizeof(payload));
-    EspNowLink::send(
-        message.source, MSG_DATA_RESPONSE, payload, size, reliable_options());
+    uint8_t      payload[40] = {};
+    const size_t size        = encode_data_message(response, payload, sizeof(payload));
+    EspNowLink::send(message.source, MSG_DATA_RESPONSE, payload, size, reliable_options());
 }
 
 /**
@@ -292,38 +259,28 @@ void on_data_request(const EspNowLink::Message& message, void*) {
  * 完整解码，但调用方应以 available 为准决定是否采用数据。
  */
 void on_data_response(const EspNowLink::Message& message, void*) {
-    if (!is_reliable_unicast(message) ||
-        message.payload_size != DATA_MESSAGE_SIZE ||
-        message.payload[4] > 1) {
+    if (!is_reliable_unicast(message) || message.payload_size != DATA_MESSAGE_SIZE || message.payload[4] > 1) {
         return;
     }
 
     DataMessage data = {};
-    data.request_id = EspNowLink::Codec::load_le<uint32_t>(message.payload);
+    data.request_id  = EspNowLink::Codec::load_le<uint32_t>(message.payload);
     if (data.request_id == 0) {
         return;
     }
-    data.available = message.payload[4] != 0;
-    data.data.status_flags = message.payload[5];
-    data.data.voltage_mv = EspNowLink::Codec::load_le<uint16_t>(message.payload + 6);
-    data.data.current_ua = EspNowLink::Codec::load_le<int32_t>(message.payload + 8);
-    data.data.board_temperature_centi_c =
-        EspNowLink::Codec::load_le<int16_t>(message.payload + 12);
-    data.data.chip_temperature_centi_c =
-        EspNowLink::Codec::load_le<int16_t>(message.payload + 14);
-    data.data.charge_uah = EspNowLink::Codec::load_le<int64_t>(message.payload + 16);
-    data.data.energy_uwh = EspNowLink::Codec::load_le<int64_t>(message.payload + 24);
-    data.data.meter_time_ms =
-        EspNowLink::Codec::load_le<uint64_t>(message.payload + 32);
+    data.available                      = message.payload[4] != 0;
+    data.data.status_flags              = message.payload[5];
+    data.data.voltage_mv                = EspNowLink::Codec::load_le<uint16_t>(message.payload + 6);
+    data.data.current_ua                = EspNowLink::Codec::load_le<int32_t>(message.payload + 8);
+    data.data.board_temperature_centi_c = EspNowLink::Codec::load_le<int16_t>(message.payload + 12);
+    data.data.chip_temperature_centi_c  = EspNowLink::Codec::load_le<int16_t>(message.payload + 14);
+    data.data.charge_uah                = EspNowLink::Codec::load_le<int64_t>(message.payload + 16);
+    data.data.energy_uwh                = EspNowLink::Codec::load_le<int64_t>(message.payload + 24);
+    data.data.meter_time_ms             = EspNowLink::Codec::load_le<uint64_t>(message.payload + 32);
 
     const auto slot = callback_snapshot(data_received_slot);
     if (slot.handler != nullptr) {
-        slot.handler(message.source,
-                     data.request_id,
-                     data.data,
-                     data.available,
-                     false,
-                     slot.context);
+        slot.handler(message.source, data.request_id, data.data, data.available, false, slot.context);
     }
 }
 
@@ -334,24 +291,20 @@ void on_data_response(const EspNowLink::Message& message, void*) {
  * 误当成广播遥测，也避免周期包进入可靠重传流程。
  */
 void on_periodic_data(const EspNowLink::Message& message, void*) {
-    if (message.reliable ||
-        message.payload_size != DATA_MESSAGE_SIZE ||
-        message.payload[4] != 1 ||
+    if (message.reliable || message.payload_size != DATA_MESSAGE_SIZE || message.payload[4] != 1 ||
         EspNowLink::Codec::load_le<uint32_t>(message.payload) != 0) {
         return;
     }
 
-    DeviceData data = {};
-    data.status_flags = message.payload[5];
-    data.voltage_mv = EspNowLink::Codec::load_le<uint16_t>(message.payload + 6);
-    data.current_ua = EspNowLink::Codec::load_le<int32_t>(message.payload + 8);
-    data.board_temperature_centi_c =
-        EspNowLink::Codec::load_le<int16_t>(message.payload + 12);
-    data.chip_temperature_centi_c =
-        EspNowLink::Codec::load_le<int16_t>(message.payload + 14);
-    data.charge_uah = EspNowLink::Codec::load_le<int64_t>(message.payload + 16);
-    data.energy_uwh = EspNowLink::Codec::load_le<int64_t>(message.payload + 24);
-    data.meter_time_ms = EspNowLink::Codec::load_le<uint64_t>(message.payload + 32);
+    DeviceData data                = {};
+    data.status_flags              = message.payload[5];
+    data.voltage_mv                = EspNowLink::Codec::load_le<uint16_t>(message.payload + 6);
+    data.current_ua                = EspNowLink::Codec::load_le<int32_t>(message.payload + 8);
+    data.board_temperature_centi_c = EspNowLink::Codec::load_le<int16_t>(message.payload + 12);
+    data.chip_temperature_centi_c  = EspNowLink::Codec::load_le<int16_t>(message.payload + 14);
+    data.charge_uah                = EspNowLink::Codec::load_le<int64_t>(message.payload + 16);
+    data.energy_uwh                = EspNowLink::Codec::load_le<int64_t>(message.payload + 24);
+    data.meter_time_ms             = EspNowLink::Codec::load_le<uint64_t>(message.payload + 32);
 
     const auto slot = callback_snapshot(data_received_slot);
     if (slot.handler != nullptr) {
@@ -383,25 +336,16 @@ bool get_remote_switch_status(RemoteSwitchStatus& status) {
     return status.connected;
 }
 
-esp_err_t send_remote_battery(const EspNowLink::MacAddress& destination,
-                              uint8_t battery_percent,
-                              EspNowLink::SendCallback callback,
-                              void* context) {
-    uint8_t payload[1] = {};
-    const size_t size =
-        Internal::encode_remote_battery(battery_percent, payload, sizeof(payload));
+esp_err_t send_remote_battery(const EspNowLink::MacAddress& destination, uint8_t battery_percent,
+                              EspNowLink::SendCallback callback, void* context) {
+    uint8_t      payload[1] = {};
+    const size_t size       = Internal::encode_remote_battery(battery_percent, payload, sizeof(payload));
     if (size == 0) {
         return ESP_ERR_INVALID_ARG;
     }
     EspNowLink::SendOptions options = {};
-    options.delivery = EspNowLink::Delivery::BEST_EFFORT;
-    return EspNowLink::send(destination,
-                            Internal::MSG_REMOTE_BATTERY,
-                            payload,
-                            size,
-                            options,
-                            callback,
-                            context);
+    options.delivery                = EspNowLink::Delivery::BEST_EFFORT;
+    return EspNowLink::send(destination, Internal::MSG_REMOTE_BATTERY, payload, size, options, callback, context);
 }
 
 /**
@@ -410,24 +354,16 @@ esp_err_t send_remote_battery(const EspNowLink::MacAddress& destination,
  * 周期上报没有业务 request_id，也不等待业务响应。目的地址为广播时，espnow_link 会
  * 强制使用明文 BEST_EFFORT；单播时仍使用已配置 peer。
  */
-esp_err_t send_periodic_data(const EspNowLink::MacAddress& destination,
-                             const DeviceData& data,
-                             EspNowLink::SendCallback callback,
-                             void* context) {
-    Internal::DataMessage message = {};
-    message.available = true;
-    message.data = data;
-    uint8_t payload[40] = {};
-    const size_t size = Internal::encode_data_message(message, payload, sizeof(payload));
-    EspNowLink::SendOptions options = {};
-    options.delivery = EspNowLink::Delivery::BEST_EFFORT;
-    return EspNowLink::send(destination,
-                            Internal::MSG_DATA_PERIODIC,
-                            payload,
-                            size,
-                            options,
-                            callback,
-                            context);
+esp_err_t send_periodic_data(const EspNowLink::MacAddress& destination, const DeviceData& data,
+                             EspNowLink::SendCallback callback, void* context) {
+    Internal::DataMessage message       = {};
+    message.available                   = true;
+    message.data                        = data;
+    uint8_t                 payload[40] = {};
+    const size_t            size        = Internal::encode_data_message(message, payload, sizeof(payload));
+    EspNowLink::SendOptions options     = {};
+    options.delivery                    = EspNowLink::Delivery::BEST_EFFORT;
+    return EspNowLink::send(destination, Internal::MSG_DATA_PERIODIC, payload, size, options, callback, context);
 }
 
 } // namespace EspNowService

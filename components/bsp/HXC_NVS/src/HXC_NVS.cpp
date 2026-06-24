@@ -11,7 +11,7 @@ static const char* TAG = "HXC_NVS";
 
 // 初始化 NVS_Base 静态成员
 std::atomic_bool NVS_Base::is_setup = false;
-nvs_handle_t NVS_Base::_handle = 0;
+nvs_handle_t     NVS_Base::_handle  = 0;
 
 esp_err_t NVS_Base::setup() {
     if (is_setup.load(std::memory_order_acquire)) {
@@ -60,11 +60,11 @@ NVS_DATA<char*>::NVS_DATA(const char* _key, const char* default_value) : value(n
     if (strlen(_key) > 15) {
         ESP_LOGE(TAG, "nvs key too long, truncated: %s", this->key);
     }
-    
+
     // 深拷贝默认值
     if (default_value) {
         const size_t length = strlen(default_value) + 1;
-        this->value = new (std::nothrow) char[length];
+        this->value         = new (std::nothrow) char[length];
         if (this->value != nullptr) {
             memcpy(this->value, default_value, length);
         }
@@ -83,7 +83,8 @@ esp_err_t NVS_DATA<char*>::save() {
     if (err != ESP_OK) {
         return err;
     }
-    if (!value) return ESP_FAIL;
+    if (!value)
+        return ESP_FAIL;
 
     err = nvs_set_str(_handle, key, value);
     if (err != ESP_OK) {
@@ -104,8 +105,8 @@ esp_err_t NVS_DATA<char*>::set(const char* new_value) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    const size_t length = strlen(new_value) + 1;
-    char* replacement = new (std::nothrow) char[length];
+    const size_t length      = strlen(new_value) + 1;
+    char*        replacement = new (std::nothrow) char[length];
     if (replacement == nullptr) {
         return ESP_ERR_NO_MEM;
     }
@@ -125,7 +126,7 @@ esp_err_t NVS_DATA<char*>::set(const char* new_value) {
     }
 
     delete[] value;
-    value = replacement;
+    value   = replacement;
     is_read = true;
     return ESP_OK;
 }
@@ -134,11 +135,12 @@ char* NVS_DATA<char*>::read() {
     if (setup() != ESP_OK) {
         return value;
     }
-    if (is_read) return value;
+    if (is_read)
+        return value;
 
-    size_t datalen = 0;
+    size_t    datalen = 0;
     // 获取所需长度（包含 \0）
-    esp_err_t err = nvs_get_str(_handle, key, NULL, &datalen);
+    esp_err_t err     = nvs_get_str(_handle, key, NULL, &datalen);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "KEY=%s NVS无数据, 使用默认值", key);
         is_read = true;
@@ -161,7 +163,7 @@ char* NVS_DATA<char*>::read() {
     if (value) {
         delete[] value;
     }
-    value = arr;
+    value   = arr;
     is_read = true;
     return value;
 }

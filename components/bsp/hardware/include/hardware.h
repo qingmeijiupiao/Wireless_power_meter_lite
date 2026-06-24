@@ -15,7 +15,7 @@
 
 constexpr adc_channel_t hardware_adc_channel = ADC_CHANNEL_1;
 
-struct hardware_config{
+struct hardware_config {
     // TFT屏幕引脚配置
     gpio_num_t TFT_SCL;
     gpio_num_t TFT_SDA;
@@ -23,7 +23,7 @@ struct hardware_config{
     gpio_num_t TFT_RS;
     gpio_num_t TFT_CS;
     gpio_num_t TFT_BLK;
-    bool TFT_BLK_ACTIVE_STATE; // 备光开启时引脚的电平状态
+    bool       TFT_BLK_ACTIVE_STATE; // 备光开启时引脚的电平状态
 
     // 温度传感器通道
     adc_channel_t temperature_channel;
@@ -42,11 +42,9 @@ struct hardware_config{
     gpio_num_t OUTPUT_CTRL; // 输出控制引脚
 
     // 按键引脚配置
-    gpio_num_t MAIN_BUTTON;   // 主按键引脚
-    gpio_num_t SIDE_BUTTON;   // 侧边上的按键引脚
-
+    gpio_num_t MAIN_BUTTON; // 主按键引脚
+    gpio_num_t SIDE_BUTTON; // 侧边上的按键引脚
 };
-
 
 /**
  * @description: 初始化硬件配置

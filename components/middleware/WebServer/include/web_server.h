@@ -18,19 +18,19 @@
 namespace WebServer {
 
 /** 路由表最大数量，静态分配，避免运行期扩容 */
-constexpr uint8_t WEB_SERVER_MAX_ROUTES = 64;
+constexpr uint8_t  WEB_SERVER_MAX_ROUTES           = 64;
 /** 全局中间件最大数量，按注册顺序执行 */
-constexpr uint8_t WEB_SERVER_MAX_MIDDLEWARES = 8;
+constexpr uint8_t  WEB_SERVER_MAX_MIDDLEWARES      = 8;
 /** URI缓存长度，不含query字符串 */
-constexpr uint16_t WEB_SERVER_URI_MAX_LEN = 96;
+constexpr uint16_t WEB_SERVER_URI_MAX_LEN          = 96;
 /** query字符串缓存长度 */
-constexpr uint16_t WEB_SERVER_QUERY_MAX_LEN = 128;
+constexpr uint16_t WEB_SERVER_QUERY_MAX_LEN        = 128;
 /** 请求体最大缓存长度，超过该长度返回413 */
-constexpr uint16_t WEB_SERVER_BODY_MAX_LEN = 1024;
+constexpr uint16_t WEB_SERVER_BODY_MAX_LEN         = 1024;
 /** 预留给业务层读取Header时使用的建议长度 */
 constexpr uint16_t WEB_SERVER_HEADER_VALUE_MAX_LEN = 128;
 /** 客户端 IPv4 文本缓存长度，包含结尾 NUL。 */
-constexpr uint8_t WEB_SERVER_PEER_IP_MAX_LEN = 16;
+constexpr uint8_t  WEB_SERVER_PEER_IP_MAX_LEN      = 16;
 
 /** HTTP方法枚举，ANY用于业务路由匹配任意方法 */
 enum class Method : uint8_t {
@@ -52,18 +52,18 @@ enum class Method : uint8_t {
  * @note 该结构体只在handler/middleware执行期间有效，不要保存指针到异步任务中使用。
  */
 struct Request {
-    httpd_req_t* raw;
-    Method method;
-    char uri[WEB_SERVER_URI_MAX_LEN];
-    char query[WEB_SERVER_QUERY_MAX_LEN];
-    char peer_ip[WEB_SERVER_PEER_IP_MAX_LEN];
-    char body[WEB_SERVER_BODY_MAX_LEN + 1];
-    size_t body_len;
-    bool body_loaded;
+    httpd_req_t* raw                                 = nullptr;
+    Method       method                              = Method::GET;
+    char         uri[WEB_SERVER_URI_MAX_LEN]         = {};
+    char         query[WEB_SERVER_QUERY_MAX_LEN]     = {};
+    char         peer_ip[WEB_SERVER_PEER_IP_MAX_LEN] = {};
+    char         body[WEB_SERVER_BODY_MAX_LEN + 1]   = {};
+    size_t       body_len                            = 0;
+    bool         body_loaded                         = false;
 };
 
-using Handler = std::function<esp_err_t(Request* request)>;
-using Middleware = std::function<esp_err_t(Request* request)>;
+using Handler          = std::function<esp_err_t(Request* request)>;
+using Middleware       = std::function<esp_err_t(Request* request)>;
 using BodyChunkHandler = std::function<esp_err_t(const char* data, size_t size)>;
 
 /**
@@ -270,6 +270,6 @@ esp_err_t load_body(Request* request);
  */
 esp_err_t stream_body(Request* request, char* buffer, size_t buffer_size, BodyChunkHandler chunk_handler);
 
-}
+} // namespace WebServer
 
 #endif

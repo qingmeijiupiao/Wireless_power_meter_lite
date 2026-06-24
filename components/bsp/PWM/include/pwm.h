@@ -11,7 +11,8 @@
 #include "driver/ledc.h"
 #include "driver/gpio.h"
 class pwm_t {
-public:
+  public:
+    /** @brief `pwm_t` 接口。 */
     pwm_t() = default;
 
     /**
@@ -26,8 +27,8 @@ public:
      * @param {ledc_timer_bit_t} _duty_resolution 占空比分辨率,默认13位
      * @return {esp_err_t} 成功返回ESP_OK,通道已满返回ESP_ERR_NOT_FOUND
      */
-    esp_err_t init(gpio_num_t _gpio_num,
-                   uint32_t _freq_hz = 5000, ledc_timer_bit_t _duty_resolution = LEDC_TIMER_13_BIT);
+    esp_err_t init(gpio_num_t _gpio_num, uint32_t _freq_hz = 5000,
+                   ledc_timer_bit_t _duty_resolution = LEDC_TIMER_13_BIT);
 
     /**
      * @description: 获取当前占空比百分比
@@ -42,14 +43,14 @@ public:
      */
     esp_err_t set_duty_percent(float percent);
 
-private:
-    ledc_channel_t channel;
-    ledc_timer_t timer;
-    gpio_num_t gpio_num;
-    uint32_t freq_hz;
+  private:
+    ledc_channel_t   channel;
+    ledc_timer_t     timer;
+    gpio_num_t       gpio_num;
+    uint32_t         freq_hz;
     ledc_timer_bit_t duty_resolution;
-    bool initialized = false;
-    static uint8_t channel_used;
+    bool             initialized = false;
+    static uint8_t   channel_used;
 };
 
 #endif

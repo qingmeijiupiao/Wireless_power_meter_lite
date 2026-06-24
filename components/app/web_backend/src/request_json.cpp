@@ -19,8 +19,7 @@ namespace {
 constexpr size_t JSON_TOKEN_COUNT = 64;
 
 bool emit_byte(char byte, char* out, size_t out_size, const char* expected, size_t* decoded_size, bool* matches) {
-    if (expected != nullptr && *matches &&
-        (expected[*decoded_size] == '\0' || expected[*decoded_size] != byte)) {
+    if (expected != nullptr && *matches && (expected[*decoded_size] == '\0' || expected[*decoded_size] != byte)) {
         *matches = false;
     }
     if (out != nullptr && out_size > 0 && *decoded_size < out_size - 1) {
@@ -56,8 +55,8 @@ bool emit_codepoint(uint32_t codepoint, char* out, size_t out_size, const char* 
 bool read_hex_quad(const char* json, int offset, uint32_t* codepoint) {
     *codepoint = 0;
     for (int i = 0; i < 4; ++i) {
-        const char digit = json[offset + i];
-        *codepoint <<= 4;
+        const char digit   = json[offset + i];
+        *codepoint       <<= 4;
         if (digit >= '0' && digit <= '9') {
             *codepoint += static_cast<uint32_t>(digit - '0');
         } else if (digit >= 'a' && digit <= 'f') {
@@ -71,13 +70,14 @@ bool read_hex_quad(const char* json, int offset, uint32_t* codepoint) {
     return true;
 }
 
-bool decode_string(const char* json, const jsmntok_t& token, char* out, size_t out_size, const char* expected = nullptr) {
+bool decode_string(const char* json, const jsmntok_t& token, char* out, size_t out_size,
+                   const char* expected = nullptr) {
     if (token.type != JSMN_STRING || (out != nullptr && out_size == 0)) {
         return false;
     }
 
     size_t decoded_size = 0;
-    bool matches = true;
+    bool   matches      = true;
     for (int offset = token.start; offset < token.end; ++offset) {
         const unsigned char byte = static_cast<unsigned char>(json[offset]);
         if (byte < 0x20) {
@@ -126,12 +126,12 @@ bool decode_string(const char* json, const jsmntok_t& token, char* out, size_t o
                     return false;
                 }
                 uint32_t low_surrogate = 0;
-                if (!read_hex_quad(json, offset + 3, &low_surrogate) ||
-                    low_surrogate < 0xDC00 || low_surrogate > 0xDFFF) {
+                if (!read_hex_quad(json, offset + 3, &low_surrogate) || low_surrogate < 0xDC00 ||
+                    low_surrogate > 0xDFFF) {
                     return false;
                 }
-                codepoint = 0x10000 + ((codepoint - 0xD800) << 10) + (low_surrogate - 0xDC00);
-                offset += 6;
+                codepoint  = 0x10000 + ((codepoint - 0xD800) << 10) + (low_surrogate - 0xDC00);
+                offset    += 6;
             } else if (codepoint >= 0xDC00 && codepoint <= 0xDFFF) {
                 return false;
             }
@@ -300,7 +300,7 @@ bool validate_token(const char* json, size_t json_size, const jsmntok_t* tokens,
 }
 
 bool validate_json(const char* json, size_t json_size, const jsmntok_t* tokens, size_t token_count) {
-    size_t index = 0;
+    size_t index  = 0;
     size_t offset = 0;
     if (!validate_token(json, json_size, tokens, token_count, &index, &offset)) {
         return false;
@@ -309,23 +309,22 @@ bool validate_json(const char* json, size_t json_size, const jsmntok_t* tokens, 
     return index == token_count && offset == json_size;
 }
 
-template <typename Reader>
-bool read_top_level_field(const char* json, const char* key, Reader reader) {
+template <typename Reader> bool read_top_level_field(const char* json, const char* key, Reader reader) {
     if (json == nullptr || key == nullptr) {
         return false;
     }
 
-    jsmn_parser parser = {};
-    jsmntok_t tokens[JSON_TOKEN_COUNT] = {};
+    jsmn_parser parser                   = {};
+    jsmntok_t   tokens[JSON_TOKEN_COUNT] = {};
     jsmn_init(&parser);
-    const size_t json_size = strlen(json);
-    const int token_count = jsmn_parse(&parser, json, json_size, tokens, JSON_TOKEN_COUNT);
+    const size_t json_size   = strlen(json);
+    const int    token_count = jsmn_parse(&parser, json, json_size, tokens, JSON_TOKEN_COUNT);
     if (token_count < 1 || tokens[0].type != JSMN_OBJECT ||
         !validate_json(json, json_size, tokens, static_cast<size_t>(token_count))) {
         return false;
     }
 
-    bool found = false;
+    bool   found = false;
     size_t index = 1;
     while (index < static_cast<size_t>(token_count) && tokens[index].start < tokens[0].end) {
         const jsmntok_t& key_token = tokens[index++];
@@ -347,9 +346,8 @@ bool json_get_string(const char* json, const char* key, char* out, size_t out_si
     if (out == nullptr || out_size == 0) {
         return false;
     }
-    return read_top_level_field(json, key, [json, out, out_size](const jsmntok_t& token) {
-        return decode_string(json, token, out, out_size);
-    });
+    return read_top_level_field(
+        json, key, [json, out, out_size](const jsmntok_t& token) { return decode_string(json, token, out, out_size); });
 }
 
 bool json_get_bool(const char* json, const char* key, bool* out) {
@@ -371,14 +369,12 @@ bool json_get_bool(const char* json, const char* key, bool* out) {
 
 bool json_get_uint32(const char* json, const char* key, uint32_t* out) {
     return out != nullptr && read_top_level_field(json, key, [json, out](const jsmntok_t& token) {
-        return token_to_uint32(json, token, out);
-    });
+               return token_to_uint32(json, token, out);
+           });
 }
 
 bool json_has_key(const char* json, const char* key) {
-    return read_top_level_field(json, key, [](const jsmntok_t&) {
-        return true;
-    });
+    return read_top_level_field(json, key, [](const jsmntok_t&) { return true; });
 }
 
 } // namespace WebBackend

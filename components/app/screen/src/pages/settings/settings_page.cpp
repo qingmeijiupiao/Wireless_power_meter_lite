@@ -59,12 +59,7 @@ constexpr uint32_t CAN_BAUDRATES[] = {
 };
 
 constexpr uint32_t BLACKBOX_SNAPSHOT_INTERVALS_S[] = {
-    0,
-    1,
-    5,
-    10,
-    30,
-    60,
+    0, 1, 5, 10, 30, 60,
 };
 
 } // namespace
@@ -124,17 +119,15 @@ bool SettingsPage::handle_button(ButtonId button, ButtonEvent event) {
             const OtaService::Status ota = OtaService::get_status();
             if (button == ButtonId::Side && event == ButtonEvent::SHORT_PRESS) {
                 update_confirm_ = false;
-                mode_ = Mode::Menu;
+                mode_           = Mode::Menu;
                 return true;
             }
-            if (!update_confirm_ &&
-                button == ButtonId::Main && event == ButtonEvent::SHORT_PRESS &&
+            if (!update_confirm_ && button == ButtonId::Main && event == ButtonEvent::SHORT_PRESS &&
                 ota.state == OtaService::State::UPDATE_AVAILABLE) {
                 update_confirm_ = true;
                 return true;
             }
-            if (update_confirm_ &&
-                button == ButtonId::Main && event == ButtonEvent::LONG_PRESS) {
+            if (update_confirm_ && button == ButtonId::Main && event == ButtonEvent::LONG_PRESS) {
                 const esp_err_t err = OtaService::request_upgrade();
                 if (err == ESP_OK) {
                     update_confirm_ = false;
@@ -142,8 +135,7 @@ bool SettingsPage::handle_button(ButtonId button, ButtonEvent event) {
                 return true;
             }
             if (button == ButtonId::Main && event == ButtonEvent::SHORT_PRESS &&
-                (ota.state == OtaService::State::FAILED ||
-                 ota.state == OtaService::State::UP_TO_DATE)) {
+                (ota.state == OtaService::State::FAILED || ota.state == OtaService::State::UP_TO_DATE)) {
                 OtaService::request_check();
                 return true;
             }
@@ -192,16 +184,16 @@ void SettingsPage::render(RenderMode mode) {
     ST7735::draw_image(2, 16, SETTINGS_LOGO_WIDTH, SETTINGS_LOGO_HEIGHT, settings_logo_data);
 
     auto draw_menu_rows = [&]() {
-        constexpr uint16_t row_x = 60;
-        constexpr uint16_t row_w = 98;
-        constexpr uint16_t row_h = 22;
-        constexpr uint16_t row_y0 = 4;
-        constexpr uint16_t row_step = 25;
+        constexpr uint16_t row_x      = 60;
+        constexpr uint16_t row_w      = 98;
+        constexpr uint16_t row_h      = 22;
+        constexpr uint16_t row_y0     = 4;
+        constexpr uint16_t row_step   = 25;
         constexpr uint16_t row_radius = 7;
         for (uint8_t row = 0; row < VISIBLE_ROWS; row++) {
-            const uint8_t item = (selected_ + ITEM_COUNT + row - 1) % ITEM_COUNT;
-            const uint16_t y = row_y0 + row * row_step;
-            const bool selected = row == 1 && mode_ != Mode::View;
+            const uint8_t         item       = (selected_ + ITEM_COUNT + row - 1) % ITEM_COUNT;
+            const uint16_t        y          = row_y0 + row * row_step;
+            const bool            selected   = row == 1 && mode_ != Mode::View;
             const ST7735::color_t background = selected ? ST7735::YELLOW : ST7735::color_t(0x202020);
             const ST7735::color_t foreground = selected ? ST7735::BLACK : ST7735::WHITE;
             ST7735::fill_round_rect(row_x, y, row_w, row_h, row_radius, background, ST7735::BLACK);
@@ -209,10 +201,9 @@ void SettingsPage::render(RenderMode mode) {
             const char* value = item_value(item);
             if (item_type(item) == ItemType::Detail) {
                 constexpr uint16_t icon_size = 18;
-                const uint16_t icon_x = row_x + row_w - icon_size - 2;
-                const uint16_t icon_y = y + 2;
-                ST7735::draw_round_rect(icon_x, icon_y, icon_size, icon_size, icon_size / 2,
-                                         1, foreground, background);
+                const uint16_t     icon_x    = row_x + row_w - icon_size - 2;
+                const uint16_t     icon_y    = y + 2;
+                ST7735::draw_round_rect(icon_x, icon_y, icon_size, icon_size, icon_size / 2, 1, foreground, background);
                 ST7735::draw_string(icon_x + 7, icon_y + 2, "i", foreground, background, DENGB16);
             } else if (value[0] != '\0') {
                 ST7735::draw_string(row_x + 70, y + 5, value, foreground, background, DENGB16);
@@ -228,7 +219,7 @@ void SettingsPage::render(RenderMode mode) {
 
 /** @brief 从 NVS 加载设置页使用的显示配置。 */
 void SettingsPage::load_config() {
-    rotation_180_ = ui_config_get_rotation_180();
+    rotation_180_    = ui_config_get_rotation_180();
     backlight_level_ = ui_config_get_backlight_level();
 }
 
@@ -239,34 +230,34 @@ void SettingsPage::load_config() {
  */
 const char* SettingsPage::item_name(uint8_t item) const {
     switch (item) {
-        case Rotate180:
-            return "Rotate";
-        case Backlight:
-            return "Bright";
-        case WebBoot:
-            return "Web";
-        case ProtectBypass:
-            return "Protect";
-        case BlackboxSnapshot:
-            return "BBsnap";
-        case EspNowPair:
-            return "NOWpair";
-        case EspNowInfo:
-            return "NOWinfo";
-        case CanBaudrate:
-            return "CANrate";
-        case CanTerm:
-            return "CANRs";
-        case FirmwareInfo:
-            return "Firmware";
-        case FirmwareUpdate:
-            return "Update";
-        case BlackboxInfo:
-            return "Blackbox";
-        case CalibrationInfo:
-            return "Calib";
-        default:
-            return "";
+    case Rotate180:
+        return "Rotate";
+    case Backlight:
+        return "Bright";
+    case WebBoot:
+        return "Web";
+    case ProtectBypass:
+        return "Protect";
+    case BlackboxSnapshot:
+        return "BBsnap";
+    case EspNowPair:
+        return "NOWpair";
+    case EspNowInfo:
+        return "NOWinfo";
+    case CanBaudrate:
+        return "CANrate";
+    case CanTerm:
+        return "CANRs";
+    case FirmwareInfo:
+        return "Firmware";
+    case FirmwareUpdate:
+        return "Update";
+    case BlackboxInfo:
+        return "Blackbox";
+    case CalibrationInfo:
+        return "Calib";
+    default:
+        return "";
     }
 }
 
@@ -277,108 +268,114 @@ const char* SettingsPage::item_name(uint8_t item) const {
  */
 const char* SettingsPage::item_value(uint8_t item) {
     switch (item) {
-        case Rotate180:
-            return rotation_180_ ? "180" : "0";
-        case Backlight:
-            snprintf(value_buf_, sizeof(value_buf_), "%u/5", static_cast<unsigned>(backlight_level_));
-            return value_buf_;
-        case WebBoot:
-            return WifiService::is_web_enabled_on_boot() ? "ON" : "OFF";
-        case ProtectBypass:
-            return protect_is_bypassed() ? "OFF" : "ON";
-        case BlackboxSnapshot: {
-            switch (BlackboxService::get_snapshot_interval_s()) {
-                case 0: return "OFF";
-                case 1: return "1s";
-                case 5: return "5s";
-                case 10: return "10s";
-                case 30: return "30s";
-                case 60: return "60s";
-                default: return "Other";
-            }
-        }
-        case EspNowPair:
-            return EspNowLink::is_pairing() ? "WAIT" : "";
-        case EspNowInfo:
-            snprintf(value_buf_, sizeof(value_buf_), "%u/3",
-                     static_cast<unsigned>(EspNowLink::get_saved_peer_count()));
-            return value_buf_;
-        case CanBaudrate:
-            switch (CanCallback::CAN_BAUDRATE.read()) {
-                case 1_Mbps:
-                    return "1M";
-                case 500_Kbps:
-                    return "500K";
-                case 250_Kbps:
-                    return "250K";
-                case 125_Kbps:
-                    return "125K";
-                default:
-                    return "Other";
-            }
-        case CanTerm:
-            return CanResistor::instance().get() ? "ON" : "OFF";
-        case FirmwareInfo:
-            return "";
-        case FirmwareUpdate: {
-            const OtaService::State state = OtaService::get_status().state;
-            if (state == OtaService::State::UPDATE_AVAILABLE) return "NEW";
-            if (state == OtaService::State::CHECKING ||
-                state == OtaService::State::DOWNLOADING ||
-                state == OtaService::State::VERIFYING) return "BUSY";
-            if (state == OtaService::State::FAILED) return "ERR";
-            return "";
-        }
-        case BlackboxInfo:
-        case CalibrationInfo:
-            return "";
+    case Rotate180:
+        return rotation_180_ ? "180" : "0";
+    case Backlight:
+        snprintf(value_buf_, sizeof(value_buf_), "%u/5", static_cast<unsigned>(backlight_level_));
+        return value_buf_;
+    case WebBoot:
+        return WifiService::is_web_enabled_on_boot() ? "ON" : "OFF";
+    case ProtectBypass:
+        return protect_is_bypassed() ? "OFF" : "ON";
+    case BlackboxSnapshot: {
+        switch (BlackboxService::get_snapshot_interval_s()) {
+        case 0:
+            return "OFF";
+        case 1:
+            return "1s";
+        case 5:
+            return "5s";
+        case 10:
+            return "10s";
+        case 30:
+            return "30s";
+        case 60:
+            return "60s";
         default:
-            return "";
+            return "Other";
+        }
+    }
+    case EspNowPair:
+        return EspNowLink::is_pairing() ? "WAIT" : "";
+    case EspNowInfo:
+        snprintf(value_buf_, sizeof(value_buf_), "%u/3", static_cast<unsigned>(EspNowLink::get_saved_peer_count()));
+        return value_buf_;
+    case CanBaudrate:
+        switch (CanCallback::CAN_BAUDRATE.read()) {
+        case 1_Mbps:
+            return "1M";
+        case 500_Kbps:
+            return "500K";
+        case 250_Kbps:
+            return "250K";
+        case 125_Kbps:
+            return "125K";
+        default:
+            return "Other";
+        }
+    case CanTerm:
+        return CanResistor::instance().get() ? "ON" : "OFF";
+    case FirmwareInfo:
+        return "";
+    case FirmwareUpdate: {
+        const OtaService::State state = OtaService::get_status().state;
+        if (state == OtaService::State::UPDATE_AVAILABLE)
+            return "NEW";
+        if (state == OtaService::State::CHECKING || state == OtaService::State::DOWNLOADING ||
+            state == OtaService::State::VERIFYING)
+            return "BUSY";
+        if (state == OtaService::State::FAILED)
+            return "ERR";
+        return "";
+    }
+    case BlackboxInfo:
+    case CalibrationInfo:
+        return "";
+    default:
+        return "";
     }
 }
 
 /** @brief 获取设置项交互类型。 */
 SettingsPage::ItemType SettingsPage::item_type(uint8_t item) const {
     switch (item) {
-        case EspNowPair:
-        case FirmwareUpdate:
-            return ItemType::Action;
-        case EspNowInfo:
-        case FirmwareInfo:
-        case BlackboxInfo:
-        case CalibrationInfo:
-            return ItemType::Detail;
-        default:
-            return ItemType::Adjustable;
+    case EspNowPair:
+    case FirmwareUpdate:
+        return ItemType::Action;
+    case EspNowInfo:
+    case FirmwareInfo:
+    case BlackboxInfo:
+    case CalibrationInfo:
+        return ItemType::Detail;
+    default:
+        return ItemType::Adjustable;
     }
 }
 
 /** @brief 激活当前选中项。 */
 void SettingsPage::activate_selected_item() {
     switch (item_type(selected_)) {
-        case ItemType::Adjustable:
-            adjust_selected_item();
-            break;
-        case ItemType::Detail:
+    case ItemType::Adjustable:
+        adjust_selected_item();
+        break;
+    case ItemType::Detail:
+        mode_ = Mode::Dialog;
+        break;
+    case ItemType::Action:
+        if (run_action_item(selected_)) {
             mode_ = Mode::Dialog;
-            break;
-        case ItemType::Action:
-            if (run_action_item(selected_)) {
-                mode_ = Mode::Dialog;
-            }
-            break;
+        }
+        break;
     }
 }
 
 /** @brief 运行动作类设置项。 */
 bool SettingsPage::run_action_item(uint8_t item) {
     if (item == FirmwareUpdate) {
-        update_confirm_ = false;
+        update_confirm_              = false;
         const OtaService::Status ota = OtaService::get_status();
-        if (ota.state != OtaService::State::UPDATE_AVAILABLE &&
-            ota.state != OtaService::State::CHECKING &&
-            ota.state != OtaService::State::DOWNLOADING &&
-            ota.state != OtaService::State::VERIFYING &&
+        if (ota.state != OtaService::State::UPDATE_AVAILABLE && ota.state != OtaService::State::CHECKING &&
+            ota.state != OtaService::State::DOWNLOADING && ota.state != OtaService::State::VERIFYING &&
             ota.state != OtaService::State::RESTARTING) {
             OtaService::request_check();
         }
@@ -397,8 +394,7 @@ bool SettingsPage::run_action_item(uint8_t item) {
         if (ret == ESP_OK) {
             DEVICE_EVENT_I(TAG, "espnow: pairing source=screen action=start unlimited=1 result=ok");
         } else {
-            ESP_LOGW(TAG, "espnow: pairing source=screen target=active result=%s",
-                     esp_err_to_name(ret));
+            ESP_LOGW(TAG, "espnow: pairing source=screen target=active result=%s", esp_err_to_name(ret));
         }
     }
     return true;
@@ -421,15 +417,12 @@ void SettingsPage::build_dialog_content() {
         snprintf(detail_lines_[3], sizeof(detail_lines_[3]), "Success auto exits");
     } else if (item == EspNowInfo) {
         const size_t count = EspNowLink::get_saved_peer_count();
-        snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "Paired %u/3",
-                 static_cast<unsigned>(count));
+        snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "Paired %u/3", static_cast<unsigned>(count));
         for (size_t i = 0; i < 3; ++i) {
             EspNowLink::SavedPeer peer = {};
             if (i < count && EspNowLink::get_saved_peer(i, &peer) == ESP_OK) {
-                snprintf(detail_lines_[i + 1], sizeof(detail_lines_[i + 1]),
-                         "%02X:%02X:%02X:%02X:%02X:%02X",
-                         peer.address.bytes[0], peer.address.bytes[1],
-                         peer.address.bytes[2], peer.address.bytes[3],
+                snprintf(detail_lines_[i + 1], sizeof(detail_lines_[i + 1]), "%02X:%02X:%02X:%02X:%02X:%02X",
+                         peer.address.bytes[0], peer.address.bytes[1], peer.address.bytes[2], peer.address.bytes[3],
                          peer.address.bytes[4], peer.address.bytes[5]);
             } else {
                 snprintf(detail_lines_[i + 1], sizeof(detail_lines_[i + 1]), "--");
@@ -438,15 +431,12 @@ void SettingsPage::build_dialog_content() {
     } else if (item == FirmwareInfo) {
         const MAC_t mac = WiFiManager::instance().get_mac(WIFI_IF_STA);
         snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "Version %u.%u.%u %s",
-                 static_cast<unsigned>(VERSION_MAJOR),
-                 static_cast<unsigned>(VERSION_MINOR),
-                 static_cast<unsigned>(VERSION_PATCH),
-                 VERSION_PATCH == 99 ? "Test" : "Release");
+                 static_cast<unsigned>(VERSION_MAJOR), static_cast<unsigned>(VERSION_MINOR),
+                 static_cast<unsigned>(VERSION_PATCH), VERSION_PATCH == 99 ? "Test" : "Release");
         snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Build Time");
         snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "%.16s", BUILD_TIME);
-        snprintf(detail_lines_[3], sizeof(detail_lines_[3]), "MAC %02X:%02X:%02X:%02X:%02X:%02X",
-                 mac.octet1, mac.octet2, mac.octet3,
-                 mac.octet4, mac.octet5, mac.octet6);
+        snprintf(detail_lines_[3], sizeof(detail_lines_[3]), "MAC %02X:%02X:%02X:%02X:%02X:%02X", mac.octet1,
+                 mac.octet2, mac.octet3, mac.octet4, mac.octet5, mac.octet6);
     } else if (item == FirmwareUpdate) {
         const OtaService::Status ota = OtaService::get_status();
         if (update_confirm_) {
@@ -455,16 +445,14 @@ void SettingsPage::build_dialog_content() {
             snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "SIDE cancel");
             snprintf(detail_lines_[3], sizeof(detail_lines_[3]), "Auto reboot");
         } else {
-            snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "State %s",
-                     OtaService::state_to_string(ota.state));
+            snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "State %s", OtaService::state_to_string(ota.state));
             if (ota.state == OtaService::State::UPDATE_AVAILABLE) {
-                snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "%.11s -> %.11s",
-                         ota.current_version, ota.latest_version);
+                snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "%.11s -> %.11s", ota.current_version,
+                         ota.latest_version);
                 snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "MAIN to confirm");
             } else if (ota.state == OtaService::State::DOWNLOADING) {
-                const unsigned percent = ota.image_size == 0
-                    ? 0U
-                    : static_cast<unsigned>(ota.bytes_downloaded * 100 / ota.image_size);
+                const unsigned percent =
+                    ota.image_size == 0 ? 0U : static_cast<unsigned>(ota.bytes_downloaded * 100 / ota.image_size);
                 snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Source %.18s", ota.active_source);
                 snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "Download %u%%", percent);
                 snprintf(detail_lines_[3], sizeof(detail_lines_[3]), "Do not power off");
@@ -490,28 +478,25 @@ void SettingsPage::build_dialog_content() {
         const uint32_t interval = BlackboxService::get_snapshot_interval_s();
         snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "State %s", Blackbox::is_enabled() ? "ON" : "OFF");
         snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Used %lu/%lu",
-                 static_cast<unsigned long>(Blackbox::count()),
-                 static_cast<unsigned long>(Blackbox::capacity()));
+                 static_cast<unsigned long>(Blackbox::count()), static_cast<unsigned long>(Blackbox::capacity()));
         if (interval == 0) {
             snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "Snapshot OFF");
         } else {
-            snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "Snapshot %lus",
-                     static_cast<unsigned long>(interval));
+            snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "Snapshot %lus", static_cast<unsigned long>(interval));
         }
     } else if (item == CalibrationInfo) {
-        const auto params = CurrentCalib::params_data.read();
-        uint8_t valid_points = 0;
+        const auto params       = CurrentCalib::params_data.read();
+        uint8_t    valid_points = 0;
         for (const auto& point : params.points) {
             if (point.register_value != 0 || point.offset_current_100uA != 0) {
                 valid_points++;
             }
         }
         const float sample_resistance_mohm = params.current_base_K == 0 ? 0.0f : 2500.0f / params.current_base_K;
-        snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "calibration %s %u/6",
-                 valid_points == 6 ? "YES" : "NO", static_cast<unsigned>(valid_points));
+        snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "calibration %s %u/6", valid_points == 6 ? "YES" : "NO",
+                 static_cast<unsigned>(valid_points));
         snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Resistance %.3fmR", sample_resistance_mohm);
-        snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "BaseK %u",
-                 static_cast<unsigned>(params.current_base_K));
+        snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "BaseK %u", static_cast<unsigned>(params.current_base_K));
     }
 }
 
@@ -533,82 +518,80 @@ void SettingsPage::draw_dialog_overlay() {
 /** @brief 修改当前选中的设置项。 */
 void SettingsPage::adjust_selected_item() {
     switch (selected_) {
-        case Rotate180:
+    case Rotate180:
+        rotation_180_ = !rotation_180_;
+        if (ui_config_set_rotation_180(rotation_180_) != ESP_OK) {
             rotation_180_ = !rotation_180_;
-            if (ui_config_set_rotation_180(rotation_180_) != ESP_OK) {
-                rotation_180_ = !rotation_180_;
-                ESP_LOGE(TAG, "failed to persist rotation setting");
+            ESP_LOGE(TAG, "failed to persist rotation setting");
+            break;
+        }
+        ST7735::set_rotation(rotation_180_ ? ST7735::Rotation::HorizontalMirror : ST7735::Rotation::Horizontal);
+        DEVICE_EVENT_I(TAG, "ui: config source=screen rotate_180=%u", rotation_180_ ? 1U : 0U);
+        break;
+    case Backlight:
+        backlight_level_++;
+        if (backlight_level_ > BACKLIGHT_LEVEL_COUNT) {
+            backlight_level_ = 1;
+        }
+        if (ui_config_set_backlight_level(backlight_level_) != ESP_OK) {
+            ESP_LOGE(TAG, "failed to persist backlight setting");
+            backlight_level_ = ui_config_get_backlight_level();
+            break;
+        }
+        ST7735::set_backlight(backlight_value_from_level(backlight_level_));
+        DEVICE_EVENT_I(TAG, "ui: config source=screen backlight_level=%u", static_cast<unsigned>(backlight_level_));
+        break;
+    case WebBoot: {
+        bool enabled = !WifiService::is_web_enabled_on_boot();
+        WifiService::set_web_enabled_on_boot(enabled, TAG);
+        break;
+    }
+    case ProtectBypass:
+        protect_set_bypassed(!protect_is_bypassed(), TAG);
+        break;
+    case BlackboxSnapshot: {
+        const uint32_t current = BlackboxService::get_snapshot_interval_s();
+        uint32_t       next    = BLACKBOX_SNAPSHOT_INTERVALS_S[0];
+        for (size_t i = 0; i < sizeof(BLACKBOX_SNAPSHOT_INTERVALS_S) / sizeof(BLACKBOX_SNAPSHOT_INTERVALS_S[0]); ++i) {
+            if (BLACKBOX_SNAPSHOT_INTERVALS_S[i] == current) {
+                next = BLACKBOX_SNAPSHOT_INTERVALS_S[(i + 1) % (sizeof(BLACKBOX_SNAPSHOT_INTERVALS_S) /
+                                                                sizeof(BLACKBOX_SNAPSHOT_INTERVALS_S[0]))];
                 break;
             }
-            ST7735::set_rotation(rotation_180_ ? ST7735::Rotation::HorizontalMirror : ST7735::Rotation::Horizontal);
-            DEVICE_EVENT_I(TAG, "ui: config source=screen rotate_180=%u",
-                           rotation_180_ ? 1U : 0U);
-            break;
-        case Backlight:
-            backlight_level_++;
-            if (backlight_level_ > BACKLIGHT_LEVEL_COUNT) {
-                backlight_level_ = 1;
-            }
-            if (ui_config_set_backlight_level(backlight_level_) != ESP_OK) {
-                ESP_LOGE(TAG, "failed to persist backlight setting");
-                backlight_level_ = ui_config_get_backlight_level();
+        }
+        if (BlackboxService::set_snapshot_interval_s(next, TAG) != ESP_OK) {
+            ESP_LOGE(TAG, "failed to persist blackbox snapshot interval");
+        }
+        break;
+    }
+    case CanBaudrate: {
+        uint32_t current = CanCallback::CAN_BAUDRATE.read();
+        uint32_t next    = CAN_BAUDRATES[0];
+        for (size_t i = 0; i < sizeof(CAN_BAUDRATES) / sizeof(CAN_BAUDRATES[0]); ++i) {
+            if (CAN_BAUDRATES[i] == current) {
+                next = CAN_BAUDRATES[(i + 1) % (sizeof(CAN_BAUDRATES) / sizeof(CAN_BAUDRATES[0]))];
                 break;
             }
-            ST7735::set_backlight(backlight_value_from_level(backlight_level_));
-            DEVICE_EVENT_I(TAG, "ui: config source=screen backlight_level=%u",
-                           static_cast<unsigned>(backlight_level_));
-            break;
-        case WebBoot: {
-            bool enabled = !WifiService::is_web_enabled_on_boot();
-            WifiService::set_web_enabled_on_boot(enabled, TAG);
+        }
+        if (CanCallback::CAN_BAUDRATE.set(next) != ESP_OK) {
+            ESP_LOGE(TAG, "failed to persist CAN baudrate");
             break;
         }
-        case ProtectBypass:
-            protect_set_bypassed(!protect_is_bypassed(), TAG);
-            break;
-        case BlackboxSnapshot: {
-            const uint32_t current = BlackboxService::get_snapshot_interval_s();
-            uint32_t next = BLACKBOX_SNAPSHOT_INTERVALS_S[0];
-            for (size_t i = 0; i < sizeof(BLACKBOX_SNAPSHOT_INTERVALS_S) / sizeof(BLACKBOX_SNAPSHOT_INTERVALS_S[0]); ++i) {
-                if (BLACKBOX_SNAPSHOT_INTERVALS_S[i] == current) {
-                    next = BLACKBOX_SNAPSHOT_INTERVALS_S[(i + 1) % (sizeof(BLACKBOX_SNAPSHOT_INTERVALS_S) / sizeof(BLACKBOX_SNAPSHOT_INTERVALS_S[0]))];
-                    break;
-                }
-            }
-            if (BlackboxService::set_snapshot_interval_s(next, TAG) != ESP_OK) {
-                ESP_LOGE(TAG, "failed to persist blackbox snapshot interval");
-            }
-            break;
+        DEVICE_EVENT_I(TAG, "can: config baud=%lu source=screen reboot_required=1", static_cast<unsigned long>(next));
+        break;
+    }
+    case CanTerm: {
+        const esp_err_t ret = CanResistor::instance().toggle();
+        if (ret == ESP_OK) {
+            DEVICE_STATE_I(TAG, "can: resistor source=screen state=%u result=ok",
+                           CanResistor::instance().get() ? 1U : 0U);
+        } else {
+            ESP_LOGE(TAG, "can: resistor source=screen result=%s", esp_err_to_name(ret));
         }
-        case CanBaudrate: {
-            uint32_t current = CanCallback::CAN_BAUDRATE.read();
-            uint32_t next = CAN_BAUDRATES[0];
-            for (size_t i = 0; i < sizeof(CAN_BAUDRATES) / sizeof(CAN_BAUDRATES[0]); ++i) {
-                if (CAN_BAUDRATES[i] == current) {
-                    next = CAN_BAUDRATES[(i + 1) % (sizeof(CAN_BAUDRATES) / sizeof(CAN_BAUDRATES[0]))];
-                    break;
-                }
-            }
-            if (CanCallback::CAN_BAUDRATE.set(next) != ESP_OK) {
-                ESP_LOGE(TAG, "failed to persist CAN baudrate");
-                break;
-            }
-            DEVICE_EVENT_I(TAG, "can: config baud=%lu source=screen reboot_required=1",
-                           static_cast<unsigned long>(next));
-            break;
-        }
-        case CanTerm: {
-            const esp_err_t ret = CanResistor::instance().toggle();
-            if (ret == ESP_OK) {
-                DEVICE_STATE_I(TAG, "can: resistor source=screen state=%u result=ok",
-                               CanResistor::instance().get() ? 1U : 0U);
-            } else {
-                ESP_LOGE(TAG, "can: resistor source=screen result=%s", esp_err_to_name(ret));
-            }
-            break;
-        }
-        default:
-            break;
+        break;
+    }
+    default:
+        break;
     }
 }
 

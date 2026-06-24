@@ -16,9 +16,9 @@ namespace EnergyMeter {
  * @brief 共享计量会话快照。
  */
 struct Snapshot {
-    int64_t charge_uah;      /**< 相对当前基线的累计电量，单位 μAh。 */
-    int64_t energy_uwh;      /**< 相对当前基线的累计能量，单位 μWh。 */
-    uint64_t meter_time_ms;  /**< 当前计量会话持续时间，单位 ms。 */
+    int64_t  charge_uah    = 0; /**< 相对当前基线的累计电量，单位 μAh。 */
+    int64_t  energy_uwh    = 0; /**< 相对当前基线的累计能量，单位 μWh。 */
+    uint64_t meter_time_ms = 0; /**< 当前计量会话持续时间，单位 ms。 */
 };
 
 /**

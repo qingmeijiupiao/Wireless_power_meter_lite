@@ -15,20 +15,16 @@
 static const char* TAG = "WiFiManager";
 
 /* 事件组位定义 */
-#define WIFI_CONNECTED_BIT  BIT0   /**< STA已连接并获取IP */
-#define WIFI_FAIL_BIT       BIT1   /**< STA连接失败/断开 */
-#define WIFI_SCAN_DONE_BIT  BIT2   /**< 扫描完成 */
-#define WIFI_ASSOCIATED_BIT BIT3   /**< 本次STA连接尝试已完成802.11关联 */
+#define WIFI_CONNECTED_BIT BIT0  /**< STA已连接并获取IP */
+#define WIFI_FAIL_BIT BIT1       /**< STA连接失败/断开 */
+#define WIFI_SCAN_DONE_BIT BIT2  /**< 扫描完成 */
+#define WIFI_ASSOCIATED_BIT BIT3 /**< 本次STA连接尝试已完成802.11关联 */
 
 /* ==================== 构造/析构 ==================== */
 
 WiFiManager::WiFiManager()
-    : state_(WIFI_STATE_DISCONNECTED),
-      initialized_(false),
-      wifi_started_(false),
-      sta_netif_(nullptr),
-      ap_netif_(nullptr),
-      event_group_(nullptr) {
+    : state_(WIFI_STATE_DISCONNECTED), initialized_(false), wifi_started_(false), sta_netif_(nullptr),
+      ap_netif_(nullptr), event_group_(nullptr) {
     memset(&ip_, 0, sizeof(ip_));
     memset(radio_listeners_, 0, sizeof(radio_listeners_));
 }
@@ -60,33 +56,25 @@ esp_err_t WiFiManager::init() {
 
     /* 3. 创建STA和AP的netif实例 */
     sta_netif_ = esp_netif_create_default_wifi_sta();
-    ap_netif_ = esp_netif_create_default_wifi_ap();
+    ap_netif_  = esp_netif_create_default_wifi_ap();
 
     /* 4. 使用默认配置初始化WiFi驱动 */
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ret = esp_wifi_init(&cfg);
+    ret                    = esp_wifi_init(&cfg);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "wifi init failed: %s", esp_err_to_name(ret));
         return ret;
     }
 
     /* 5. 注册WiFi事件回调 */
-    ret = esp_event_handler_instance_register(WIFI_EVENT,
-                                               ESP_EVENT_ANY_ID,
-                                               &wifi_event_handler,
-                                               this,
-                                               nullptr);
+    ret = esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, this, nullptr);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "register wifi event handler failed: %s", esp_err_to_name(ret));
         return ret;
     }
 
     /* 6. 注册IP事件回调 */
-    ret = esp_event_handler_instance_register(IP_EVENT,
-                                               ESP_EVENT_ANY_ID,
-                                               &ip_event_handler,
-                                               this,
-                                               nullptr);
+    ret = esp_event_handler_instance_register(IP_EVENT, ESP_EVENT_ANY_ID, &ip_event_handler, this, nullptr);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "register ip event handler failed: %s", esp_err_to_name(ret));
         return ret;
@@ -188,11 +176,8 @@ esp_err_t WiFiManager::connect_sta(const char* ssid, const char* password, bool 
 
     /* 可选：阻塞等待连接结果 */
     if (wait) {
-        EventBits_t bits = xEventGroupWaitBits(event_group_,
-                                                WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-                                                pdFALSE,
-                                                pdFALSE,
-                                                pdMS_TO_TICKS(WIFI_CONNECT_TIMEOUT_MS));
+        EventBits_t bits = xEventGroupWaitBits(event_group_, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT, pdFALSE, pdFALSE,
+                                               pdMS_TO_TICKS(WIFI_CONNECT_TIMEOUT_MS));
         if (bits & WIFI_CONNECTED_BIT) {
             ESP_LOGI(TAG, "Connected to AP SSID:%s", ssid);
             return ESP_OK;
@@ -204,11 +189,12 @@ esp_err_t WiFiManager::connect_sta(const char* ssid, const char* password, bool 
             }
         } else {
             if (bits & WIFI_ASSOCIATED_BIT) {
-                ESP_LOGW(TAG, "Connect to SSID:%s timed out: associated with AP but DHCP IP was not acquired within %d ms",
+                ESP_LOGW(TAG,
+                         "Connect to SSID:%s timed out: associated with AP but DHCP IP was not acquired within %d ms",
                          ssid, WIFI_CONNECT_TIMEOUT_MS);
             } else {
-                ESP_LOGW(TAG, "Connect to SSID:%s timed out before AP association within %d ms",
-                         ssid, WIFI_CONNECT_TIMEOUT_MS);
+                ESP_LOGW(TAG, "Connect to SSID:%s timed out before AP association within %d ms", ssid,
+                         WIFI_CONNECT_TIMEOUT_MS);
             }
         }
         return ESP_ERR_TIMEOUT;
@@ -259,11 +245,11 @@ esp_err_t WiFiManager::start_ap(const char* ssid, const char* password, uint8_t 
     wifi_config_t ap_config = {};
     strncpy(reinterpret_cast<char*>(ap_config.ap.ssid), ssid, WIFI_SSID_MAX_LEN - 1);
     strncpy(reinterpret_cast<char*>(ap_config.ap.password), password, WIFI_PASSWORD_MAX_LEN - 1);
-    ap_config.ap.ssid_len = static_cast<uint8_t>(strlen(ssid));
-    ap_config.ap.channel = channel;
+    ap_config.ap.ssid_len       = static_cast<uint8_t>(strlen(ssid));
+    ap_config.ap.channel        = channel;
     ap_config.ap.max_connection = max_conn;
     /* 空密码使用OPEN认证，否则使用WPA2 */
-    ap_config.ap.authmode = (strlen(password) == 0) ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
+    ap_config.ap.authmode       = (strlen(password) == 0) ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
 
     ret = esp_wifi_set_config(WIFI_IF_AP, &ap_config);
     if (ret != ESP_OK) {
@@ -300,10 +286,10 @@ esp_err_t WiFiManager::start_apsta(const char* ssid, const char* password, uint8
     wifi_config_t ap_config = {};
     strncpy(reinterpret_cast<char*>(ap_config.ap.ssid), ssid, WIFI_SSID_MAX_LEN - 1);
     strncpy(reinterpret_cast<char*>(ap_config.ap.password), password, WIFI_PASSWORD_MAX_LEN - 1);
-    ap_config.ap.ssid_len = static_cast<uint8_t>(strlen(ssid));
-    ap_config.ap.channel = channel;
+    ap_config.ap.ssid_len       = static_cast<uint8_t>(strlen(ssid));
+    ap_config.ap.channel        = channel;
     ap_config.ap.max_connection = max_conn;
-    ap_config.ap.authmode = (strlen(password) == 0) ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
+    ap_config.ap.authmode       = (strlen(password) == 0) ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
 
     ret = esp_wifi_set_config(WIFI_IF_AP, &ap_config);
     if (ret != ESP_OK) {
@@ -330,7 +316,7 @@ esp_err_t WiFiManager::disconnect() {
 
     /* 仅在STA/APSTA模式下执行断开操作 */
     wifi_mode_t mode;
-    esp_err_t ret = esp_wifi_get_mode(&mode);
+    esp_err_t   ret = esp_wifi_get_mode(&mode);
     if (ret == ESP_OK && (mode == WIFI_MODE_STA || mode == WIFI_MODE_APSTA)) {
         ret = esp_wifi_disconnect();
         if (ret != ESP_OK) {
@@ -452,8 +438,8 @@ esp_err_t WiFiManager::scan_start(const wifi_scan_config_t* config, bool block) 
     xEventGroupClearBits(event_group_, WIFI_SCAN_DONE_BIT);
 
     /* 若未提供配置则使用全零默认配置 */
-    wifi_scan_config_t default_config = {};
-    const wifi_scan_config_t* cfg = config ? config : &default_config;
+    wifi_scan_config_t        default_config = {};
+    const wifi_scan_config_t* cfg            = config ? config : &default_config;
 
     esp_err_t ret = esp_wifi_scan_start(cfg, block);
     if (ret != ESP_OK) {
@@ -561,13 +547,14 @@ esp_err_t WiFiManager::get_sta_config(wifi_config_t* conf) {
     return esp_wifi_get_config(WIFI_IF_STA, conf);
 }
 
-esp_err_t WiFiManager::set_ap_config(const char* ssid, const char* password, uint8_t channel, wifi_auth_mode_t authmode, uint8_t max_conn) {
+esp_err_t WiFiManager::set_ap_config(const char* ssid, const char* password, uint8_t channel, wifi_auth_mode_t authmode,
+                                     uint8_t max_conn) {
     wifi_config_t conf = {};
     strncpy(reinterpret_cast<char*>(conf.ap.ssid), ssid, WIFI_SSID_MAX_LEN - 1);
     strncpy(reinterpret_cast<char*>(conf.ap.password), password, WIFI_PASSWORD_MAX_LEN - 1);
-    conf.ap.ssid_len = static_cast<uint8_t>(strlen(ssid));
-    conf.ap.channel = channel;
-    conf.ap.authmode = authmode;
+    conf.ap.ssid_len       = static_cast<uint8_t>(strlen(ssid));
+    conf.ap.channel        = channel;
+    conf.ap.authmode       = authmode;
     conf.ap.max_connection = max_conn;
     return esp_wifi_set_config(WIFI_IF_AP, &conf);
 }
@@ -582,9 +569,9 @@ esp_err_t WiFiManager::set_ap_ip(IP_t ip, IP_t netmask) {
     }
 
     esp_netif_ip_info_t ip_info = {};
-    ip_info.ip.addr = ip.addr;
-    ip_info.gw.addr = ip.addr;
-    ip_info.netmask.addr = netmask.addr;
+    ip_info.ip.addr             = ip.addr;
+    ip_info.gw.addr             = ip.addr;
+    ip_info.netmask.addr        = netmask.addr;
 
     esp_err_t ret = esp_netif_dhcps_stop(ap_netif_);
     if (ret != ESP_OK && ret != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STOPPED) {
@@ -657,7 +644,7 @@ void WiFiManager::notify_radio_event(RadioEvent event) {
 
 /**
  * @brief WiFi事件回调
- * 
+ *
  * 处理STA连接/断开、AP启动/停止、STA加入/离开AP、扫描完成等事件。
  * 通过arg参数获取WiFiManager实例指针以更新内部状态。
  */
@@ -707,18 +694,16 @@ void WiFiManager::wifi_event_handler(void* arg, esp_event_base_t event_base, int
     /* 有新STA连接到AP */
     case WIFI_EVENT_AP_STACONNECTED: {
         wifi_event_ap_staconnected_t* event = static_cast<wifi_event_ap_staconnected_t*>(event_data);
-        ESP_LOGI(TAG, "STA joined AP, MAC:%02x:%02x:%02x:%02x:%02x:%02x AID:%d",
-                 event->mac[0], event->mac[1], event->mac[2],
-                 event->mac[3], event->mac[4], event->mac[5], event->aid);
+        ESP_LOGI(TAG, "STA joined AP, MAC:%02x:%02x:%02x:%02x:%02x:%02x AID:%d", event->mac[0], event->mac[1],
+                 event->mac[2], event->mac[3], event->mac[4], event->mac[5], event->aid);
         break;
     }
 
     /* 有STA断开与AP的连接 */
     case WIFI_EVENT_AP_STADISCONNECTED: {
         wifi_event_ap_stadisconnected_t* event = static_cast<wifi_event_ap_stadisconnected_t*>(event_data);
-        ESP_LOGI(TAG, "STA left AP, MAC:%02x:%02x:%02x:%02x:%02x:%02x AID:%d",
-                 event->mac[0], event->mac[1], event->mac[2],
-                 event->mac[3], event->mac[4], event->mac[5], event->aid);
+        ESP_LOGI(TAG, "STA left AP, MAC:%02x:%02x:%02x:%02x:%02x:%02x AID:%d", event->mac[0], event->mac[1],
+                 event->mac[2], event->mac[3], event->mac[4], event->mac[5], event->aid);
         break;
     }
 
@@ -735,7 +720,7 @@ void WiFiManager::wifi_event_handler(void* arg, esp_event_base_t event_base, int
 
 /**
  * @brief IP事件回调
- * 
+ *
  * 处理IP地址获取/丢失事件，更新内部IP状态和连接标志。
  */
 void WiFiManager::ip_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
@@ -749,8 +734,8 @@ void WiFiManager::ip_event_handler(void* arg, esp_event_base_t event_base, int32
     /* DHCP成功获取IP地址 */
     case IP_EVENT_STA_GOT_IP: {
         ip_event_got_ip_t* event = static_cast<ip_event_got_ip_t*>(event_data);
-        self->ip_.addr = event->ip_info.ip.addr;
-        self->state_ = WIFI_STATE_STA_CONNECTED;
+        self->ip_.addr           = event->ip_info.ip.addr;
+        self->state_             = WIFI_STATE_STA_CONNECTED;
         xEventGroupClearBits(self->event_group_, WIFI_FAIL_BIT);
         xEventGroupSetBits(self->event_group_, WIFI_CONNECTED_BIT);
         ESP_LOGI(TAG, "Got IP:" IPSTR, IP2STR(&event->ip_info.ip));

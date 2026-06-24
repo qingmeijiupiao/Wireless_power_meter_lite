@@ -18,8 +18,8 @@ namespace SCREEN {
  * @brief 按键事件消息
  */
 struct ButtonMessage {
-    ButtonId button;    /**< 按键 ID */
-    ButtonEvent event;  /**< 按键事件 */
+    ButtonId    button = ButtonId::Main;           /**< 按键 ID */
+    ButtonEvent event  = ButtonEvent::SHORT_PRESS; /**< 按键事件 */
 };
 
 /**
@@ -30,7 +30,7 @@ struct ButtonMessage {
  * 避免按键任务直接修改屏幕状态。
  */
 class UIManager {
-public:
+  public:
     /**
      * @brief 获取 UIManager 单例
      * @return UIManager 引用
@@ -61,7 +61,8 @@ public:
      */
     void loop_once();
 
-private:
+  private:
+    /** @brief `UIManager` 接口。 */
     UIManager() = default;
 
     /**

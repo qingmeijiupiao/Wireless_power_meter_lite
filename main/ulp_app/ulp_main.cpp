@@ -8,34 +8,33 @@
 #include "ulp_Interp.hpp"
 #include "../../components/app/current_calibration/include/CurrentCalib.h"
 
+constexpr int voltage_scale = 1250; // 电压校准系数，根据手册计算得到，无需校准
 
-constexpr int voltage_scale = 1250; //电压校准系数，根据手册计算得到，无需校准
-
-constexpr uint32_t LP_CPU_FREQ_HZ = 20000000;
-constexpr uint32_t current_dead_zone_uA = 5000; //电流死区，单位uA
+constexpr uint32_t LP_CPU_FREQ_HZ       = 20000000;
+constexpr uint32_t current_dead_zone_uA = 5000; // 电流死区，单位uA
 
 #define MS_TO_US(ms) ((ms) * 1000)
 
 #define LP_VAR __attribute__((section(".rtc.bss")))
 /* 定义共享变量，存放在RTC内存中（.rtc.bss段） */
-volatile uint32_t      ulp_state                     LP_VAR;
+volatile uint32_t ulp_state                          LP_VAR;
 ulp_lp_core_spinlock_t shared_lock                   LP_VAR;
-volatile uint32_t      log_data                      LP_VAR;
-volatile uint32_t      voltage_uv                    LP_VAR;
-volatile uint16_t      voltage_register_raw          LP_VAR;
-volatile int32_t       current_uA                    LP_VAR;
-volatile int16_t       shunt_register_raw            LP_VAR;
-volatile uint16_t      ina226_manufacturer_id        LP_VAR;
-volatile int32_t       Board_temperature             LP_VAR; //单位0.01℃
-volatile int64_t       meter_uah                     LP_VAR; //单位uAh
-volatile int64_t       meter_uwh                     LP_VAR; //单位uWh
+volatile uint32_t log_data                           LP_VAR;
+volatile uint32_t voltage_uv                         LP_VAR;
+volatile uint16_t voltage_register_raw               LP_VAR;
+volatile int32_t current_uA                          LP_VAR;
+volatile int16_t shunt_register_raw                  LP_VAR;
+volatile uint16_t ina226_manufacturer_id             LP_VAR;
+volatile int32_t Board_temperature                   LP_VAR; // 单位0.01℃
+volatile int64_t meter_uah                           LP_VAR; // 单位uAh
+volatile int64_t meter_uwh                           LP_VAR; // 单位uWh
 volatile CurrentCalib::params_t current_calib_params LP_VAR;
 
-volatile uint32_t now_time_ms = 0;
-UlpNonEquidistantInterp<int16_t,int16_t,6> current_interp;
-ULP_CORE_STATE& ulp_state_p = *(ULP_CORE_STATE*)&(ulp_state);
+volatile uint32_t                            now_time_ms = 0;
+UlpNonEquidistantInterp<int16_t, int16_t, 6> current_interp;
+ULP_CORE_STATE&                              ulp_state_p = *(ULP_CORE_STATE*)&(ulp_state);
 // 计算过程使用 LP 本地副本，避免每次采样长时间占用跨核锁。
-CurrentCalib::params_t local_current_calib_params;
+CurrentCalib::params_t                       local_current_calib_params;
 
 /**
  * @brief 在 LP/HP 共享自旋锁保护下执行无返回值的短操作。
@@ -45,8 +44,7 @@ CurrentCalib::params_t local_current_calib_params;
  *
  * @note 用于原子更新共享状态位、测量值和 64 位累计量。
  */
-template<typename F>
-void with_shared_lock_void(F&& action) {
+template <typename F> void with_shared_lock_void(F&& action) {
     ulp_lp_core_enter_critical(&shared_lock);
     action();
     ulp_lp_core_exit_critical(&shared_lock);
@@ -62,16 +60,14 @@ void with_shared_lock_void(F&& action) {
  *
  * @note 电压、电流和原始寄存器值必须同批次提交，HP 核才不会读到混合样本。
  */
-static void publish_sample(uint16_t new_voltage_register_raw,
-                           int16_t new_shunt_register_raw,
-                           uint32_t new_voltage_uv,
+static void publish_sample(uint16_t new_voltage_register_raw, int16_t new_shunt_register_raw, uint32_t new_voltage_uv,
                            int32_t new_current_uA) {
     // I2C 读取和补偿计算已在锁外完成，这里只原子提交一组共享采样值。
     with_shared_lock_void([=]() {
-        voltage_register_raw = new_voltage_register_raw;
-        shunt_register_raw = new_shunt_register_raw;
-        voltage_uv = new_voltage_uv;
-        current_uA = new_current_uA;
+        voltage_register_raw                               = new_voltage_register_raw;
+        shunt_register_raw                                 = new_shunt_register_raw;
+        voltage_uv                                         = new_voltage_uv;
+        current_uA                                         = new_current_uA;
         ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout = false;
     });
 }
@@ -89,7 +85,7 @@ static CurrentCalib::params_t read_current_calib_params() {
     with_shared_lock_void([&]() {
         params.current_base_K = current_calib_params.current_base_K;
         for (size_t i = 0; i < sizeof(params.points) / sizeof(params.points[0]); ++i) {
-            params.points[i].register_value = current_calib_params.points[i].register_value;
+            params.points[i].register_value       = current_calib_params.points[i].register_value;
             params.points[i].offset_current_100uA = current_calib_params.points[i].offset_current_100uA;
         }
         params.temperature_K = current_calib_params.temperature_K;
@@ -99,7 +95,7 @@ static CurrentCalib::params_t read_current_calib_params() {
 
 constexpr uint32_t INA226_READ_TIMEOUT_MS = 1000;
 // INA226 reset/config/首样本等待期间置位，避免 ina226_run() 在恢复流程内再次递归触发恢复。
-static bool ina226_configuring = false;
+static bool        ina226_configuring     = false;
 
 bool ulp_ina226_init();
 void timer_run(void);
@@ -111,19 +107,17 @@ void timer_run(void);
  *       INA226_READ_TIMEOUT_MS 后置位 `ulp_ina226_read_timeout`，并在非配置流程中
  *       阻塞执行 INA226 重新初始化，直到恢复首个有效样本。
  */
-void ina226_run(){
+void ina226_run() {
     // 最近一次成功发布完整电压/电流样本的 LP 毫秒时间，用于判断数据是否陈旧。
-    static uint32_t last_success_ms = 0;
-    const auto handle_ina226_read_not_ready = [&]() {
+    static uint32_t last_success_ms              = 0;
+    const auto      handle_ina226_read_not_ready = [&]() {
         // 只在本函数内判断连续采样失败时长，避免把 INA226 私有状态暴露为文件级变量。
         if ((now_time_ms - last_success_ms) <= INA226_READ_TIMEOUT_MS) {
             return;
         }
 
         // 采样失效时保留最后一次有效样本，避免把通信异常伪装成 0V 欠压。
-        with_shared_lock_void([]() {
-            ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout = true;
-        });
+        with_shared_lock_void([]() { ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout = true; });
         // 配置流程内部只标记超时，由外层 init 循环重新 reset/config，避免递归恢复。
         if (ina226_configuring) {
             return;
@@ -137,13 +131,13 @@ void ina226_run(){
         handle_ina226_read_not_ready();
         return;
     }
-    if(!(mask_enable & (1 << 3))){ // CNVR 位为 0 表示本轮转换未完成，继续保留上次有效样本。
+    if (!(mask_enable & (1 << 3))) { // CNVR 位为 0 表示本轮转换未完成，继续保留上次有效样本。
         handle_ina226_read_not_ready();
         return;
     }
 
     uint16_t new_voltage_register_raw = 0;
-    int16_t new_shunt_register_raw = 0;
+    int16_t  new_shunt_register_raw   = 0;
     /* 读取电压寄存器 */
     if (INA226::read_register(INA226::Register_enum::INA226_BUS_VOLTAGE, &new_voltage_register_raw) != ESP_OK) {
         handle_ina226_read_not_ready();
@@ -151,29 +145,29 @@ void ina226_run(){
     }
 
     /* 读取电流寄存器 */
-    if (INA226::read_register(INA226::Register_enum::INA226_SHUNT_VOLTAGE,
-                              (uint16_t*)&new_shunt_register_raw) != ESP_OK) {
+    if (INA226::read_register(INA226::Register_enum::INA226_SHUNT_VOLTAGE, (uint16_t*)&new_shunt_register_raw) !=
+        ESP_OK) {
         handle_ina226_read_not_ready();
         return;
     }
 
-    const uint32_t new_voltage_uv = new_voltage_register_raw * voltage_scale;
-    int32_t new_current_uA = 0;
-    int32_t board_temperature = 0;
-    with_shared_lock_void([&]() {
-        board_temperature = Board_temperature;
-    });
-    if(std::abs((int32_t)new_shunt_register_raw * local_current_calib_params.current_base_K) < current_dead_zone_uA){
+    const uint32_t new_voltage_uv    = new_voltage_register_raw * voltage_scale;
+    int32_t        new_current_uA    = 0;
+    int32_t        board_temperature = 0;
+    with_shared_lock_void([&]() { board_temperature = Board_temperature; });
+    if (std::abs((int32_t)new_shunt_register_raw * local_current_calib_params.current_base_K) < current_dead_zone_uA) {
         new_current_uA = 0;
     } else {
-        //插值补偿映射
-        int32_t no_temp_cali_current_uA = local_current_calib_params.current_base_K * new_shunt_register_raw + current_interp.interpolate(new_shunt_register_raw) * 100;
-        
-        //温漂补偿
+        // 插值补偿映射
+        int32_t no_temp_cali_current_uA = local_current_calib_params.current_base_K * new_shunt_register_raw +
+                                          current_interp.interpolate(new_shunt_register_raw) * 100;
+
+        // 温漂补偿
         int32_t delta_temp = (board_temperature - CurrentCalib::BASE_TEMPERATURE) / 100;
-        int32_t temp_comp_uA = (no_temp_cali_current_uA / 1000) * local_current_calib_params.temperature_K * delta_temp / 1000;
-        
-        //最终电流
+        int32_t temp_comp_uA =
+            (no_temp_cali_current_uA / 1000) * local_current_calib_params.temperature_K * delta_temp / 1000;
+
+        // 最终电流
         new_current_uA = no_temp_cali_current_uA - temp_comp_uA;
     }
 
@@ -190,10 +184,10 @@ void ina226_run(){
  *       恢复期间置位 `ulp_i2c_init_err` 与 `ulp_ina226_read_timeout`，HP 核保护逻辑会据此
  *       暂停 INA226 相关保护，避免用无效数据关断输出。
  */
-bool ulp_ina226_init(){
+bool ulp_ina226_init() {
     ina226_configuring = true;
     with_shared_lock_void([]() {
-        ulp_state_p.ulp_state_bits.ulp_i2c_init_err = true;
+        ulp_state_p.ulp_state_bits.ulp_i2c_init_err        = true;
         ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout = true;
     });
 
@@ -209,48 +203,41 @@ bool ulp_ina226_init(){
         timer_run();
 
         uint16_t new_ina226_manufacturer_id = 0;
-        if (INA226::read_register(INA226::Register_enum::INA226_MANUFACTURER,
-                                  &new_ina226_manufacturer_id) != ESP_OK) {
+        if (INA226::read_register(INA226::Register_enum::INA226_MANUFACTURER, &new_ina226_manufacturer_id) != ESP_OK) {
             ulp_lp_core_delay_us(MS_TO_US(20));
             continue;
         }
-        with_shared_lock_void([=]() {
-            ina226_manufacturer_id = new_ina226_manufacturer_id;
-        });
+        with_shared_lock_void([=]() { ina226_manufacturer_id = new_ina226_manufacturer_id; });
 
-        if (INA226::set_configuration(
-            INA226::Avg_times_enum::INA226_64_samples,
-            INA226::Timing_enum::INA226_1100_us,
-            INA226::Timing_enum::INA226_1100_us,
-            INA226::Mode_enum::INA226_SHUNT_AND_BUS_CONTINUOUS
-        ) != ESP_OK) {
+        if (INA226::set_configuration(INA226::Avg_times_enum::INA226_64_samples, INA226::Timing_enum::INA226_1100_us,
+                                      INA226::Timing_enum::INA226_1100_us,
+                                      INA226::Mode_enum::INA226_SHUNT_AND_BUS_CONTINUOUS) != ESP_OK) {
             ulp_lp_core_delay_us(MS_TO_US(20));
             continue;
         }
 
         INA226::MaskEnable_reg_t MaskEnable_reg;
-        MaskEnable_reg.raw = 0;
-        MaskEnable_reg.bits.LEN=1;
-        MaskEnable_reg.bits.APOL=0;
-        MaskEnable_reg.bits.CNVR=1;
-        if (INA226::write_register(INA226::Register_enum::INA226_MASK_ENABLE,MaskEnable_reg.raw) != ESP_OK) {
+        MaskEnable_reg.raw       = 0;
+        MaskEnable_reg.bits.LEN  = 1;
+        MaskEnable_reg.bits.APOL = 0;
+        MaskEnable_reg.bits.CNVR = 1;
+        if (INA226::write_register(INA226::Register_enum::INA226_MASK_ENABLE, MaskEnable_reg.raw) != ESP_OK) {
             ulp_lp_core_delay_us(MS_TO_US(20));
             continue;
         }
 
         const uint32_t sample_wait_start_ms = now_time_ms;
-        while(true){
+        while (true) {
             timer_run();
             ina226_run();
             bool sample_ready = false;
-            with_shared_lock_void([&]() {
-                sample_ready = voltage_uv != 0 && !ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout;
-            });
+            with_shared_lock_void(
+                [&]() { sample_ready = voltage_uv != 0 && !ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout; });
             if (sample_ready) {
                 // 首个有效样本发布后，测量链路重新变为可靠，HP 核可恢复 INA226 相关保护。
                 with_shared_lock_void([]() {
-                    ulp_state_p.ulp_state_bits.ulp_i2c_init_err = false;
-                    ulp_state_p.ulp_state_bits.ulp_ina226_init_ok = true;
+                    ulp_state_p.ulp_state_bits.ulp_i2c_init_err        = false;
+                    ulp_state_p.ulp_state_bits.ulp_ina226_init_ok      = true;
                     ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout = false;
                 });
                 ina226_configuring = false;
@@ -270,14 +257,15 @@ bool ulp_ina226_init(){
  *
  * @note 校准参数从 RTC 共享区复制到 LP 本地副本，运行期采样不再频繁持锁访问共享参数。
  */
-void load_current_calib_params(){
+void load_current_calib_params() {
     local_current_calib_params = read_current_calib_params();
-    for(int i = 0;i<sizeof(local_current_calib_params.points)/sizeof(local_current_calib_params.points[0]);i++){
-        current_interp.set_point(i,local_current_calib_params.points[i].register_value,local_current_calib_params.points[i].offset_current_100uA);
+    for (int i = 0; i < sizeof(local_current_calib_params.points) / sizeof(local_current_calib_params.points[0]); i++) {
+        current_interp.set_point(i, local_current_calib_params.points[i].register_value,
+                                 local_current_calib_params.points[i].offset_current_100uA);
     }
     current_interp.finish_load();
 }
-    
+
 /**
  * @brief 更新 LP Core 内部毫秒计数。
  *
@@ -286,11 +274,11 @@ void load_current_calib_params(){
  */
 void timer_run(void) {
     constexpr uint32_t CYCLES_PER_MS = LP_CPU_FREQ_HZ / 1000;
-    constexpr uint32_t MAX_MS = 0xFFFFFFFF / CYCLES_PER_MS;
-    static uint32_t last_raw_ms = 0;
+    constexpr uint32_t MAX_MS        = 0xFFFFFFFF / CYCLES_PER_MS;
+    static uint32_t    last_raw_ms   = 0;
 
     int32_t current_ms = ulp_lp_core_get_cpu_cycles() / CYCLES_PER_MS;
-    int32_t diff = current_ms - last_raw_ms;
+    int32_t diff       = current_ms - last_raw_ms;
 
     if (now_time_ms == 0) {
         now_time_ms = current_ms;
@@ -298,7 +286,7 @@ void timer_run(void) {
         return;
     }
 
-    if (diff < 0) {  // 发生回绕
+    if (diff < 0) { // 发生回绕
         now_time_ms += (MAX_MS - last_raw_ms) + current_ms;
     } else {
         now_time_ms += diff;
@@ -311,41 +299,40 @@ void timer_run(void) {
  *
  * @note 读取并清除 `ulp_reload_calib_params` 必须在同一临界区完成，避免重复处理或丢失请求。
  */
-void check_reload_current_calib_params(){
+void check_reload_current_calib_params() {
     bool reload = false;
     with_shared_lock_void([&]() {
-        reload = ulp_state_p.ulp_state_bits.ulp_reload_calib_params;
+        reload                                             = ulp_state_p.ulp_state_bits.ulp_reload_calib_params;
         ulp_state_p.ulp_state_bits.ulp_reload_calib_params = false;
     });
-    if(reload){
+    if (reload) {
         load_current_calib_params();
     }
 }
-
 
 /**
  * @brief 按当前采样值积分电量和能量累计值。
  *
  * @note 电荷单位为 uAh，能量单位为 uWh；内部保留带符号余数，避免低电流下积分量被截断。
- */ 
-static int64_t charge_accum_uAms = 0;   // 电荷累加器，单位 uA·ms
-static int64_t energy_accum_uvAms = 0;  // 能量乘积累加器，单位 uA·uV·ms
-void update_meter() {
+ */
+static int64_t charge_accum_uAms  = 0; // 电荷累加器，单位 uA·ms
+static int64_t energy_accum_uvAms = 0; // 能量乘积累加器，单位 uA·uV·ms
+void           update_meter() {
     static uint32_t last_run_ms = 0;
-    uint32_t delta_ms = now_time_ms - last_run_ms;   // 不处理回绕，直接减
-    if (delta_ms == 0) return;
+    uint32_t        delta_ms    = now_time_ms - last_run_ms; // 不处理回绕，直接减
+    if (delta_ms == 0)
+        return;
 
     // ----- 电量积分 (uAh) -----
-    int32_t sample_current_uA = 0;
+    int32_t  sample_current_uA = 0;
     uint32_t sample_voltage_uv = 0;
-    bool sample_valid = false;
+    bool     sample_valid      = false;
     // 电流和电压必须在同一临界区读取，避免电量积分组合到不同批次样本。
     with_shared_lock_void([&]() {
         sample_current_uA = current_uA;
         sample_voltage_uv = voltage_uv;
-        sample_valid = !ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout &&
-                       ulp_state_p.ulp_state_bits.ulp_ina226_init_ok &&
-                       !ulp_state_p.ulp_state_bits.ulp_i2c_init_err;
+        sample_valid      = !ulp_state_p.ulp_state_bits.ulp_ina226_read_timeout &&
+                       ulp_state_p.ulp_state_bits.ulp_ina226_init_ok && !ulp_state_p.ulp_state_bits.ulp_i2c_init_err;
     });
     if (!sample_valid) {
         // 测量降级时保留最后显示样本，但不继续用陈旧电流积分电量。
@@ -353,17 +340,17 @@ void update_meter() {
         return;
     }
 
-    charge_accum_uAms += (int64_t)sample_current_uA * delta_ms;
-    const int64_t UAH_THRESHOLD = 3600000LL;   // 1 uAh = 3,600,000 uA·ms
-    const int64_t whole_uah = charge_accum_uAms / UAH_THRESHOLD;
-    charge_accum_uAms %= UAH_THRESHOLD;    // 保留带符号余数
+    charge_accum_uAms           += (int64_t)sample_current_uA * delta_ms;
+    const int64_t UAH_THRESHOLD  = 3600000LL; // 1 uAh = 3,600,000 uA·ms
+    const int64_t whole_uah      = charge_accum_uAms / UAH_THRESHOLD;
+    charge_accum_uAms           %= UAH_THRESHOLD; // 保留带符号余数
 
     // ----- 能量积分 (uWh) -----
     // 1 uWh = 3.6e12 uA·uV·ms
-    energy_accum_uvAms += (int64_t)sample_current_uA * sample_voltage_uv * delta_ms;
-    const int64_t UWH_THRESHOLD = 3600000000000LL;   // 3.6e12
-    const int64_t whole_uwh = energy_accum_uvAms / UWH_THRESHOLD;
-    energy_accum_uvAms %= UWH_THRESHOLD;
+    energy_accum_uvAms          += (int64_t)sample_current_uA * sample_voltage_uv * delta_ms;
+    const int64_t UWH_THRESHOLD  = 3600000000000LL; // 3.6e12
+    const int64_t whole_uwh      = energy_accum_uvAms / UWH_THRESHOLD;
+    energy_accum_uvAms          %= UWH_THRESHOLD;
 
     if (whole_uah != 0 || whole_uwh != 0) {
         // 两个 64 位累计值需要在同一临界区提交，供 HP 核读取一致快照。
@@ -385,8 +372,7 @@ void update_meter() {
  *
  * @note 当前实现使用 `>` 判断，因此实际间隔会略大于 `interval_ms`。
  */
-template<typename F>
-void app_loop_every_ms(uint32_t interval_ms, F&& action) {
+template <typename F> void app_loop_every_ms(uint32_t interval_ms, F&& action) {
     static uint32_t last_run_ms = 0;
     if ((now_time_ms - last_run_ms) > interval_ms) {
         last_run_ms = now_time_ms;
@@ -399,22 +385,21 @@ void app_loop_every_ms(uint32_t interval_ms, F&& action) {
  *
  * @return 不返回；INA226 初始化会阻塞重试直到成功，随后进入主循环。
  *
+ *
  * @note 主循环持续轮询 INA226、维护毫秒计数、处理校准重载并执行电量积分。
  */
-int main(void){
+int main(void) {
     load_current_calib_params();
     ulp_ina226_init();
-    with_shared_lock_void([]() {
-        ulp_state_p.ulp_state_bits.ulp_run = true;
-    });
+    with_shared_lock_void([]() { ulp_state_p.ulp_state_bits.ulp_run = true; });
     while (1) {
         timer_run();
         ina226_run();
 
-        //检查是否需要重新加载校准参数
-        app_loop_every_ms(20,check_reload_current_calib_params);
+        // 检查是否需要重新加载校准参数
+        app_loop_every_ms(20, check_reload_current_calib_params);
 
         // 电量积分
-        app_loop_every_ms(10,update_meter);
+        app_loop_every_ms(10, update_meter);
     }
 }

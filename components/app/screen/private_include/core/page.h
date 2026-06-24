@@ -21,7 +21,8 @@ namespace SCREEN {
  * 全局编辑提示和刷新节奏由 UIManager 统一管理。
  */
 class Page {
-public:
+  public:
+    /** @brief `~Page` 接口。 */
     virtual ~Page() = default;
 
     /**
@@ -40,19 +41,25 @@ public:
      * @brief 获取页面刷新周期
      * @return 刷新周期，单位 ms
      */
-    virtual uint32_t refresh_interval_ms() const { return DEFAULT_REFRESH_MS; }
+    virtual uint32_t refresh_interval_ms() const {
+        return DEFAULT_REFRESH_MS;
+    }
 
     /**
      * @brief 页面是否支持编辑模式
      * @return true 表示 UIManager 长按侧键时可进入编辑模式
      */
-    virtual bool supports_edit_mode() const { return false; }
+    virtual bool supports_edit_mode() const {
+        return false;
+    }
 
     /**
      * @brief 页面是否需要显示全局编辑提示
      * @return true 表示绘制全局编辑提示
      */
-    virtual bool is_overlay_active() const { return false; }
+    virtual bool is_overlay_active() const {
+        return false;
+    }
 
     /** @brief 页面进入回调 */
     virtual void on_enter() {}

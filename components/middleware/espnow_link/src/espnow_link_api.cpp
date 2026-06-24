@@ -30,7 +30,7 @@ esp_err_t add_peer(const PeerConfig& config) {
         return ESP_ERR_NO_MEM;
     }
 
-    entry->used = true;
+    entry->used   = true;
     entry->config = config;
     if (entry->metrics.ack_timeout_ms == 0) {
         entry->metrics.ack_timeout_ms = DEFAULT_ACK_TIMEOUT_MS;
@@ -46,11 +46,9 @@ esp_err_t add_peer(const PeerConfig& config) {
     memcpy(info.peer_addr, config.address.bytes, MAC_ADDRESS_SIZE);
     memcpy(info.lmk, config.lmk, KEY_SIZE);
     info.channel = 0;
-    info.ifidx = WIFI_IF_STA;
+    info.ifidx   = WIFI_IF_STA;
     info.encrypt = config.encrypted;
-    return esp_now_is_peer_exist(config.address.bytes)
-               ? esp_now_mod_peer(&info)
-               : esp_now_add_peer(&info);
+    return esp_now_is_peer_exist(config.address.bytes) ? esp_now_mod_peer(&info) : esp_now_add_peer(&info);
 }
 
 esp_err_t remove_peer(const MacAddress& address) {
@@ -77,36 +75,30 @@ bool has_peer(const MacAddress& address) {
     return found;
 }
 
-esp_err_t send(const MacAddress& destination,
-               uint16_t message_id,
-               const void* payload,
-               size_t payload_size,
-               const SendOptions& options,
-               SendCallback callback,
-               void* context) {
+esp_err_t send(const MacAddress& destination, uint16_t message_id, const void* payload, size_t payload_size,
+               const SendOptions& options, SendCallback callback, void* context) {
     using namespace Internal;
     if (!initialized || !active) {
         return ESP_ERR_INVALID_STATE;
     }
-    if (payload_size > MAX_PAYLOAD_SIZE || (payload_size > 0 && payload == nullptr) ||
-        message_id == ACK_MESSAGE_ID) {
+    if (payload_size > MAX_PAYLOAD_SIZE || (payload_size > 0 && payload == nullptr) || message_id == ACK_MESSAGE_ID) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    SendRequest request = {};
-    request.destination = destination;
-    request.message_id = message_id;
+    SendRequest request  = {};
+    request.destination  = destination;
+    request.message_id   = message_id;
     request.payload_size = static_cast<uint16_t>(payload_size);
     if (payload_size > 0) {
         memcpy(request.payload, payload, payload_size);
     }
-    request.options = options;
+    request.options  = options;
     request.callback = callback;
-    request.context = context;
+    request.context  = context;
 
     // 广播无法使用 ESP-NOW 加密，也不存在唯一 ACK 对端，强制使用 BEST_EFFORT。
     if (destination.is_broadcast()) {
-        request.options.delivery = Delivery::BEST_EFFORT;
+        request.options.delivery        = Delivery::BEST_EFFORT;
         request.options.allow_plaintext = true;
     } else {
         portENTER_CRITICAL(&state_lock);
@@ -167,19 +159,17 @@ esp_err_t unregister_handler(uint16_t message_id) {
 
 esp_err_t set_default_reliable_options(const SendOptions& options) {
     if (options.max_attempts == 0 ||
-        (options.ack_timeout_ms != 0 &&
-         (options.ack_timeout_ms < Internal::MIN_ACK_TIMEOUT_MS ||
-          options.ack_timeout_ms > Internal::MAX_ACK_TIMEOUT_MS))) {
+        (options.ack_timeout_ms != 0 && (options.ack_timeout_ms < Internal::MIN_ACK_TIMEOUT_MS ||
+                                         options.ack_timeout_ms > Internal::MAX_ACK_TIMEOUT_MS))) {
         return ESP_ERR_INVALID_ARG;
     }
-    Internal::default_reliable_options = options;
+    Internal::default_reliable_options          = options;
     Internal::default_reliable_options.delivery = Delivery::RELIABLE;
     return ESP_OK;
 }
 
 esp_err_t set_peer_ack_timeout(const MacAddress& address, uint16_t timeout_ms) {
-    if (timeout_ms < Internal::MIN_ACK_TIMEOUT_MS ||
-        timeout_ms > Internal::MAX_ACK_TIMEOUT_MS) {
+    if (timeout_ms < Internal::MIN_ACK_TIMEOUT_MS || timeout_ms > Internal::MAX_ACK_TIMEOUT_MS) {
         return ESP_ERR_INVALID_ARG;
     }
     portENTER_CRITICAL(&Internal::state_lock);
@@ -208,45 +198,34 @@ esp_err_t get_peer_metrics(const MacAddress& address, PeerMetrics* metrics) {
     return ESP_OK;
 }
 
-uint32_t get_response_timeout_ms(const MacAddress& address,
-                                 uint8_t request_attempts,
-                                 uint8_t response_attempts,
+uint32_t get_response_timeout_ms(const MacAddress& address, uint8_t request_attempts, uint8_t response_attempts,
                                  uint16_t processing_budget_ms) {
     PeerMetrics metrics = {};
-    uint32_t rto_ms = Internal::DEFAULT_ACK_TIMEOUT_MS;
-    if (get_peer_metrics(address, &metrics) == ESP_OK &&
-        metrics.ack_timeout_ms != 0) {
+    uint32_t    rto_ms  = Internal::DEFAULT_ACK_TIMEOUT_MS;
+    if (get_peer_metrics(address, &metrics) == ESP_OK && metrics.ack_timeout_ms != 0) {
         rto_ms = metrics.ack_timeout_ms;
     }
-    const uint32_t attempts =
-        static_cast<uint32_t>(request_attempts) + response_attempts;
+    const uint32_t attempts = static_cast<uint32_t>(request_attempts) + response_attempts;
     return rto_ms * attempts + processing_budget_ms + 20U;
 }
 
-uint32_t get_delivery_timeout_ms(const MacAddress& address,
-                                 uint8_t max_attempts,
-                                 uint16_t mac_completion_budget_ms) {
+uint32_t get_delivery_timeout_ms(const MacAddress& address, uint8_t max_attempts, uint16_t mac_completion_budget_ms) {
     PeerMetrics metrics = {};
-    uint32_t rto_ms = Internal::DEFAULT_ACK_TIMEOUT_MS;
-    if (get_peer_metrics(address, &metrics) == ESP_OK &&
-        metrics.ack_timeout_ms != 0) {
+    uint32_t    rto_ms  = Internal::DEFAULT_ACK_TIMEOUT_MS;
+    if (get_peer_metrics(address, &metrics) == ESP_OK && metrics.ack_timeout_ms != 0) {
         rto_ms = metrics.ack_timeout_ms;
     }
-    return static_cast<uint32_t>(max_attempts) *
-               (mac_completion_budget_ms + rto_ms) +
-           20U;
+    return static_cast<uint32_t>(max_attempts) * (mac_completion_budget_ms + rto_ms) + 20U;
 }
 
 uint16_t get_channel_probe_timeout_ms(const MacAddress& address) {
     PeerMetrics metrics = {};
-    if (get_peer_metrics(address, &metrics) != ESP_OK ||
-        metrics.rtt_sample_count <= 5 ||
+    if (get_peer_metrics(address, &metrics) != ESP_OK || metrics.rtt_sample_count <= 5 ||
         metrics.recent_rtt_count < 3) {
         return 30;
     }
-    const uint32_t sum = static_cast<uint32_t>(metrics.recent_rtt_ms[0]) +
-                         metrics.recent_rtt_ms[1] +
-                         metrics.recent_rtt_ms[2];
+    const uint32_t sum =
+        static_cast<uint32_t>(metrics.recent_rtt_ms[0]) + metrics.recent_rtt_ms[1] + metrics.recent_rtt_ms[2];
     const uint32_t timeout_ms = (sum + 1U) / 2U;
     return static_cast<uint16_t>(std::clamp<uint32_t>(timeout_ms, 20U, 200U));
 }

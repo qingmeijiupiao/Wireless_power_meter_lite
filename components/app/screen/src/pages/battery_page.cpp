@@ -78,9 +78,9 @@ double pow10(uint8_t exponent) {
  * @param max_precision 最多保留的小数位数。
  * @param clamp 是否在超出显示范围时封顶。
  */
-void format_fixed_digits(char* line, size_t line_size, double value, const char* unit,
-                         uint8_t max_digits, uint8_t max_precision, bool clamp) {
-    value = std::abs(value);
+void format_fixed_digits(char* line, size_t line_size, double value, const char* unit, uint8_t max_digits,
+                         uint8_t max_precision, bool clamp) {
+    value         = std::abs(value);
     int precision = max_precision;
     while (precision > 0) {
         const double rounding_limit = pow10(max_digits - precision) - 0.5 / pow10(precision);
@@ -105,8 +105,7 @@ void format_fixed_digits(char* line, size_t line_size, double value, const char*
  * @param total_seconds 总秒数。
  */
 void format_duration(char* line, size_t line_size, const char* prefix, uint64_t total_seconds) {
-    snprintf(line, line_size, "%s%02llu:%02llu:%02llu",
-             prefix == nullptr ? "" : prefix,
+    snprintf(line, line_size, "%s%02llu:%02llu:%02llu", prefix == nullptr ? "" : prefix,
              static_cast<unsigned long long>(total_seconds / 3600),
              static_cast<unsigned long long>((total_seconds / 60) % 60),
              static_cast<unsigned long long>(total_seconds % 60));
@@ -153,15 +152,15 @@ void BatteryPage::render(RenderMode mode) {
     (void)mode;
     ST7735::fill_screen(ST7735::BLACK);
 
-    const EnergyMeter::Snapshot meter = EnergyMeter::snapshot();
-    const int64_t meter_uwh = meter.energy_uwh;
-    const int64_t meter_uah = meter.charge_uah;
-    const auto& global_state = get_global_state();
-    const float voltage = global_state.voltage_mV / 1000.0f;
-    const float current = global_state.current_uA / 1000000.0f;
-    const float power = voltage * current;
-    const uint32_t system_seconds = (xTaskGetTickCount() * portTICK_PERIOD_MS) / 1000;
-    const uint64_t meter_seconds = meter.meter_time_ms / 1000;
+    const EnergyMeter::Snapshot meter          = EnergyMeter::snapshot();
+    const int64_t               meter_uwh      = meter.energy_uwh;
+    const int64_t               meter_uah      = meter.charge_uah;
+    const auto&                 global_state   = get_global_state();
+    const float                 voltage        = global_state.voltage_mV / 1000.0f;
+    const float                 current        = global_state.current_uA / 1000000.0f;
+    const float                 power          = voltage * current;
+    const uint32_t              system_seconds = (xTaskGetTickCount() * portTICK_PERIOD_MS) / 1000;
+    const uint64_t              meter_seconds  = meter.meter_time_ms / 1000;
 
     char line[32];
 
@@ -179,8 +178,7 @@ void BatteryPage::render(RenderMode mode) {
         ST7735::draw_string(106, 5, line, ST7735::WHITE, ST7735::BLACK, DENGB12);
 
         const bool output_enabled = global_state.flags.bits.output_enabled;
-        ST7735::draw_image(145, 4,
-                           output_enabled ? METER_CIRCLE_GREEN_WIDTH : METER_CIRCLE_RED_WIDTH,
+        ST7735::draw_image(145, 4, output_enabled ? METER_CIRCLE_GREEN_WIDTH : METER_CIRCLE_RED_WIDTH,
                            output_enabled ? METER_CIRCLE_GREEN_HEIGHT : METER_CIRCLE_RED_HEIGHT,
                            output_enabled ? meter_circle_green_data : meter_circle_red_data);
     };

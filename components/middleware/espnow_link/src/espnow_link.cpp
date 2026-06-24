@@ -33,22 +33,22 @@ namespace Internal {
 
 static constexpr char TAG[] = "EspNowLink";
 
-bool initialized = false;
-bool active = false;
-QueueHandle_t rx_queue = nullptr;
-QueueHandle_t tx_queue = nullptr;
-QueueHandle_t mac_queue = nullptr;
-QueueHandle_t ack_queue = nullptr;
-TaskHandle_t task_handle = nullptr;
-HandlerEntry handlers[MAX_HANDLERS] = {};
-PeerEntry peers[MAX_PEERS] = {};
-PendingTransmission pending = {};
-SendOptions default_reliable_options = {};
-LinkStatistics statistics = {};
-uint32_t next_sequence = 1;
-uint32_t local_session_id = 1;
-portMUX_TYPE statistics_lock = portMUX_INITIALIZER_UNLOCKED;
-portMUX_TYPE state_lock = portMUX_INITIALIZER_UNLOCKED;
+bool                initialized              = false;
+bool                active                   = false;
+QueueHandle_t       rx_queue                 = nullptr;
+QueueHandle_t       tx_queue                 = nullptr;
+QueueHandle_t       mac_queue                = nullptr;
+QueueHandle_t       ack_queue                = nullptr;
+TaskHandle_t        task_handle              = nullptr;
+HandlerEntry        handlers[MAX_HANDLERS]   = {};
+PeerEntry           peers[MAX_PEERS]         = {};
+PendingTransmission pending                  = {};
+SendOptions         default_reliable_options = {};
+LinkStatistics      statistics               = {};
+uint32_t            next_sequence            = 1;
+uint32_t            local_session_id         = 1;
+portMUX_TYPE        statistics_lock          = portMUX_INITIALIZER_UNLOCKED;
+portMUX_TYPE        state_lock               = portMUX_INITIALIZER_UNLOCKED;
 
 void increment_counter(uint32_t* counter) {
     portENTER_CRITICAL(&statistics_lock);
@@ -79,7 +79,7 @@ static void receive_callback(const esp_now_recv_info_t* info, const uint8_t* dat
     event.size = static_cast<uint16_t>(data_len);
     memcpy(event.data, data, event.size);
     if (info->rx_ctrl != nullptr) {
-        event.rssi = info->rx_ctrl->rssi;
+        event.rssi    = info->rx_ctrl->rssi;
         event.channel = info->rx_ctrl->channel;
     }
     // 队列保存完整帧副本，避免 IDF 回调返回后继续引用临时接收缓冲。
@@ -118,8 +118,8 @@ esp_err_t activate() {
     esp_now_peer_info_t broadcast = {};
     memcpy(broadcast.peer_addr, BROADCAST_ADDRESS.bytes, MAC_ADDRESS_SIZE);
     broadcast.channel = 0;
-    broadcast.ifidx = WIFI_IF_STA;
-    ret = esp_now_add_peer(&broadcast);
+    broadcast.ifidx   = WIFI_IF_STA;
+    ret               = esp_now_add_peer(&broadcast);
     if (ret != ESP_OK && ret != ESP_ERR_ESPNOW_EXIST) {
         esp_now_unregister_recv_cb();
         esp_now_unregister_send_cb();
@@ -135,9 +135,9 @@ esp_err_t activate() {
         memcpy(info.peer_addr, peer.config.address.bytes, MAC_ADDRESS_SIZE);
         memcpy(info.lmk, peer.config.lmk, KEY_SIZE);
         info.channel = 0;
-        info.ifidx = WIFI_IF_STA;
+        info.ifidx   = WIFI_IF_STA;
         info.encrypt = peer.config.encrypted;
-        ret = esp_now_add_peer(&info);
+        ret          = esp_now_add_peer(&info);
         if (ret != ESP_OK && ret != ESP_ERR_ESPNOW_EXIST) {
             ESP_LOGW(TAG, "restore peer failed: %s", esp_err_to_name(ret));
         }
@@ -156,7 +156,7 @@ void deactivate() {
     esp_now_unregister_recv_cb();
     esp_now_unregister_send_cb();
     esp_now_deinit();
-    active = false;
+    active  = false;
     pending = {};
     DEVICE_STATE_I(TAG, "espnow: link old=active new=inactive result=ok");
 }
@@ -181,33 +181,31 @@ esp_err_t init() {
     }
 
     // 所有队列使用固定元素大小，运行期不为单个收发包动态分配内存。
-    rx_queue = xQueueCreate(RX_QUEUE_LENGTH, sizeof(RxEvent));
-    tx_queue = xQueueCreate(TX_QUEUE_LENGTH, sizeof(SendRequest));
+    rx_queue  = xQueueCreate(RX_QUEUE_LENGTH, sizeof(RxEvent));
+    tx_queue  = xQueueCreate(TX_QUEUE_LENGTH, sizeof(SendRequest));
     mac_queue = xQueueCreate(MAC_QUEUE_LENGTH, sizeof(MacResultEvent));
     ack_queue = xQueueCreate(ACK_QUEUE_LENGTH, sizeof(AckRequest));
-    if (rx_queue == nullptr || tx_queue == nullptr ||
-        mac_queue == nullptr || ack_queue == nullptr) {
+    if (rx_queue == nullptr || tx_queue == nullptr || mac_queue == nullptr || ack_queue == nullptr) {
         deinit();
         return ESP_ERR_NO_MEM;
     }
 
-    default_reliable_options.delivery = Delivery::RELIABLE;
-    default_reliable_options.timeout_mode = TimeoutMode::ADAPTIVE;
+    default_reliable_options.delivery       = Delivery::RELIABLE;
+    default_reliable_options.timeout_mode   = TimeoutMode::ADAPTIVE;
     default_reliable_options.ack_timeout_ms = DEFAULT_ACK_TIMEOUT_MS;
-    default_reliable_options.max_attempts = 5;
+    default_reliable_options.max_attempts   = 5;
     // 每次启动生成新的 session，避免对端把本机重启后的低序号误判为旧包。
-    local_session_id = esp_random();
+    local_session_id                        = esp_random();
     if (local_session_id == 0) {
         local_session_id = 1;
     }
 
-    if (xTaskCreate(link_task, "espnow_link", TASK_STACK_SIZE, nullptr,
-                    TASK_PRIORITY, &task_handle) != pdPASS) {
+    if (xTaskCreate(link_task, "espnow_link", TASK_STACK_SIZE, nullptr, TASK_PRIORITY, &task_handle) != pdPASS) {
         deinit();
         return ESP_ERR_NO_MEM;
     }
 
-    initialized = true;
+    initialized   = true;
     esp_err_t ret = WiFiManager::instance().register_radio_listener(radio_event_handler, nullptr);
     if (ret != ESP_OK) {
         deinit();

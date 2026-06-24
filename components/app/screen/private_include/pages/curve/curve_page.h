@@ -16,7 +16,7 @@
 namespace SCREEN {
 
 class CurvePage final : public Page {
-public:
+  public:
     /**
      * @brief 获取曲线页 ID
      * @return 曲线页 ID
@@ -74,7 +74,7 @@ public:
      */
     void render(RenderMode mode) override;
 
-private:
+  private:
     enum class DisplayMode : uint8_t {
         Voltage,
         Current,
@@ -90,10 +90,10 @@ private:
     };
 
     struct AutoRange {
-        float minimum = 0.0f;
-        float maximum = 1.0f;
-        uint32_t shrink_candidate_ms = 0;
-        bool initialized = false;
+        float    minimum             = 0.0f;  // 当前量程最小值
+        float    maximum             = 1.0f;  // 当前量程最大值
+        uint32_t shrink_candidate_ms = 0;     // 满足缩小量程条件的起始时间，单位 ms
+        bool     initialized         = false; // 自动量程是否已经初始化
     };
 
     /**
@@ -127,8 +127,7 @@ private:
      * @param bucket_count 像素桶数量
      * @param now_ms 当前系统时间，单位 ms
      */
-    void update_auto_range(CurveMetric metric, const CurveBucket* buckets,
-                           size_t bucket_count, uint32_t now_ms);
+    void update_auto_range(CurveMetric metric, const CurveBucket* buckets, size_t bucket_count, uint32_t now_ms);
 
     /**
      * @brief 绘制单指标曲线模式
@@ -161,17 +160,16 @@ private:
      * @param height 曲线区域高度
      * @param color 曲线颜色
      */
-    void draw_bucket_curve(const CurveBucket* buckets, size_t bucket_count,
-                           const AutoRange& range, uint16_t x, uint16_t y,
-                           uint16_t height, ST7735::color_t color) const;
+    void draw_bucket_curve(const CurveBucket* buckets, size_t bucket_count, const AutoRange& range, uint16_t x,
+                           uint16_t y, uint16_t height, ST7735::color_t color) const;
 
-    DisplayMode display_mode_ = DisplayMode::Voltage; // 当前曲线显示模式
-    EditItem    edit_item_    = EditItem::Display; // 当前编辑项
-    uint8_t     window_index_ = 1; // 当前时间窗口索引，默认 30s
-    bool        editing_      = false; // 是否处于曲线参数编辑状态
-    bool        config_loaded_ = false; // 是否已经从 NVS 加载配置
-    AutoRange   ranges_[static_cast<uint8_t>(CurveMetric::Count)] = {}; // 各指标自动量程
-    CurveBucket buckets_[ST7735::WIDTH] = {}; // 单帧像素桶工作缓冲区
+    DisplayMode display_mode_                                     = DisplayMode::Voltage; // 当前曲线显示模式
+    EditItem    edit_item_                                        = EditItem::Display;    // 当前编辑项
+    uint8_t     window_index_                                     = 1;     // 当前时间窗口索引，默认 30s
+    bool        editing_                                          = false; // 是否处于曲线参数编辑状态
+    bool        config_loaded_                                    = false; // 是否已经从 NVS 加载配置
+    AutoRange   ranges_[static_cast<uint8_t>(CurveMetric::Count)] = {};    // 各指标自动量程
+    CurveBucket buckets_[ST7735::WIDTH]                           = {};    // 单帧像素桶工作缓冲区
 };
 
 } // namespace SCREEN

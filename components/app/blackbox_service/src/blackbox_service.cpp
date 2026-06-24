@@ -36,13 +36,13 @@ esp_err_t append_event(const char* fmt, ...) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    char text[Blackbox::TEXT_BUFFER_SIZE];
+    char    text[Blackbox::TEXT_BUFFER_SIZE];
     va_list args;
     va_start(args, fmt);
     vsnprintf(text, sizeof(text), fmt, args);
     va_end(args);
 
-    const esp_err_t text_ret = Blackbox::append_text("%s", text);
+    const esp_err_t text_ret     = Blackbox::append_text("%s", text);
     const esp_err_t snapshot_ret = append_snapshot(true);
     return snapshot_ret != ESP_OK ? snapshot_ret : text_ret;
 }
@@ -52,7 +52,7 @@ esp_err_t append_text_event(const char* fmt, ...) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    char text[Blackbox::TEXT_BUFFER_SIZE];
+    char    text[Blackbox::TEXT_BUFFER_SIZE];
     va_list args;
     va_start(args, fmt);
     vsnprintf(text, sizeof(text), fmt, args);
@@ -69,8 +69,7 @@ esp_err_t set_snapshot_interval_s(uint32_t seconds, const char* source) {
     if (err != ESP_OK) {
         return err;
     }
-    append_text_event("blackbox: config source=%s snapshot_interval_s=%lu",
-                      source == nullptr ? "unknown" : source,
+    append_text_event("blackbox: config source=%s snapshot_interval_s=%lu", source == nullptr ? "unknown" : source,
                       static_cast<unsigned long>(seconds));
     return ESP_OK;
 }

@@ -20,13 +20,13 @@ enum class State : uint8_t {
 };
 
 struct Status {
-    State state;
-    char current_version[32];
-    char latest_version[32];
-    char active_source[24];
-    char last_error[64];
-    size_t bytes_downloaded;
-    size_t image_size;
+    State  state               = State::IDLE;
+    char   current_version[32] = {};
+    char   latest_version[32]  = {};
+    char   active_source[24]   = {};
+    char   last_error[64]      = {};
+    size_t bytes_downloaded    = 0;
+    size_t image_size          = 0;
 };
 
 /** @brief 初始化远端 OTA 服务状态和同步资源。 */

@@ -19,14 +19,14 @@ enum class PersistPolicy : uint8_t {
 };
 
 struct LogEvent {
-    PersistPolicy policy;
-    char text[Blackbox::TEXT_BUFFER_SIZE];
+    PersistPolicy policy                           = PersistPolicy::NONE;
+    char          text[Blackbox::TEXT_BUFFER_SIZE] = {};
 };
 
 struct CaptureDropStats {
-    uint32_t no_slot;
-    uint32_t ring_full;
-    uint32_t parse_failed;
+    uint32_t no_slot      = 0;
+    uint32_t ring_full    = 0;
+    uint32_t parse_failed = 0;
 };
 
 /** @brief 从 NVS 恢复周期快照配置。 */
