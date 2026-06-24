@@ -10,7 +10,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
-#include "pages.h"
+#include "core/page.h"
 
 namespace SCREEN {
 
@@ -101,13 +101,6 @@ private:
 
     /** 按键事件队列，生产者为 Button 任务，消费者为 screen_task */
     QueueHandle_t event_queue_ = nullptr;
-
-    /** 页面实例静态持有，避免嵌入式运行期动态分配 */
-    DashboardPage dashboard_;
-    BatteryPage battery_;
-    CurvePage curve_;
-    WirelessPage wireless_;
-    SettingsPage settings_;
 
     /** 页面指针表，顺序即侧键短按翻页顺序 */
     Page* pages_[static_cast<uint8_t>(PageId::Count)] = {};

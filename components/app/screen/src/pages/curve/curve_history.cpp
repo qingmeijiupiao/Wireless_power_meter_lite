@@ -1,4 +1,11 @@
-#include "curve_history.h"
+/*
+ * @version: 1.0
+ * @LastEditors: qingmeijiupiao
+ * @Description: 曲线历史采样环形缓存与像素桶聚合实现
+ * @Author: qingmeijiupiao
+ * @LastEditTime: 2026-06-24
+ */
+#include "pages/curve/curve_history.h"
 
 #include <algorithm>
 #include <cmath>

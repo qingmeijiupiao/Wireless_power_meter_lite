@@ -1,5 +1,5 @@
 /*
- * @Description: 曲线页历史采样缓存与像素桶聚合接口
+ * @Description: 曲线页历史采样环形缓存与像素桶聚合接口
  */
 #ifndef CURVE_HISTORY_H
 #define CURVE_HISTORY_H
@@ -23,10 +23,10 @@ enum class CurveMetric : uint8_t {
  * @brief 单个横向像素桶的统计结果
  */
 struct CurveBucket {
-    float minimum = 0.0f; /**< 桶内最小值 */
-    float maximum = 0.0f; /**< 桶内最大值 */
-    float average = 0.0f; /**< 桶内平均值 */
-    bool valid = false;   /**< 桶内是否包含有效采样 */
+    float minimum = 0.0f;  /**< 桶内最小值 */
+    float maximum = 0.0f;  /**< 桶内最大值 */
+    float average = 0.0f;  /**< 桶内平均值 */
+    bool  valid   = false; /**< 桶内是否包含有效采样 */
 };
 
 /**
@@ -37,9 +37,9 @@ struct CurveBucket {
  */
 class CurveHistory {
 public:
-    static constexpr uint32_t SAMPLE_INTERVAL_MS = 500;
-    static constexpr uint32_t MAX_WINDOW_MS = 10 * 60 * 1000;
-    static constexpr size_t MAX_SAMPLES = MAX_WINDOW_MS / SAMPLE_INTERVAL_MS;
+    static constexpr uint32_t SAMPLE_INTERVAL_MS = 500; // 采样间隔，单位 ms
+    static constexpr uint32_t MAX_WINDOW_MS      = 10 * 60 * 1000; // 最大时间窗口，单位 ms
+    static constexpr size_t   MAX_SAMPLES        = MAX_WINDOW_MS / SAMPLE_INTERVAL_MS; // 最大采样数量
 
     /**
      * @brief 获取曲线历史管理器单例

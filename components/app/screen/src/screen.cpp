@@ -17,7 +17,7 @@
 #include "protect.h"
 #include "power_output.h"
 #include "st7735.h"
-#include "ui_manager.h"
+#include "core/ui_manager.h"
 #include "start_logo.h"
 
 namespace SCREEN {

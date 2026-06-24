@@ -10,7 +10,7 @@
 
 #include "Button.h"
 #include "screen.h"
-#include "ui_common.h"
+#include "core/ui_types.h"
 
 namespace SCREEN {
 

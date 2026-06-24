@@ -15,9 +15,9 @@
 
 namespace SCREEN {
 
-/** Default startup logo display duration in milliseconds. */
+/** 默认开机画面显示时长，单位 ms。 */
 static constexpr uint32_t DEFAULT_START_LOGO_DURATION_MS = 2000;
-/** Maximum startup logo display duration in milliseconds. */
+/** 开机画面最大显示时长，单位 ms。 */
 static constexpr uint32_t MAX_START_LOGO_DURATION_MS = 10000;
 
 /**
@@ -36,18 +36,19 @@ enum class ButtonId : uint8_t {
  */
 void screen_task(void* arg);
 
-/** @brief Bind application button routes and initialize their GPIO inputs. */
+/** @brief 绑定应用按键事件并初始化对应的 GPIO 输入。 */
 esp_err_t init_buttons();
 
 /**
- * @brief Get the persisted startup logo display duration.
- * @return Duration in milliseconds. Zero disables the startup logo.
+ * @brief 获取持久化保存的开机画面显示时长。
+ * @return 显示时长，单位 ms；返回 0 表示关闭开机画面。
  */
 uint32_t get_start_logo_duration_ms();
 
 /**
- * @brief Persist the startup logo display duration.
- * @param duration_ms Duration in milliseconds. Zero disables the startup logo.
+ * @brief 设置并持久化开机画面显示时长。
+ * @param duration_ms 显示时长，单位 ms；传入 0 表示关闭开机画面。
+ * @return ESP_OK 表示保存成功，其他值表示 NVS 写入失败。
  */
 esp_err_t set_start_logo_duration_ms(uint32_t duration_ms);
 

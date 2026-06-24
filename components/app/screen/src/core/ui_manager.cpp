@@ -5,13 +5,16 @@
  * @Author: qingmeijiupiao
  * @LastEditTime: 2026-05-30
  */
-#include "ui_manager.h"
+#include "core/ui_manager.h"
 
 #include "esp_log.h"
-#include "curve_history.h"
+#include "core/page_registry.h"
+#include "config/display_config.h"
+#include "pages/curve/curve_history.h"
 #include "freertos/task.h"
 #include "power_output.h"
 #include "st7735.h"
+#include "widgets/ui_chrome.h"
 
 namespace SCREEN {
 namespace {
@@ -49,14 +52,14 @@ bool UIManager::init() {
         }
     }
 
-    settings_.load_config();
-
-    // 页面对象由 UIManager 静态持有，指针表只负责定义翻页顺序。
-    pages_[0] = &dashboard_;
-    pages_[1] = &battery_;
-    pages_[2] = &curve_;
-    pages_[3] = &wireless_;
-    pages_[4] = &settings_;
+    const PageRegistry registry = get_page_registry();
+    if (registry.count != static_cast<size_t>(PageId::Count)) {
+        ESP_LOGE(TAG, "invalid page registry count=%u", static_cast<unsigned>(registry.count));
+        return false;
+    }
+    for (size_t index = 0; index < registry.count; ++index) {
+        pages_[index] = registry.pages[index];
+    }
     current_page_ = 0;
     current_page()->on_enter();
     full_redraw_ = true;

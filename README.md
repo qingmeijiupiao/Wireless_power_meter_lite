@@ -117,6 +117,19 @@ HP Core 不直接读取一组可能正在变化的零散变量，而是取得同
 这种策略链便于二次开发：新增启动条件时，可以增加策略，而不必在按键、Web、CAN 和
 ESP-NOW 的每个入口重复判断。
 
+### 本地屏幕 UI
+
+`screen` 组件采用静态多页面架构。`screen_task` 是唯一 UI 消费者，Button 任务只把
+按键事件投递到固定队列；页面切换、页面内交互和 ST7735 绘制均在屏幕任务中串行执行。
+
+组件内部按 `core/`、`pages/`、`widgets/` 和 `config/` 分层：核心调度器只依赖抽象
+`Page`，具体页面由静态 `PageRegistry` 创建和排序，运行期不使用堆分配。Dashboard、
+Battery、Curve、Wireless 和 Settings 各自拥有独立头文件和实现文件，页面设计、按键
+状态和数据流见 [screen 组件文档](components/app/screen/README.md)。
+
+新增页面时应修改稳定 `PageId` 和静态注册表，不要把具体页面重新写入 `UIManager`；
+页面业务操作仍应通过 `PowerOutput`、`WifiService`、`EnergyMeter` 等公开服务接口完成。
+
 ### ESP-NOW、WiFi 与 Web
 
 ESP-NOW 和普通 WiFi 共用同一套 2.4 GHz 射频，因此不能把它们当成完全独立的外设。
@@ -186,7 +199,7 @@ ESP-NOW 和普通 WiFi 共用同一套 2.4 GHz 射频，因此不能把它们当
 
 | 需求 | 建议从这里开始 |
 |------|----------------|
-| 新增或修改屏幕页面 | `components/app/screen/` |
+| 新增或修改屏幕页面 | [screen 组件说明](components/app/screen/README.md) 与 [UI 架构设计](components/app/screen/DOC/architecture.md) |
 | 新增 Shell 命令 | `components/app/shell_command/` |
 | 新增 REST API | `components/app/web_backend/` |
 | 修改网页 | `components/assets/web_file/` |
