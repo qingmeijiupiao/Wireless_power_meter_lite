@@ -71,6 +71,9 @@ public:
      */
     uint32_t refresh_interval_ms() const override;
 
+    /** @brief 首次进入页面时从 NVS 恢复曲线配置。 */
+    void on_enter() override;
+
     /**
      * @brief 声明曲线页支持参数编辑模式
      * @return 始终返回 true
@@ -147,6 +150,12 @@ private:
      */
     const char* window_text() const;
 
+    /** @brief 从 NVS 加载并校验显示模式和时间窗口。 */
+    void load_config();
+
+    /** @brief 将当前显示模式和时间窗口立即保存到 NVS。 */
+    void save_config() const;
+
     /**
      * @brief 更新指定指标的自动量程
      * @param metric 指标类型
@@ -196,6 +205,7 @@ private:
     EditItem edit_item_ = EditItem::Display;
     uint8_t window_index_ = 1;
     bool editing_ = false;
+    bool config_loaded_ = false;
     AutoRange ranges_[static_cast<uint8_t>(CurveMetric::Count)] = {};
     CurveBucket buckets_[ST7735::WIDTH] = {};
 };

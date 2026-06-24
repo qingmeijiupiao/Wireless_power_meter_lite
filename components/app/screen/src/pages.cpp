@@ -29,6 +29,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "global_state.h"
+#include "HXC_NVS.h"
 #include "meter_a_logo.h"
 #include "meter_circle_green.h"
 #include "meter_circle_red.h"
@@ -85,6 +86,24 @@ constexpr float CURVE_MINIMUM_SPANS[] = {
     0.05f,
     0.5f,
 };
+
+struct CurveConfig {
+    uint8_t version;
+    uint8_t display_mode;
+    uint8_t window_index;
+    uint8_t reserved;
+};
+static_assert(sizeof(CurveConfig) == 4, "CurveConfig size mismatch");
+
+constexpr uint8_t CURVE_CONFIG_VERSION = 1;
+constexpr CurveConfig DEFAULT_CURVE_CONFIG = {
+    .version = CURVE_CONFIG_VERSION,
+    .display_mode = 0, // CurvePage::DisplayMode::Voltage
+    .window_index = 1, // 30s
+    .reserved = 0,
+};
+
+HXC::NVS_DATA<CurveConfig> curve_config_data("ui_curve_cfg", DEFAULT_CURVE_CONFIG);
 
 /**
  * @brief 计算 10 的非负整数次幂。
@@ -450,6 +469,12 @@ uint32_t CurvePage::refresh_interval_ms() const {
     return 200;
 }
 
+void CurvePage::on_enter() {
+    if (!config_loaded_) {
+        load_config();
+    }
+}
+
 /** @brief 声明曲线页支持参数编辑模式。 */
 bool CurvePage::supports_edit_mode() const {
     return true;
@@ -483,6 +508,7 @@ bool CurvePage::handle_button(ButtonId button, ButtonEvent event) {
             display_mode_ = static_cast<DisplayMode>(
                 (static_cast<uint8_t>(display_mode_) + 1) %
                 static_cast<uint8_t>(DisplayMode::Count));
+            save_config();
             return true;
         }
         return false;
@@ -509,6 +535,7 @@ bool CurvePage::handle_button(ButtonId button, ButtonEvent event) {
                 range.shrink_candidate_ms = 0;
             }
         }
+        save_config();
         return true;
     }
 
@@ -536,6 +563,40 @@ const char* CurvePage::display_mode_text() const {
 
 const char* CurvePage::window_text() const {
     return CURVE_WINDOW_TEXT[window_index_];
+}
+
+void CurvePage::load_config() {
+    const CurveConfig config = curve_config_data.read();
+    const bool valid =
+        config.version == CURVE_CONFIG_VERSION &&
+        config.display_mode < static_cast<uint8_t>(DisplayMode::Count) &&
+        config.window_index < sizeof(CURVE_WINDOWS_MS) / sizeof(CURVE_WINDOWS_MS[0]);
+
+    if (valid) {
+        display_mode_ = static_cast<DisplayMode>(config.display_mode);
+        window_index_ = config.window_index;
+    } else {
+        display_mode_ = DisplayMode::Voltage;
+        window_index_ = 1;
+        const esp_err_t ret = curve_config_data.set(DEFAULT_CURVE_CONFIG);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "failed to restore curve config: %s", esp_err_to_name(ret));
+        }
+    }
+    config_loaded_ = true;
+}
+
+void CurvePage::save_config() const {
+    const CurveConfig config = {
+        .version = CURVE_CONFIG_VERSION,
+        .display_mode = static_cast<uint8_t>(display_mode_),
+        .window_index = window_index_,
+        .reserved = 0,
+    };
+    const esp_err_t ret = curve_config_data.set(config);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "failed to save curve config: %s", esp_err_to_name(ret));
+    }
 }
 
 void CurvePage::update_auto_range(CurveMetric metric, const CurveBucket* buckets,
