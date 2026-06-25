@@ -1,6 +1,8 @@
 #ifndef PROTECT_INTERNAL_H
 #define PROTECT_INTERNAL_H
 
+#include <cstdint>
+
 /**
  * @brief 判断 INA226 电压/电流测量链路当前是否可靠。
  *
@@ -19,7 +21,7 @@ bool protect_ina226_measurement_reliable();
  *
  * @note 该接口用于选择触发迟滞时长和测量可靠性门控。OTP 使用温度传感器，不受 INA226 降级影响。
  */
-bool protect_is_ina226_channel(unsigned channel);
+bool protect_is_ina226_channel(uint32_t channel);
 
 /**
  * @brief 启动 MOS 损坏诊断任务。

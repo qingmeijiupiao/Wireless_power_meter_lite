@@ -8,6 +8,7 @@
 #include "pages/wireless_page.h"
 
 #include <algorithm>
+#include <cinttypes>
 #include <cmath>
 #include <cstdio>
 
@@ -139,7 +140,7 @@ void WirelessPage::render(RenderMode mode) {
         if (status.battery_percent == 100) {
             snprintf(text, sizeof(text), "100");
         } else {
-            snprintf(text, sizeof(text), "%u%%", static_cast<unsigned>(status.battery_percent));
+            snprintf(text, sizeof(text), "%" PRIu32 "%%", static_cast<uint32_t>(status.battery_percent));
         }
 
         uint16_t text_w = 0;
@@ -222,16 +223,18 @@ void WirelessPage::render(RenderMode mode) {
         draw_info_row(2, 19, 156, "SSID", value,
                       wifi_mode == WifiService::Mode::OFF ? ST7735::color_t(0xB5B5B5) : ST7735::WHITE);
 
-        snprintf(value, sizeof(value), "IP:%u.%u.%u.%u", static_cast<unsigned>(ip.octet1),
-                 static_cast<unsigned>(ip.octet2), static_cast<unsigned>(ip.octet3), static_cast<unsigned>(ip.octet4));
+        snprintf(value, sizeof(value), "IP:%" PRIu32 ".%" PRIu32 ".%" PRIu32 ".%" PRIu32,
+                 static_cast<uint32_t>(ip.octet1), static_cast<uint32_t>(ip.octet2),
+                 static_cast<uint32_t>(ip.octet3), static_cast<uint32_t>(ip.octet4));
         draw_text_row(54, 42, 104, value, provisioning ? ST7735::color_t(0x1ef851) : ST7735::color_t(0x2FC9EC));
 
         if (wifi_mode == WifiService::Mode::STA && channel_available) {
-            snprintf(value, sizeof(value), "CH%u %u%%", static_cast<unsigned>(channel), static_cast<unsigned>(signal));
+            snprintf(value, sizeof(value), "CH%" PRIu32 " %" PRIu32 "%%", static_cast<uint32_t>(channel),
+                     static_cast<uint32_t>(signal));
         } else if (provisioning) {
             snprintf(value, sizeof(value), "AP mode");
         } else if (wifi_mode == WifiService::Mode::ESPNOW_ONLY && channel_available) {
-            snprintf(value, sizeof(value), "CH%u NOW", static_cast<unsigned>(channel));
+            snprintf(value, sizeof(value), "CH%" PRIu32 " NOW", static_cast<uint32_t>(channel));
         } else if (last_result_ != ESP_OK) {
             snprintf(value, sizeof(value), "%.12s", esp_err_to_name(last_result_));
         } else {

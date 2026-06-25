@@ -1,5 +1,6 @@
 #include "web_backend_internal.h"
 
+#include <cinttypes>
 #include <cstdio>
 #include <cstring>
 
@@ -67,28 +68,32 @@ const esp_partition_t* status_target_partition() {
 void append_ota_status_event(const char* phase, esp_err_t err = ESP_OK) {
     const OtaManager::Status status = OtaManager::get_status();
     if (err == ESP_OK) {
-        DEVICE_STATE_I(TAG, "ota: phase=%s state=%s bytes=%u/%u slots_run=%u slots_boot=%u slots_target=%u result=ok",
-                       phase, ota_state_to_str(status.state), static_cast<unsigned>(status.bytes_written),
-                       static_cast<unsigned>(status.image_size),
-                       static_cast<unsigned>(ota_partition_slot(OtaManager::get_running_partition())),
-                       static_cast<unsigned>(ota_partition_slot(OtaManager::get_boot_partition())),
-                       static_cast<unsigned>(ota_partition_slot(status_target_partition())));
+        DEVICE_STATE_I(TAG,
+                       "ota: phase=%s state=%s bytes=%" PRIu32 "/%" PRIu32
+                       " slots_run=%" PRIu32 " slots_boot=%" PRIu32 " slots_target=%" PRIu32 " result=ok",
+                       phase, ota_state_to_str(status.state), static_cast<uint32_t>(status.bytes_written),
+                       static_cast<uint32_t>(status.image_size),
+                       static_cast<uint32_t>(ota_partition_slot(OtaManager::get_running_partition())),
+                       static_cast<uint32_t>(ota_partition_slot(OtaManager::get_boot_partition())),
+                       static_cast<uint32_t>(ota_partition_slot(status_target_partition())));
     } else {
         DEVICE_STATE_W(TAG,
-                       "ota: phase=%s state=%s bytes=%u/%u slots_run=%u slots_boot=%u slots_target=%u err=%s(0x%x)",
-                       phase, ota_state_to_str(status.state), static_cast<unsigned>(status.bytes_written),
-                       static_cast<unsigned>(status.image_size),
-                       static_cast<unsigned>(ota_partition_slot(OtaManager::get_running_partition())),
-                       static_cast<unsigned>(ota_partition_slot(OtaManager::get_boot_partition())),
-                       static_cast<unsigned>(ota_partition_slot(status_target_partition())), ota_error_to_str(err),
-                       static_cast<unsigned>(err));
+                       "ota: phase=%s state=%s bytes=%" PRIu32 "/%" PRIu32
+                       " slots_run=%" PRIu32 " slots_boot=%" PRIu32 " slots_target=%" PRIu32 " err=%s(0x%" PRIx32
+                       ")",
+                       phase, ota_state_to_str(status.state), static_cast<uint32_t>(status.bytes_written),
+                       static_cast<uint32_t>(status.image_size),
+                       static_cast<uint32_t>(ota_partition_slot(OtaManager::get_running_partition())),
+                       static_cast<uint32_t>(ota_partition_slot(OtaManager::get_boot_partition())),
+                       static_cast<uint32_t>(ota_partition_slot(status_target_partition())), ota_error_to_str(err),
+                       static_cast<uint32_t>(err));
     }
 }
 
 void append_partition_json(char* out, size_t out_size, const esp_partition_t* partition) {
-    snprintf(out, out_size, "{\"slot\":%u,\"label\":\"%s\",\"size\":%u}",
-             static_cast<unsigned>(ota_partition_slot(partition)), partition == nullptr ? "" : partition->label,
-             partition == nullptr ? 0U : static_cast<unsigned>(partition->size));
+    snprintf(out, out_size, "{\"slot\":%" PRIu32 ",\"label\":\"%s\",\"size\":%" PRIu32 "}",
+             static_cast<uint32_t>(ota_partition_slot(partition)), partition == nullptr ? "" : partition->label,
+             partition == nullptr ? 0U : static_cast<uint32_t>(partition->size));
 }
 
 esp_err_t send_ota_status(WebServer::Request* request, bool ok, const char* reason) {
@@ -115,9 +120,9 @@ esp_err_t send_ota_status(WebServer::Request* request, bool ok, const char* reas
              "\"ok\":%s,"
              "\"reason\":\"%s\","
              "\"state\":\"%s\","
-             "\"image_size\":%u,"
-             "\"bytes_written\":%u,"
-             "\"max_image_size\":%u,"
+             "\"image_size\":%" PRIu32 ","
+             "\"bytes_written\":%" PRIu32 ","
+             "\"max_image_size\":%" PRIu32 ","
              "\"target_version\":\"%s\","
              "\"running\":%s,"
              "\"boot\":%s,"
@@ -128,15 +133,15 @@ esp_err_t send_ota_status(WebServer::Request* request, bool ok, const char* reas
              "\"latest_version\":\"%s\","
              "\"source\":\"%s\","
              "\"last_error\":\"%s\","
-             "\"bytes_downloaded\":%u,"
-             "\"image_size\":%u"
+             "\"bytes_downloaded\":%" PRIu32 ","
+             "\"image_size\":%" PRIu32
              "}"
              "}\n",
-             ok ? "true" : "false", reason, ota_state_to_str(status.state), static_cast<unsigned>(status.image_size),
-             static_cast<unsigned>(status.bytes_written), target == nullptr ? 0U : static_cast<unsigned>(target->size),
+             ok ? "true" : "false", reason, ota_state_to_str(status.state), static_cast<uint32_t>(status.image_size),
+             static_cast<uint32_t>(status.bytes_written), target == nullptr ? 0U : static_cast<uint32_t>(target->size),
              target_version, running_json, boot_json, target_json, OtaService::state_to_string(remote.state),
              remote.current_version, remote.latest_version, remote.active_source, remote.last_error,
-             static_cast<unsigned>(remote.bytes_downloaded), static_cast<unsigned>(remote.image_size));
+             static_cast<uint32_t>(remote.bytes_downloaded), static_cast<uint32_t>(remote.image_size));
     return WebServer::send_json(request, web_scratch_buffer);
 }
 
@@ -192,12 +197,14 @@ esp_err_t ota_upload_handler(WebServer::Request* request) {
     if (err != ESP_OK) {
         const OtaManager::Status status = OtaManager::get_status();
         DEVICE_STATE_W(
-            TAG, "ota: begin request=%u state=%s slots_run=%u slots_boot=%u slots_target=%u result=failed err=%s(0x%x)",
-            static_cast<unsigned>(image_size), ota_state_to_str(status.state),
-            static_cast<unsigned>(ota_partition_slot(OtaManager::get_running_partition())),
-            static_cast<unsigned>(ota_partition_slot(OtaManager::get_boot_partition())),
-            static_cast<unsigned>(ota_partition_slot(status_target_partition())), ota_error_to_str(err),
-            static_cast<unsigned>(err));
+            TAG,
+            "ota: begin request=%" PRIu32 " state=%s slots_run=%" PRIu32 " slots_boot=%" PRIu32
+            " slots_target=%" PRIu32 " result=failed err=%s(0x%" PRIx32 ")",
+            static_cast<uint32_t>(image_size), ota_state_to_str(status.state),
+            static_cast<uint32_t>(ota_partition_slot(OtaManager::get_running_partition())),
+            static_cast<uint32_t>(ota_partition_slot(OtaManager::get_boot_partition())),
+            static_cast<uint32_t>(ota_partition_slot(status_target_partition())), ota_error_to_str(err),
+            static_cast<uint32_t>(err));
         snprintf(web_scratch_buffer, sizeof(web_scratch_buffer), "{\"ok\":false,\"reason\":\"%s\"}\n",
                  ota_error_to_str(err));
         return WebServer::send(request, err == ESP_ERR_INVALID_SIZE ? 413 : 409, "application/json", web_scratch_buffer,
@@ -216,10 +223,12 @@ esp_err_t ota_upload_handler(WebServer::Request* request) {
 
             const OtaManager::Status status = OtaManager::get_status();
             while (next_progress_percent <= 75 && status.bytes_written * 100 >= image_size * next_progress_percent) {
-                DEVICE_EVENT_I(TAG, "ota: upload_progress percent=%u bytes=%u/%u target=%u",
-                                                         static_cast<unsigned>(next_progress_percent),
-                                                         static_cast<unsigned>(status.bytes_written), static_cast<unsigned>(image_size),
-                                                         static_cast<unsigned>(ota_partition_slot(status.target_partition)));
+                DEVICE_EVENT_I(TAG,
+                               "ota: upload_progress percent=%" PRIu32 " bytes=%" PRIu32 "/%" PRIu32
+                               " target=%" PRIu32,
+                               static_cast<uint32_t>(next_progress_percent),
+                               static_cast<uint32_t>(status.bytes_written), static_cast<uint32_t>(image_size),
+                               static_cast<uint32_t>(ota_partition_slot(status.target_partition)));
                 next_progress_percent += 25;
             }
             return ESP_OK;
@@ -227,11 +236,13 @@ esp_err_t ota_upload_handler(WebServer::Request* request) {
     if (err != ESP_OK) {
         const OtaManager::Status status    = OtaManager::get_status();
         const esp_err_t          abort_err = OtaManager::abort();
-        DEVICE_STATE_W(TAG, "ota: upload state=%s bytes=%u/%u target=%u result=interrupted err=%s(0x%x) abort=%s(0x%x)",
-                       ota_state_to_str(status.state), static_cast<unsigned>(status.bytes_written),
-                       static_cast<unsigned>(status.image_size),
-                       static_cast<unsigned>(ota_partition_slot(status.target_partition)), ota_error_to_str(err),
-                       static_cast<unsigned>(err), ota_error_to_str(abort_err), static_cast<unsigned>(abort_err));
+        DEVICE_STATE_W(TAG,
+                       "ota: upload state=%s bytes=%" PRIu32 "/%" PRIu32
+                       " target=%" PRIu32 " result=interrupted err=%s(0x%" PRIx32 ") abort=%s(0x%" PRIx32 ")",
+                       ota_state_to_str(status.state), static_cast<uint32_t>(status.bytes_written),
+                       static_cast<uint32_t>(status.image_size),
+                       static_cast<uint32_t>(ota_partition_slot(status.target_partition)), ota_error_to_str(err),
+                       static_cast<uint32_t>(err), ota_error_to_str(abort_err), static_cast<uint32_t>(abort_err));
         snprintf(response_buffer, sizeof(response_buffer), "{\"ok\":false,\"reason\":\"%s\"}\n", ota_error_to_str(err));
         return WebServer::send(request, 500, "application/json", response_buffer, strlen(response_buffer));
     }
@@ -240,11 +251,13 @@ esp_err_t ota_upload_handler(WebServer::Request* request) {
     const OtaManager::Status received_status = OtaManager::get_status();
     err                                      = OtaManager::finish();
     if (err != ESP_OK) {
-        DEVICE_STATE_W(TAG, "ota: validation bytes=%u/%u target=%u result=failed err=%s(0x%x)",
-                       static_cast<unsigned>(received_status.bytes_written),
-                       static_cast<unsigned>(received_status.image_size),
-                       static_cast<unsigned>(ota_partition_slot(received_status.target_partition)),
-                       ota_error_to_str(err), static_cast<unsigned>(err));
+        DEVICE_STATE_W(TAG,
+                       "ota: validation bytes=%" PRIu32 "/%" PRIu32 " target=%" PRIu32
+                       " result=failed err=%s(0x%" PRIx32 ")",
+                       static_cast<uint32_t>(received_status.bytes_written),
+                       static_cast<uint32_t>(received_status.image_size),
+                       static_cast<uint32_t>(ota_partition_slot(received_status.target_partition)),
+                       ota_error_to_str(err), static_cast<uint32_t>(err));
         snprintf(response_buffer, sizeof(response_buffer), "{\"ok\":false,\"reason\":\"%s\"}\n", ota_error_to_str(err));
         return WebServer::send(request, 400, "application/json", response_buffer, strlen(response_buffer));
     }
@@ -254,19 +267,21 @@ esp_err_t ota_upload_handler(WebServer::Request* request) {
     if (err != ESP_OK) {
         const OtaManager::Status status    = OtaManager::get_status();
         const esp_err_t          abort_err = OtaManager::abort();
-        DEVICE_STATE_W(TAG, "ota: app_desc state=%s bytes=%u/%u target=%u result=failed err=%s(0x%x) abort=%s(0x%x)",
-                       ota_state_to_str(status.state), static_cast<unsigned>(status.bytes_written),
-                       static_cast<unsigned>(status.image_size),
-                       static_cast<unsigned>(ota_partition_slot(status.target_partition)), ota_error_to_str(err),
-                       static_cast<unsigned>(err), ota_error_to_str(abort_err), static_cast<unsigned>(abort_err));
+        DEVICE_STATE_W(TAG,
+                       "ota: app_desc state=%s bytes=%" PRIu32 "/%" PRIu32
+                       " target=%" PRIu32 " result=failed err=%s(0x%" PRIx32 ") abort=%s(0x%" PRIx32 ")",
+                       ota_state_to_str(status.state), static_cast<uint32_t>(status.bytes_written),
+                       static_cast<uint32_t>(status.image_size),
+                       static_cast<uint32_t>(ota_partition_slot(status.target_partition)), ota_error_to_str(err),
+                       static_cast<uint32_t>(err), ota_error_to_str(abort_err), static_cast<uint32_t>(abort_err));
         return WebServer::send(request, 422, "application/json",
                                "{\"ok\":false,\"reason\":\"app_description_unavailable\"}\n",
                                strlen("{\"ok\":false,\"reason\":\"app_description_unavailable\"}\n"));
     }
 
-    DEVICE_STATE_I(TAG, "ota: image state=verified version=%s bytes=%u target=%u", target_desc.version,
-                   static_cast<unsigned>(image_size),
-                   static_cast<unsigned>(ota_partition_slot(OtaManager::get_target_partition())));
+    DEVICE_STATE_I(TAG, "ota: image state=verified version=%s bytes=%" PRIu32 " target=%" PRIu32, target_desc.version,
+                   static_cast<uint32_t>(image_size),
+                   static_cast<uint32_t>(ota_partition_slot(OtaManager::get_target_partition())));
     return send_ota_status(request, true, "verified");
 }
 
@@ -295,15 +310,18 @@ esp_err_t ota_abort_handler(WebServer::Request* request) {
     const OtaManager::Status status = OtaManager::get_status();
     esp_err_t                err    = OtaManager::abort();
     if (err != ESP_OK) {
-        DEVICE_STATE_W(TAG, "ota: abort state=%s bytes=%u/%u result=failed err=%s(0x%x)",
-                       ota_state_to_str(status.state), static_cast<unsigned>(status.bytes_written),
-                       static_cast<unsigned>(status.image_size), ota_error_to_str(err), static_cast<unsigned>(err));
+        DEVICE_STATE_W(TAG,
+                       "ota: abort state=%s bytes=%" PRIu32 "/%" PRIu32 " result=failed err=%s(0x%" PRIx32 ")",
+                       ota_state_to_str(status.state), static_cast<uint32_t>(status.bytes_written),
+                       static_cast<uint32_t>(status.image_size), ota_error_to_str(err), static_cast<uint32_t>(err));
         snprintf(response_buffer, sizeof(response_buffer), "{\"ok\":false,\"reason\":\"%s\"}\n", ota_error_to_str(err));
         return WebServer::send(request, 409, "application/json", response_buffer, strlen(response_buffer));
     }
-    DEVICE_STATE_I(TAG, "ota: abort old=%s new=idle bytes=%u/%u target=%u result=ok", ota_state_to_str(status.state),
-                   static_cast<unsigned>(status.bytes_written), static_cast<unsigned>(status.image_size),
-                   static_cast<unsigned>(ota_partition_slot(status.target_partition)));
+    DEVICE_STATE_I(TAG,
+                   "ota: abort old=%s new=idle bytes=%" PRIu32 "/%" PRIu32 " target=%" PRIu32 " result=ok",
+                   ota_state_to_str(status.state),
+                   static_cast<uint32_t>(status.bytes_written), static_cast<uint32_t>(status.image_size),
+                   static_cast<uint32_t>(ota_partition_slot(status.target_partition)));
     return send_ota_status(request, true, "aborted");
 }
 

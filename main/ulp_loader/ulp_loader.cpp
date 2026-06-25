@@ -125,11 +125,11 @@ void load_current_calib_params(bool need_flag = true) {
     }
     ulp_lp_core_exit_critical(rtc_shared_lock);
     DEVICE_EVENT_I(LPTAG, "lp: calib_loaded base_k=%u temperature_k=%d reload=%u",
-                   static_cast<unsigned>(params.current_base_K), params.temperature_K, need_flag ? 1U : 0U);
+                   static_cast<uint32_t>(params.current_base_K), params.temperature_K, need_flag ? 1U : 0U);
 }
 
 esp_err_t LP_Core_Load(void) {
-    DEVICE_EVENT_I(LPTAG, "lp: init_start i2c_hz=%lu", static_cast<unsigned long>(i2c_cfg.i2c_timing_cfg.clk_speed_hz));
+    DEVICE_EVENT_I(LPTAG, "lp: init_start i2c_hz=%lu", static_cast<uint32_t>(i2c_cfg.i2c_timing_cfg.clk_speed_hz));
     LP_CLKRST.lp_clk_conf.fast_clk_sel =
         1; // IDF 6.0版本默认是内部RC时钟(17.5MHz)，且没有API可以切换到外部时钟源，需要手动操作寄存器切换到外部时钟源(20MHz)
 
@@ -173,7 +173,7 @@ esp_err_t LP_Core_Load(void) {
     LP_Core_GetSnapshot(&snapshot);
     if (snapshot.state.ulp_state_bits.ulp_i2c_init_err) {
         ESP_LOGE(LPTAG, "lp: ina226 result=unavailable reason=communication_failed manufacturer=0x%04x",
-                 static_cast<unsigned>(snapshot.ina226_manufacturer_id));
+                 static_cast<uint32_t>(snapshot.ina226_manufacturer_id));
     } else {
         ESP_LOGI(LPTAG, "lp core i2c init success...");
     }
@@ -185,7 +185,7 @@ esp_err_t LP_Core_Load(void) {
         ESP_LOGI(LPTAG, "lp core run success...");
         LP_Core_GetSnapshot(&snapshot);
         DEVICE_STATE_I(LPTAG, "lp: lifecycle old=starting new=running voltage_uv=%ld current_ua=%ld",
-                       static_cast<long>(snapshot.voltage_uv), static_cast<long>(snapshot.current_uA));
+                       static_cast<int32_t>(snapshot.voltage_uv), static_cast<int32_t>(snapshot.current_uA));
     }
 
     // LP 日志任务只读取共享快照和输出单条日志，保留约 1.2KB 实测余量。

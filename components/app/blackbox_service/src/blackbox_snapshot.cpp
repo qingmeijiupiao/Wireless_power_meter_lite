@@ -3,8 +3,6 @@
  */
 #include "blackbox_service.h"
 
-#include <bit>
-
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 
@@ -30,7 +28,7 @@ esp_err_t append_snapshot(bool force) {
     const auto state    = get_global_state();
     SnapshotV1 snapshot = {
         .version           = SNAPSHOT_VERSION,
-        .flags             = std::bit_cast<uint32_t>(state.flags),
+        .flags             = state.flags,
         .protect_states    = state.protect_states,
         .voltage_mV        = state.voltage_mV,
         .current_uA        = state.current_uA,

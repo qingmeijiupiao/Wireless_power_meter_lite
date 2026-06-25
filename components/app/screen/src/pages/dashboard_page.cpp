@@ -8,6 +8,7 @@
 #include "pages/dashboard_page.h"
 
 #include <algorithm>
+#include <cinttypes>
 #include <cmath>
 #include <cstdio>
 
@@ -59,10 +60,10 @@ constexpr char TAG[] = "ScreenPages";
  * @param total_seconds 总秒数。
  */
 void format_duration(char* line, size_t line_size, const char* prefix, uint64_t total_seconds) {
-    snprintf(line, line_size, "%s%02llu:%02llu:%02llu", prefix == nullptr ? "" : prefix,
-             static_cast<unsigned long long>(total_seconds / 3600),
-             static_cast<unsigned long long>((total_seconds / 60) % 60),
-             static_cast<unsigned long long>(total_seconds % 60));
+    snprintf(line, line_size, "%s%02" PRIu64 ":%02" PRIu64 ":%02" PRIu64, prefix == nullptr ? "" : prefix,
+             static_cast<uint64_t>(total_seconds / 3600),
+             static_cast<uint64_t>((total_seconds / 60) % 60),
+             static_cast<uint64_t>(total_seconds % 60));
 }
 
 } // namespace

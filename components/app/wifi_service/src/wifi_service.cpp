@@ -113,7 +113,7 @@ static void update_global_state_flags() {
 
 static void enqueue_reconnect_event(ReconnectEvent event) {
     if (reconnect_queue == nullptr || xQueueSend(reconnect_queue, &event, 0) != pdTRUE) {
-        ESP_LOGW(TAG, "reconnect queue full, dropping event=%u", static_cast<unsigned>(event));
+        ESP_LOGW(TAG, "reconnect queue full, dropping event=%u", static_cast<uint32_t>(event));
     }
 }
 
@@ -164,11 +164,11 @@ static void schedule_reconnect() {
         reconnect_attempt++;
     }
     if (xTimerChangePeriod(reconnect_timer, pdMS_TO_TICKS(delay_ms), 0) != pdPASS) {
-        ESP_LOGW(TAG, "failed to schedule STA reconnect attempt=%u", static_cast<unsigned>(reconnect_attempt));
+        ESP_LOGW(TAG, "failed to schedule STA reconnect attempt=%u", static_cast<uint32_t>(reconnect_attempt));
         return;
     }
     ESP_LOGW(TAG, "STA disconnected, reconnect attempt=%u scheduled in %lu ms",
-             static_cast<unsigned>(reconnect_attempt), static_cast<unsigned long>(delay_ms));
+             static_cast<uint32_t>(reconnect_attempt), static_cast<uint32_t>(delay_ms));
 }
 
 static void reconnect_timer_callback(TimerHandle_t) {
@@ -212,7 +212,7 @@ static void reconnect_task(void*) {
             continue;
         }
 
-        ESP_LOGI(TAG, "starting STA reconnect attempt=%u", static_cast<unsigned>(reconnect_attempt));
+        ESP_LOGI(TAG, "starting STA reconnect attempt=%u", static_cast<uint32_t>(reconnect_attempt));
         const esp_err_t ret = esp_wifi_connect();
         if (ret != ESP_OK) {
             ESP_LOGW(TAG, "STA reconnect request failed: %s", esp_err_to_name(ret));
@@ -413,14 +413,14 @@ esp_err_t connect_sta(const char* ssid, const char* password, bool save, const c
 
     esp_err_t ret = ESP_FAIL;
     for (uint8_t attempt = 1; attempt <= STA_CONNECT_MAX_ATTEMPTS; ++attempt) {
-        ESP_LOGI(TAG, "STA connect attempt %u/%u: ssid=%s", static_cast<unsigned>(attempt),
-                 static_cast<unsigned>(STA_CONNECT_MAX_ATTEMPTS), ssid);
+        ESP_LOGI(TAG, "STA connect attempt %u/%u: ssid=%s", static_cast<uint32_t>(attempt),
+                 static_cast<uint32_t>(STA_CONNECT_MAX_ATTEMPTS), ssid);
         ret = WiFiManager::instance().connect_sta(ssid, password, true);
         if (ret != ESP_ERR_TIMEOUT || attempt == STA_CONNECT_MAX_ATTEMPTS) {
             break;
         }
-        ESP_LOGW(TAG, "STA connect attempt %u/%u timed out, retrying once", static_cast<unsigned>(attempt),
-                 static_cast<unsigned>(STA_CONNECT_MAX_ATTEMPTS));
+        ESP_LOGW(TAG, "STA connect attempt %u/%u timed out, retrying once", static_cast<uint32_t>(attempt),
+                 static_cast<uint32_t>(STA_CONNECT_MAX_ATTEMPTS));
     }
     if (ret == ESP_OK) {
         ESP_RETURN_ON_ERROR(require_espnow_active(), TAG, "ESP-NOW link inactive");
@@ -436,7 +436,7 @@ esp_err_t connect_sta(const char* ssid, const char* password, bool save, const c
         }
         IP_t ip = WiFiManager::instance().get_ip();
         DEVICE_STATE_I(TAG, "wifi: mode old=%u new=%u source=%s result=ok ssid=%s save=%u ip=%u.%u.%u.%u",
-                       static_cast<unsigned>(old_mode), static_cast<unsigned>(mode), source_or_unknown(source), ssid,
+                       static_cast<uint32_t>(old_mode), static_cast<uint32_t>(mode), source_or_unknown(source), ssid,
                        save ? 1U : 0U, ip.octet1, ip.octet2, ip.octet3, ip.octet4);
         return ESP_OK;
     }
@@ -468,8 +468,8 @@ esp_err_t start_provision_ap(const char* source) {
     mode                = Mode::AP_PROVISION;
     update_global_state_flags();
     set_last_error("none");
-    DEVICE_STATE_I(TAG, "wifi: mode old=%u new=%u source=%s result=ok ssid=%s", static_cast<unsigned>(old_mode),
-                   static_cast<unsigned>(mode), source_or_unknown(source), ap_ssid);
+    DEVICE_STATE_I(TAG, "wifi: mode old=%u new=%u source=%s result=ok ssid=%s", static_cast<uint32_t>(old_mode),
+                   static_cast<uint32_t>(mode), source_or_unknown(source), ap_ssid);
     return ESP_OK;
 }
 
@@ -490,8 +490,8 @@ esp_err_t start_espnow_only(const char* source) {
     mode                = Mode::ESPNOW_ONLY;
     update_global_state_flags();
     set_last_error("none");
-    DEVICE_STATE_I(TAG, "wifi: mode old=%u new=%u source=%s result=ok channel=%u", static_cast<unsigned>(old_mode),
-                   static_cast<unsigned>(mode), source_or_unknown(source), static_cast<unsigned>(channel));
+    DEVICE_STATE_I(TAG, "wifi: mode old=%u new=%u source=%s result=ok channel=%u", static_cast<uint32_t>(old_mode),
+                   static_cast<uint32_t>(mode), source_or_unknown(source), static_cast<uint32_t>(channel));
     return ESP_OK;
 }
 

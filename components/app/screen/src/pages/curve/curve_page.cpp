@@ -136,20 +136,6 @@ void format_fixed_digits(char* line, size_t line_size, double value, const char*
 }
 
 /**
- * @brief 将秒数格式化为时分秒文本。
- * @param line 输出缓冲区。
- * @param line_size 输出缓冲区大小。
- * @param prefix 可选前缀，例如 "S:"；传入 nullptr 表示无前缀。
- * @param total_seconds 总秒数。
- */
-void format_duration(char* line, size_t line_size, const char* prefix, uint64_t total_seconds) {
-    snprintf(line, line_size, "%s%02llu:%02llu:%02llu", prefix == nullptr ? "" : prefix,
-             static_cast<unsigned long long>(total_seconds / 3600),
-             static_cast<unsigned long long>((total_seconds / 60) % 60),
-             static_cast<unsigned long long>(total_seconds % 60));
-}
-
-/**
  * @brief 将曲线状态数值限制为最多 3 位数字。
  * @param line 输出缓冲区。
  * @param line_size 输出缓冲区大小。
@@ -192,7 +178,7 @@ float nice_curve_step(float value) {
 uint16_t curve_text_width(const char* text) {
     uint16_t width = 0;
     while (text != nullptr && *text != '\0') {
-        const unsigned char character = static_cast<unsigned char>(*text++);
+        const uint8_t character = static_cast<uint8_t>(*text++);
         if (character >= ' ' && character <= 127) {
             width += DENGB12.width_table[character - ' '];
         }

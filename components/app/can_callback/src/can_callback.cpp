@@ -34,10 +34,10 @@ static void diagnostics_task(void*) {
             DEVICE_STATE_W(TAG,
                            "can: diagnostics info=%s state=%u tx_err=%u rx_err=%u bus_err=%lu bus_off=%lu "
                            "tx_failed=%lu rx_overflow=%lu",
-                           esp_err_to_name(ret), static_cast<unsigned>(status.state),
-                           static_cast<unsigned>(status.tx_error_count), static_cast<unsigned>(status.rx_error_count),
-                           static_cast<unsigned long>(statistics.bus_err_num), static_cast<unsigned long>(bus_off),
-                           static_cast<unsigned long>(tx_failed), static_cast<unsigned long>(rx_overflow));
+                           esp_err_to_name(ret), static_cast<uint32_t>(status.state),
+                           static_cast<uint32_t>(status.tx_error_count), static_cast<uint32_t>(status.rx_error_count),
+                           static_cast<uint32_t>(statistics.bus_err_num), static_cast<uint32_t>(bus_off),
+                           static_cast<uint32_t>(tx_failed), static_cast<uint32_t>(rx_overflow));
             last_tx_failed   = tx_failed;
             last_bus_off     = bus_off;
             last_bus_error   = bus_error;
@@ -131,7 +131,7 @@ esp_err_t init() {
             result = PowerOutput::off(TAG);
         }
         DEVICE_EVENT_I(TAG, "can: set_output target=%u result=%u", msg->data[0] == 0x01 ? 1U : 0U,
-                       static_cast<unsigned>(result));
+                       static_cast<uint32_t>(result));
     });
 
     /**
@@ -170,8 +170,8 @@ esp_err_t init() {
     //         // 回调实现
     //     });
 
-    DEVICE_EVENT_I(TAG, "can: init id=0x%lx baud=%lu resistor=%u", static_cast<unsigned long>(CAN_ID.read()),
-                   static_cast<unsigned long>(CAN_BAUDRATE.read()), can_resistor.get() ? 1U : 0U);
+    DEVICE_EVENT_I(TAG, "can: init id=0x%lx baud=%lu resistor=%u", static_cast<uint32_t>(CAN_ID.read()),
+                   static_cast<uint32_t>(CAN_BAUDRATE.read()), can_resistor.get() ? 1U : 0U);
     // 诊断任务仅周期读取计数器并在变化时输出日志，2KB 足以覆盖格式化路径。
     if (xTaskCreate(diagnostics_task, "can_diag", DIAGNOSTICS_TASK_STACK_SIZE, nullptr, 2, nullptr) != pdPASS) {
         ESP_LOGE(TAG, "failed to create diagnostics task");

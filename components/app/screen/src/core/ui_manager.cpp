@@ -59,7 +59,7 @@ bool UIManager::init() {
 
     const PageRegistry registry = get_page_registry();
     if (registry.count != static_cast<size_t>(PageId::Count)) {
-        ESP_LOGE(TAG, "invalid page registry count=%u", static_cast<unsigned>(registry.count));
+        ESP_LOGE(TAG, "invalid page registry count=%u", static_cast<uint32_t>(registry.count));
         return false;
     }
     for (size_t index = 0; index < registry.count; ++index) {

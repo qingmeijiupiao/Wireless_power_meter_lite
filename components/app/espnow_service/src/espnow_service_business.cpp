@@ -151,8 +151,8 @@ void on_switch_request(const EspNowLink::Message& message, void*) {
              message.source.bytes[2], message.source.bytes[3], message.source.bytes[4], message.source.bytes[5]);
     const int64_t elapsed_us = esp_timer_get_time() - started_us;
     DEVICE_EVENT_I(TAG, "espnow: switch peer=%s action=%u result=%u output=%u process_us=%lld", mac,
-                   static_cast<unsigned>(action), static_cast<unsigned>(response.result), response.output_on ? 1U : 0U,
-                   static_cast<long long>(elapsed_us));
+                   static_cast<uint32_t>(action), static_cast<uint32_t>(response.result), response.output_on ? 1U : 0U,
+                   static_cast<int64_t>(elapsed_us));
 
     // 响应复用请求 ID；可靠发送的链路 ACK 由 espnow_link 自动处理。
     uint8_t      payload[7] = {};
@@ -180,7 +180,7 @@ void on_remote_battery(const EspNowLink::Message& message, void*) {
         DEVICE_EVENT_I(TAG, "espnow: remote_battery peer=%02X:%02X:%02X:%02X:%02X:%02X percent=%u",
                        message.source.bytes[0], message.source.bytes[1], message.source.bytes[2],
                        message.source.bytes[3], message.source.bytes[4], message.source.bytes[5],
-                       static_cast<unsigned>(message.payload[0]));
+                       static_cast<uint32_t>(message.payload[0]));
     }
 }
 
@@ -244,8 +244,8 @@ void on_data_request(const EspNowLink::Message& message, void*) {
              message.source.bytes[2], message.source.bytes[3], message.source.bytes[4], message.source.bytes[5]);
     const int64_t elapsed_us = esp_timer_get_time() - started_us;
     DEVICE_EVENT_I(TAG, "espnow: data_request peer=%s voltage_mv=%u current_ua=%ld process_us=%lld", mac,
-                   response.data.voltage_mv, static_cast<long>(response.data.current_ua),
-                   static_cast<long long>(elapsed_us));
+                   response.data.voltage_mv, static_cast<int32_t>(response.data.current_ua),
+                   static_cast<int64_t>(elapsed_us));
     // 即使未来数据暂不可用，也应发送 available=false 的同格式响应，而不是静默超时。
     uint8_t      payload[40] = {};
     const size_t size        = encode_data_message(response, payload, sizeof(payload));

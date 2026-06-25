@@ -40,7 +40,7 @@ bool append_json_escaped(size_t* pos, const char* text) {
     if (text == nullptr) {
         return true;
     }
-    for (const unsigned char* p = reinterpret_cast<const unsigned char*>(text); *p != '\0'; ++p) {
+    for (const uint8_t* p = reinterpret_cast<const uint8_t*>(text); *p != '\0'; ++p) {
         switch (*p) {
         case '\"':
         case '\\':
@@ -100,7 +100,7 @@ uint32_t read_query_uint32(WebServer::Request* request, const char* key, uint32_
         return fallback;
     }
     char*         end    = nullptr;
-    unsigned long parsed = strtoul(value, &end, 10);
+    uint32_t parsed = strtoul(value, &end, 10);
     if (value[0] == '\0' || *end != '\0' || parsed > UINT32_MAX) {
         return fallback;
     }
@@ -151,17 +151,17 @@ esp_err_t blackbox_api_handler(WebServer::Request* request) {
     bool           ok        = append_checked(&pos,
                                               "{\"ok\":true,\"enabled\":%s,\"persisted_records\":%lu,"
                                                                "\"capacity_records\":%lu,\"snapshot_interval_s\":%lu,\"start\":%lu,\"records\":[",
-                             Blackbox::is_enabled() ? "true" : "false", static_cast<unsigned long>(raw_count),
-                                              static_cast<unsigned long>(Blackbox::capacity()),
-                                              static_cast<unsigned long>(BlackboxService::get_snapshot_interval_s()),
-                                              static_cast<unsigned long>(index));
+                             Blackbox::is_enabled() ? "true" : "false", static_cast<uint32_t>(raw_count),
+                                              static_cast<uint32_t>(Blackbox::capacity()),
+                                              static_cast<uint32_t>(BlackboxService::get_snapshot_interval_s()),
+                                              static_cast<uint32_t>(index));
 
     while (ok && !metadata_only && index < raw_count && emitted < limit) {
         const Blackbox::Record record    = Blackbox::read(index);
         const char*            separator = emitted == 0 ? "" : ",";
         if (record.header.sof != CircularFlashBuffer::BLOCK_SOF) {
             ok = append_checked(&pos, "%s{\"index\":%lu,\"type\":\"invalid\"}", separator,
-                                static_cast<unsigned long>(index));
+                                static_cast<uint32_t>(index));
             ++index;
             ++emitted;
             continue;
@@ -173,9 +173,9 @@ esp_err_t blackbox_api_handler(WebServer::Request* request) {
                 ok = append_checked(&pos,
                                     "%s{\"index\":%lu,\"timestamp_ms\":%lu,\"type\":\"string\","
                                     "\"fragments\":%u,\"text\":\"",
-                                    separator, static_cast<unsigned long>(index),
-                                    static_cast<unsigned long>(record.header.timestamp),
-                                    static_cast<unsigned>(text.record_count));
+                                    separator, static_cast<uint32_t>(index),
+                                    static_cast<uint32_t>(record.header.timestamp),
+                                    static_cast<uint32_t>(text.record_count));
                 if (ok)
                     ok = append_json_escaped(&pos, text.str);
                 if (ok)
@@ -190,7 +190,7 @@ esp_err_t blackbox_api_handler(WebServer::Request* request) {
         payload_to_hex(record.payload.bytes, sizeof(record.payload.bytes), payload_hex, sizeof(payload_hex));
         ok = append_checked(
             &pos, "%s{\"index\":%lu,\"timestamp_ms\":%lu,\"type\":\"%s\",\"payload_hex\":\"%s\"", separator,
-            static_cast<unsigned long>(index), static_cast<unsigned long>(record.header.timestamp),
+            static_cast<uint32_t>(index), static_cast<uint32_t>(record.header.timestamp),
             record.header.type == Blackbox::LogType::STRUCTURED ? "structured" : "unknown", payload_hex);
         if (ok && record.header.type == Blackbox::LogType::STRUCTURED) {
             ok = append_snapshot(&pos, record);
@@ -202,7 +202,7 @@ esp_err_t blackbox_api_handler(WebServer::Request* request) {
     }
 
     if (ok) {
-        ok = append_checked(&pos, "],\"next\":%lu,\"has_more\":%s}\n", static_cast<unsigned long>(index),
+        ok = append_checked(&pos, "],\"next\":%lu,\"has_more\":%s}\n", static_cast<uint32_t>(index),
                             !metadata_only && index < raw_count ? "true" : "false");
     }
     if (!ok) {
@@ -217,7 +217,7 @@ esp_err_t blackbox_clear_handler(WebServer::Request* request) {
     const esp_err_t ret = Blackbox::erase_all();
     snprintf(web_scratch_buffer, sizeof(web_scratch_buffer),
              "{\"ok\":%s,\"reason\":\"%s\",\"persisted_records\":%lu}\n", ret == ESP_OK ? "true" : "false",
-             ret == ESP_OK ? "ok" : esp_err_to_name(ret), static_cast<unsigned long>(Blackbox::count()));
+             ret == ESP_OK ? "ok" : esp_err_to_name(ret), static_cast<uint32_t>(Blackbox::count()));
     return WebServer::send_json(request, web_scratch_buffer);
 }
 
@@ -241,7 +241,7 @@ esp_err_t blackbox_config_handler(WebServer::Request* request) {
                                strlen("{\"ok\":false,\"reason\":\"persist_failed\"}\n"));
     }
     snprintf(web_scratch_buffer, sizeof(web_scratch_buffer), "{\"ok\":true,\"snapshot_interval_s\":%lu}\n",
-             static_cast<unsigned long>(BlackboxService::get_snapshot_interval_s()));
+             static_cast<uint32_t>(BlackboxService::get_snapshot_interval_s()));
     return WebServer::send_json(request, web_scratch_buffer);
 }
 

@@ -44,24 +44,24 @@ static bool ina226_measurement_reliable(const GlobalStateFlags& flags) {
 static void log_state_change_event(const char* channel, ProtectState_t last_state, ProtectState_t new_state,
                                    float value, const protect_threshold_t& threshold) {
     const auto     state       = get_global_state();
-    const int      current_raw = state.current_register_raw;
-    const unsigned voltage_raw = state.voltage_register_raw;
+    const int32_t  current_raw = state.current_register_raw;
+    const uint32_t voltage_raw = state.voltage_register_raw;
     if (new_state == PROTECT_STATE_NORMAL) {
         DEVICE_STATE_I(PROTECT_LOG_TAG,
                        "protect: state channel=%s old=%u new=%u value_milli=%ld warn=%ld protect=%ld bypass=%u "
                        "output=%u raw_i=%d raw_v=%u",
-                       channel, static_cast<unsigned>(last_state), static_cast<unsigned>(new_state),
-                       static_cast<long>(to_milli(value)), static_cast<long>(to_milli(threshold.warning_threshold)),
-                       static_cast<long>(to_milli(threshold.protect_threshold)),
+                       channel, static_cast<uint32_t>(last_state), static_cast<uint32_t>(new_state),
+                       static_cast<int32_t>(to_milli(value)), static_cast<int32_t>(to_milli(threshold.warning_threshold)),
+                       static_cast<int32_t>(to_milli(threshold.protect_threshold)),
                        state.flags.protect_bypassed ? 1U : 0U,
                        state.flags.output_enabled ? 1U : 0U, current_raw, voltage_raw);
     } else {
         DEVICE_STATE_W(PROTECT_LOG_TAG,
                        "protect: state channel=%s old=%u new=%u value_milli=%ld warn=%ld protect=%ld bypass=%u "
                        "output=%u raw_i=%d raw_v=%u",
-                       channel, static_cast<unsigned>(last_state), static_cast<unsigned>(new_state),
-                       static_cast<long>(to_milli(value)), static_cast<long>(to_milli(threshold.warning_threshold)),
-                       static_cast<long>(to_milli(threshold.protect_threshold)),
+                       channel, static_cast<uint32_t>(last_state), static_cast<uint32_t>(new_state),
+                       static_cast<int32_t>(to_milli(value)), static_cast<int32_t>(to_milli(threshold.warning_threshold)),
+                       static_cast<int32_t>(to_milli(threshold.protect_threshold)),
                        state.flags.protect_bypassed ? 1U : 0U,
                        state.flags.output_enabled ? 1U : 0U, current_raw, voltage_raw);
     }
@@ -210,11 +210,11 @@ static void ensure_protect_config_loaded() {
 /** @brief 分行输出并持久化记录单个通道的阈值，避免单条日志过长。 */
 static void log_threshold_values(const char* channel, const protect_threshold_t& threshold) {
     DEVICE_EVENT_I(PROTECT_LOG_TAG, "protect: threshold channel=%s warn_milli=%ld warn_rec_milli=%ld", channel,
-                   static_cast<long>(to_milli(threshold.warning_threshold)),
-                   static_cast<long>(to_milli(threshold.warning_recovery_threshold)));
+                   static_cast<int32_t>(to_milli(threshold.warning_threshold)),
+                   static_cast<int32_t>(to_milli(threshold.warning_recovery_threshold)));
     DEVICE_EVENT_I(PROTECT_LOG_TAG, "protect: threshold channel=%s protect_milli=%ld protect_rec_milli=%ld", channel,
-                   static_cast<long>(to_milli(threshold.protect_threshold)),
-                   static_cast<long>(to_milli(threshold.protect_recovery_threshold)));
+                   static_cast<int32_t>(to_milli(threshold.protect_threshold)),
+                   static_cast<int32_t>(to_milli(threshold.protect_recovery_threshold)));
 }
 
 /** @brief 输出并持久化记录保护模块启动时实际使用的阈值。 */
@@ -357,9 +357,9 @@ static ProtectState_t debounce_protect_state(uint8_t channel, ProtectState_t cur
     }
 
     pending.active = false;
-    PROTECT_LOGI("state change channel=%u state=%u->%u delay_ms=%lu", static_cast<unsigned>(channel),
-                 static_cast<unsigned>(current_state), static_cast<unsigned>(candidate_state),
-                 static_cast<unsigned long>(delay_ticks * portTICK_PERIOD_MS));
+    PROTECT_LOGI("state change channel=%u state=%u->%u delay_ms=%lu", static_cast<uint32_t>(channel),
+                 static_cast<uint32_t>(current_state), static_cast<uint32_t>(candidate_state),
+                 static_cast<uint32_t>(delay_ticks * portTICK_PERIOD_MS));
     return candidate_state;
 }
 
@@ -442,7 +442,7 @@ bool protect_ina226_measurement_reliable() {
 /**
  * @brief 判断通道是否依赖 INA226 电压/电流数据。
  */
-bool protect_is_ina226_channel(unsigned channel) {
+bool protect_is_ina226_channel(uint32_t channel) {
     return channel == 1 || channel == 2 || channel == 3;
 }
 
@@ -577,7 +577,7 @@ void protect_task(void* pvParameters) {
             } else {
                 DEVICE_STATE_W(PROTECT_LOG_TAG,
                                "protect: measurement old=reliable new=unreliable reason=ina226 flags=0x%08lx",
-                               static_cast<unsigned long>(std::bit_cast<uint32_t>(state.flags)));
+                               static_cast<uint32_t>(std::bit_cast<uint32_t>(state.flags)));
             }
             last_ina226_reliable = ina226_reliable;
         }

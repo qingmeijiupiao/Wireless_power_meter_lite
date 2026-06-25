@@ -70,7 +70,7 @@ esp_err_t set_snapshot_interval_s(uint32_t seconds, const char* source) {
         return err;
     }
     append_text_event("blackbox: config source=%s snapshot_interval_s=%lu", source == nullptr ? "unknown" : source,
-                      static_cast<unsigned long>(seconds));
+                      static_cast<uint32_t>(seconds));
     return ESP_OK;
 }
 

@@ -218,7 +218,7 @@ esp_err_t WiFiManager::start_sta_radio(uint8_t channel) {
         return ret;
     }
     state_ = WIFI_STATE_DISCONNECTED;
-    ESP_LOGI(TAG, "STA radio started on channel %u", static_cast<unsigned>(channel));
+    ESP_LOGI(TAG, "STA radio started on channel %u", static_cast<uint32_t>(channel));
     return ESP_OK;
 }
 

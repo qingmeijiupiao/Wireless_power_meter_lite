@@ -87,7 +87,8 @@ static const char* output_result_to_str(PowerOutput::OutputResult result) {
 
 /** @brief 将 IP_t 转换为点分十进制字符串。 */
 void ip_to_str(IP_t ip, char* out, size_t out_size) {
-    snprintf(out, out_size, "%u.%u.%u.%u", ip.octet1, ip.octet2, ip.octet3, ip.octet4);
+    snprintf(out, out_size, "%" PRIu32 ".%" PRIu32 ".%" PRIu32 ".%" PRIu32, static_cast<uint32_t>(ip.octet1),
+             static_cast<uint32_t>(ip.octet2), static_cast<uint32_t>(ip.octet3), static_cast<uint32_t>(ip.octet4));
 }
 
 /** @brief 将 MAC_t 转换为常见冒号分隔字符串。 */
@@ -135,16 +136,18 @@ esp_err_t state_handler(WebServer::Request* request) {
              "\"meter_time_ms\":%" PRIu64 ","
              "\"output_on\":%s,"
              "\"protect_bypassed\":%s,"
-             "\"uptime_ms\":%lld,"
-             "\"protect\":{\"otp\":%u,\"ovp\":%u,\"uvp\":%u,\"ocp\":%u},"
+             "\"uptime_ms\":%" PRId64 ","
+             "\"protect\":{\"otp\":%" PRIu32 ",\"ovp\":%" PRIu32 ",\"uvp\":%" PRIu32 ",\"ocp\":%" PRIu32 "},"
              "\"wifi\":{\"mode\":\"%s\",\"state\":%d,\"ip\":\"%s\",\"ap_ssid\":\"%s\",\"boot_enabled\":%s,\"last_"
              "error\":\"%s\"}"
              "}\n",
              voltage_v, current_a, voltage_v * abs_current_a, board_temp_c, chip_temp_c, meter.energy_uwh / 1000.0,
              meter.charge_uah / 1000.0, meter.meter_time_ms, state.flags.output_enabled ? "true" : "false",
-             protect_is_bypassed() ? "true" : "false", esp_timer_get_time() / 1000,
-             (unsigned)protect.temperature_protect_state, (unsigned)protect.high_voltage_protect_state,
-             (unsigned)protect.low_voltage_protect_state, (unsigned)protect.current_protect_state,
+             protect_is_bypassed() ? "true" : "false", static_cast<int64_t>(esp_timer_get_time() / 1000),
+             static_cast<uint32_t>(protect.temperature_protect_state),
+             static_cast<uint32_t>(protect.high_voltage_protect_state),
+             static_cast<uint32_t>(protect.low_voltage_protect_state),
+             static_cast<uint32_t>(protect.current_protect_state),
              mode_to_str(WifiService::get_mode()), (int)WifiService::get_wifi_state(), ip_text,
              WifiService::get_ap_ssid(), WifiService::is_web_enabled_on_boot() ? "true" : "false",
              WifiService::get_last_error());
@@ -233,18 +236,19 @@ esp_err_t system_handler(WebServer::Request* request) {
     split_build_time(build_date, sizeof(build_date), build_clock, sizeof(build_clock));
     snprintf(detail_response_buffer, sizeof(detail_response_buffer),
              "{"
-             "\"hardware_version\":%u,"
-             "\"firmware\":{\"major\":%u,\"minor\":%u,\"patch\":%u,\"project\":\"%s\",\"build\":\"%s\",\"build_date\":"
+             "\"hardware_version\":%" PRIu32 ","
+             "\"firmware\":{\"major\":%" PRIu32 ",\"minor\":%" PRIu32 ",\"patch\":%" PRIu32
+             ",\"project\":\"%s\",\"build\":\"%s\",\"build_date\":"
              "\"%s\",\"build_time\":\"%s\"},"
-             "\"app_partition\":{\"slot\":%u,\"label\":\"%s\"},"
+             "\"app_partition\":{\"slot\":%" PRIu32 ",\"label\":\"%s\"},"
              "\"mac\":{\"sta\":\"%s\",\"ap\":\"%s\"},"
-             "\"uptime_ms\":%lld"
+             "\"uptime_ms\":%" PRId64
              "}\n",
-             static_cast<unsigned>(get_hardware_version()), static_cast<unsigned>(VERSION_MAJOR),
-             static_cast<unsigned>(VERSION_MINOR), static_cast<unsigned>(VERSION_PATCH), app_desc->project_name,
-             BUILD_TIME, build_date, build_clock, static_cast<unsigned>(ota_partition_slot(running_partition)),
+             static_cast<uint32_t>(get_hardware_version()), static_cast<uint32_t>(VERSION_MAJOR),
+             static_cast<uint32_t>(VERSION_MINOR), static_cast<uint32_t>(VERSION_PATCH), app_desc->project_name,
+             BUILD_TIME, build_date, build_clock, static_cast<uint32_t>(ota_partition_slot(running_partition)),
              running_partition == nullptr ? "" : running_partition->label, sta_mac, ap_mac,
-             esp_timer_get_time() / 1000);
+             static_cast<int64_t>(esp_timer_get_time() / 1000));
     return WebServer::send_json(request, detail_response_buffer);
 }
 
@@ -267,19 +271,22 @@ esp_err_t backlight_handler(WebServer::Request* request) {
         }
         ret = ST7735::set_backlight(static_cast<uint8_t>(brightness));
         if (ret == ESP_OK) {
-            DEVICE_EVENT_I(TAG, "ui: config source=web backlight=%lu ip=%s", static_cast<unsigned long>(brightness),
+            DEVICE_EVENT_I(TAG, "ui: config source=web backlight=%" PRIu32 " ip=%s",
+                           static_cast<uint32_t>(brightness),
                            request->peer_ip);
         } else {
-            ESP_LOGW(TAG, "backlight update failed: brightness=%lu reason=%s", brightness, esp_err_to_name(ret));
+            ESP_LOGW(TAG, "backlight update failed: brightness=%" PRIu32 " reason=%s", brightness,
+                     esp_err_to_name(ret));
         }
-        snprintf(response_buffer, sizeof(response_buffer), "{\"ok\":%s,\"reason\":\"%s\",\"brightness\":%u}\n",
+        snprintf(response_buffer, sizeof(response_buffer),
+                 "{\"ok\":%s,\"reason\":\"%s\",\"brightness\":%" PRIu32 "}\n",
                  ret == ESP_OK ? "true" : "false", ret == ESP_OK ? "ok" : esp_err_to_name(ret),
-                 static_cast<unsigned>(ST7735::get_backlight()));
+                 static_cast<uint32_t>(ST7735::get_backlight()));
         return WebServer::send_json(request, response_buffer);
     }
 
-    snprintf(response_buffer, sizeof(response_buffer), "{\"brightness\":%u}\n",
-             static_cast<unsigned>(ST7735::get_backlight()));
+    snprintf(response_buffer, sizeof(response_buffer), "{\"brightness\":%" PRIu32 "}\n",
+             static_cast<uint32_t>(ST7735::get_backlight()));
     return WebServer::send_json(request, response_buffer);
 }
 
@@ -305,14 +312,15 @@ esp_err_t start_logo_handler(WebServer::Request* request) {
                      esp_err_to_name(ret));
             return WebServer::send(request, 500, "application/json", response_buffer, strlen(response_buffer));
         }
-        DEVICE_EVENT_I(TAG, "ui: config source=web start_logo_ms=%lu reboot_required=1 ip=%s",
-                       static_cast<unsigned long>(duration_ms), request->peer_ip);
+        DEVICE_EVENT_I(TAG, "ui: config source=web start_logo_ms=%" PRIu32 " reboot_required=1 ip=%s",
+                       static_cast<uint32_t>(duration_ms), request->peer_ip);
     }
 
     const uint32_t duration_ms = SCREEN::get_start_logo_duration_ms();
     snprintf(response_buffer, sizeof(response_buffer),
-             "{\"ok\":true,\"duration_ms\":%lu,\"enabled\":%s,\"note\":\"changed value takes effect after reboot\"}\n",
-             static_cast<unsigned long>(duration_ms), duration_ms > 0 ? "true" : "false");
+             "{\"ok\":true,\"duration_ms\":%" PRIu32
+             ",\"enabled\":%s,\"note\":\"changed value takes effect after reboot\"}\n",
+             static_cast<uint32_t>(duration_ms), duration_ms > 0 ? "true" : "false");
     return WebServer::send_json(request, response_buffer);
 }
 
@@ -417,9 +425,9 @@ esp_err_t protect_handler(WebServer::Request* request) {
         }
         ok = append_checked(
             detail_response_buffer, sizeof(detail_response_buffer), &pos,
-            "%s{\"name\":\"%s\",\"unit\":\"%s\",\"value\":%.3f,\"state\":%u,\"state_text\":\"%s\","
+            "%s{\"name\":\"%s\",\"unit\":\"%s\",\"value\":%.3f,\"state\":%" PRIu32 ",\"state_text\":\"%s\","
             "\"warning\":%.3f,\"warning_recovery\":%.3f,\"protect\":%.3f,\"protect_recovery\":%.3f,\"trigger\":\"%s\"}",
-            i == 0 ? "" : ",", info.name, info.unit, info.now_value, static_cast<unsigned>(info.state),
+            i == 0 ? "" : ",", info.name, info.unit, info.now_value, static_cast<uint32_t>(info.state),
             protect_state_to_str(info.state), info.threshold.warning_threshold,
             info.threshold.warning_recovery_threshold, info.threshold.protect_threshold,
             info.threshold.protect_recovery_threshold, info.threshold.is_asc ? ">=" : "<=");
@@ -475,11 +483,12 @@ esp_err_t can_handler(WebServer::Request* request) {
     uint32_t can_id   = CanCallback::CAN_ID;
     uint32_t baudrate = CanCallback::CAN_BAUDRATE;
     if (is_post) {
-        DEVICE_EVENT_I(TAG, "can: config baud=%lu id=0x%lx source=web reboot_required=1",
-                       static_cast<unsigned long>(baudrate), static_cast<unsigned long>(can_id));
+        DEVICE_EVENT_I(TAG, "can: config baud=%" PRIu32 " id=0x%" PRIx32 " source=web reboot_required=1",
+                       static_cast<uint32_t>(baudrate), static_cast<uint32_t>(can_id));
     }
     snprintf(response_buffer, sizeof(response_buffer),
-             "{\"ok\":true,\"baudrate\":%lu,\"id\":%lu,\"id_hex\":\"0x%lX\",\"note\":\"changed values may require CAN "
+             "{\"ok\":true,\"baudrate\":%" PRIu32 ",\"id\":%" PRIu32 ",\"id_hex\":\"0x%" PRIX32
+             "\",\"note\":\"changed values may require CAN "
              "reinitialization or reboot\"}\n",
              baudrate, can_id, can_id);
     return WebServer::send_json(request, response_buffer);
@@ -491,15 +500,17 @@ esp_err_t calibration_handler(WebServer::Request* request) {
     float  sample_resistance_mohm = params.current_base_K == 0 ? 0.0f : 2500.0f / params.current_base_K;
     size_t pos                    = 0;
     bool   ok                     = append_checked(detail_response_buffer, sizeof(detail_response_buffer), &pos,
-                                                   "{\"current_base_k\":%u,\"sample_resistance_mohm\":%.3f,\"temperature_k\":%d,\"base_"
+                                                   "{\"current_base_k\":%" PRIu32
+                                                   ",\"sample_resistance_mohm\":%.3f,\"temperature_k\":%d,\"base_"
                                                                          "temperature_c\":%.2f,\"points\":[",
-                                                   static_cast<unsigned>(params.current_base_K), sample_resistance_mohm, params.temperature_K,
+                                                   static_cast<uint32_t>(params.current_base_K), sample_resistance_mohm, params.temperature_K,
                                                    CurrentCalib::BASE_TEMPERATURE / 100.0f);
 
     for (size_t i = 0; ok && i < sizeof(params.points) / sizeof(params.points[0]); ++i) {
         ok = append_checked(detail_response_buffer, sizeof(detail_response_buffer), &pos,
-                            "%s{\"index\":%u,\"register_value\":%d,\"no_offset_ma\":%d,\"offset_ua\":%d}",
-                            i == 0 ? "" : ",", static_cast<unsigned>(i), params.points[i].register_value,
+                            "%s{\"index\":%" PRIu32
+                            ",\"register_value\":%d,\"no_offset_ma\":%d,\"offset_ua\":%d}",
+                            i == 0 ? "" : ",", static_cast<uint32_t>(i), params.points[i].register_value,
                             params.points[i].register_value * params.current_base_K / 1000,
                             params.points[i].offset_current_100uA * 100);
     }
@@ -521,16 +532,18 @@ esp_err_t diagnostics_handler(WebServer::Request* request) {
     HXC_TWAI*          can                = CanCallback::is_available() ? &CanCallback::get_can_bus() : nullptr;
     const bool         can_info_available = can != nullptr && can->get_info(&can_status, &can_statistics) == ESP_OK;
     snprintf(response_buffer, sizeof(response_buffer),
-             "{\"ina226\":{\"current_register_raw\":%d,\"voltage_register_raw\":%u,\"available\":%s},\"can\":{\"info_"
-             "available\":%s,\"state\":%u,\"tx_error_count\":%u,\"rx_error_count\":%u,\"bus_error_count\":%lu,\"bus_"
-             "off_count\":%lu,\"tx_failed_count\":%lu,\"rx_overflow_count\":%lu}}\n",
-             state.current_register_raw, state.voltage_register_raw,
+             "{\"ina226\":{\"current_register_raw\":%d,\"voltage_register_raw\":%" PRIu32
+             ",\"available\":%s},\"can\":{\"info_"
+             "available\":%s,\"state\":%" PRIu32 ",\"tx_error_count\":%" PRIu32
+             ",\"rx_error_count\":%" PRIu32 ",\"bus_error_count\":%" PRIu32 ",\"bus_"
+             "off_count\":%" PRIu32 ",\"tx_failed_count\":%" PRIu32 ",\"rx_overflow_count\":%" PRIu32 "}}\n",
+             state.current_register_raw, static_cast<uint32_t>(state.voltage_register_raw),
              state.flags.lp_ina226_initialized ? "true" : "false", can_info_available ? "true" : "false",
-             static_cast<unsigned>(can_status.state), static_cast<unsigned>(can_status.tx_error_count),
-             static_cast<unsigned>(can_status.rx_error_count), static_cast<unsigned long>(can_statistics.bus_err_num),
-             can == nullptr ? 0UL : static_cast<unsigned long>(can->get_bus_off_count()),
-             can == nullptr ? 0UL : static_cast<unsigned long>(can->get_tx_failed_count()),
-             can == nullptr ? 0UL : static_cast<unsigned long>(can->get_rx_overflow_count()));
+             static_cast<uint32_t>(can_status.state), static_cast<uint32_t>(can_status.tx_error_count),
+             static_cast<uint32_t>(can_status.rx_error_count), static_cast<uint32_t>(can_statistics.bus_err_num),
+             can == nullptr ? static_cast<uint32_t>(0) : static_cast<uint32_t>(can->get_bus_off_count()),
+             can == nullptr ? static_cast<uint32_t>(0) : static_cast<uint32_t>(can->get_tx_failed_count()),
+             can == nullptr ? static_cast<uint32_t>(0) : static_cast<uint32_t>(can->get_rx_overflow_count()));
     return WebServer::send_json(request, response_buffer);
 }
 
@@ -558,9 +571,10 @@ esp_err_t wifi_status_handler(WebServer::Request* request) {
         }
         const int written =
             snprintf(peer_json + peer_json_pos, sizeof(peer_json) - peer_json_pos,
-                     "%s{\"mac\":\"%02X:%02X:%02X:%02X:%02X:%02X\",\"channel\":%u}", peer_json_pos == 1 ? "" : ",",
+                     "%s{\"mac\":\"%02X:%02X:%02X:%02X:%02X:%02X\",\"channel\":%" PRIu32 "}",
+                     peer_json_pos == 1 ? "" : ",",
                      peer.address.bytes[0], peer.address.bytes[1], peer.address.bytes[2], peer.address.bytes[3],
-                     peer.address.bytes[4], peer.address.bytes[5], static_cast<unsigned>(peer.last_channel));
+                     peer.address.bytes[4], peer.address.bytes[5], static_cast<uint32_t>(peer.last_channel));
         if (written < 0 || static_cast<size_t>(written) >= sizeof(peer_json) - peer_json_pos) {
             break;
         }
@@ -571,17 +585,20 @@ esp_err_t wifi_status_handler(WebServer::Request* request) {
     snprintf(
         response_buffer, sizeof(response_buffer),
         "{\"mode\":\"%s\",\"state\":%d,\"ip\":\"%s\",\"saved_ssid\":\"%s\",\"ap_ssid\":\"%s\",\"rssi\":%d,\"signal_"
-        "percent\":%u,\"channel\":%u,\"channel_available\":%s,\"sta_mac\":\"%s\",\"ap_mac\":\"%s\",\"boot_enabled\":%s,"
-        "\"espnow_active\":%s,\"espnow_pairing\":%s,\"espnow_peer_count\":%u,\"espnow_peers\":%s,\"espnow_tx\":%lu,"
-        "\"espnow_no_ack\":%lu,\"espnow_invalid\":%lu,\"espnow_timing\":%lu,\"last_error\":\"%s\"}\n",
+        "percent\":%" PRIu32 ",\"channel\":%" PRIu32
+        ",\"channel_available\":%s,\"sta_mac\":\"%s\",\"ap_mac\":\"%s\",\"boot_enabled\":%s,"
+        "\"espnow_active\":%s,\"espnow_pairing\":%s,\"espnow_peer_count\":%" PRIu32
+        ",\"espnow_peers\":%s,\"espnow_tx\":%" PRIu32 ","
+        "\"espnow_no_ack\":%" PRIu32 ",\"espnow_invalid\":%" PRIu32 ",\"espnow_timing\":%" PRIu32
+        ",\"last_error\":\"%s\"}\n",
         mode_to_str(WifiService::get_mode()), (int)WifiService::get_wifi_state(), ip_text, cfg.ssid,
         WifiService::get_ap_ssid(), static_cast<int>(WifiService::get_rssi()),
-        static_cast<unsigned>(WifiService::get_signal_percent()), static_cast<unsigned>(channel),
+        static_cast<uint32_t>(WifiService::get_signal_percent()), static_cast<uint32_t>(channel),
         channel_available ? "true" : "false", sta_mac, ap_mac, cfg.web_enabled_on_boot ? "true" : "false",
         EspNowLink::is_active() ? "true" : "false", EspNowLink::is_pairing() ? "true" : "false",
-        static_cast<unsigned>(peer_count), peer_json, static_cast<unsigned long>(now_stats.tx_packets),
-        static_cast<unsigned long>(now_stats.ack_timeouts), static_cast<unsigned long>(now_stats.rx_invalid_packets),
-        static_cast<unsigned long>(now_stats.timing_errors), WifiService::get_last_error());
+        static_cast<uint32_t>(peer_count), peer_json, static_cast<uint32_t>(now_stats.tx_packets),
+        static_cast<uint32_t>(now_stats.ack_timeouts), static_cast<uint32_t>(now_stats.rx_invalid_packets),
+        static_cast<uint32_t>(now_stats.timing_errors), WifiService::get_last_error());
     return WebServer::send_json(request, response_buffer);
 }
 
@@ -628,11 +645,11 @@ static size_t append_json_escaped(char* out, size_t out_size, size_t pos, const 
             }
             out[pos++] = '\\';
             out[pos++] = *p;
-        } else if (static_cast<unsigned char>(*p) < 0x20) {
+        } else if (static_cast<uint8_t>(*p) < 0x20) {
             if (pos + 6 >= out_size) {
                 break;
             }
-            int n = snprintf(out + pos, out_size - pos, "\\u%04x", static_cast<unsigned char>(*p));
+            int n = snprintf(out + pos, out_size - pos, "\\u%04x", static_cast<uint8_t>(*p));
             if (n < 0) {
                 break;
             }
@@ -689,8 +706,8 @@ esp_err_t logs_api_handler(WebServer::Request* request) {
     size_t pos = 0;
     bool   ok  = append_checked(detail_response_buffer, sizeof(detail_response_buffer), &pos,
                                 "{\"from\":%" PRIu64 ",\"seq\":%" PRIu64 ",\"latest\":%" PRIu64
-                                ",\"dropped\":%s,\"bytes\":%u,\"text\":\"",
-                                from_seq, next_seq, latest_seq, dropped ? "true" : "false", static_cast<unsigned>(len));
+                                ",\"dropped\":%s,\"bytes\":%" PRIu32 ",\"text\":\"",
+                                from_seq, next_seq, latest_seq, dropped ? "true" : "false", static_cast<uint32_t>(len));
     if (ok) {
         pos = append_json_escaped(detail_response_buffer, sizeof(detail_response_buffer), pos, log_snapshot_buffer);
         ok  = append_checked(detail_response_buffer, sizeof(detail_response_buffer), &pos, "\"}\n");
@@ -722,7 +739,7 @@ esp_err_t wifi_scan_handler(WebServer::Request* request) {
 
     size_t pos = 0;
     bool   ok  = append_checked(scan_response_buffer, sizeof(scan_response_buffer), &pos,
-                                "{\"ok\":true,\"count\":%u,\"aps\":[", static_cast<unsigned>(count));
+                                "{\"ok\":true,\"count\":%" PRIu32 ",\"aps\":[", static_cast<uint32_t>(count));
 
     for (size_t i = 0; ok && i < count && pos < sizeof(scan_response_buffer) - 1; ++i) {
         ok = append_checked(scan_response_buffer, sizeof(scan_response_buffer), &pos, "%s{\"ssid\":\"",
@@ -732,8 +749,8 @@ esp_err_t wifi_scan_handler(WebServer::Request* request) {
         }
         pos = append_json_escaped(scan_response_buffer, sizeof(scan_response_buffer), pos, results[i].ssid);
         ok  = append_checked(scan_response_buffer, sizeof(scan_response_buffer), &pos,
-                             "\",\"rssi\":%d,\"channel\":%u,\"auth\":\"%s\",\"secure\":%s}", results[i].rssi,
-                             static_cast<unsigned>(results[i].channel), authmode_to_str(results[i].authmode),
+                             "\",\"rssi\":%d,\"channel\":%" PRIu32 ",\"auth\":\"%s\",\"secure\":%s}", results[i].rssi,
+                             static_cast<uint32_t>(results[i].channel), authmode_to_str(results[i].authmode),
                             results[i].authmode == WIFI_AUTH_OPEN ? "false" : "true");
     }
 
@@ -878,9 +895,10 @@ esp_err_t espnow_pair_handler(WebServer::Request* request) {
     }
     snprintf(
         response_buffer, sizeof(response_buffer),
-        "{\"ok\":%s,\"reason\":\"%s\",\"pairing\":%s,\"peer_count\":%u,\"single_device\":true,\"unlimited\":true}\n",
+        "{\"ok\":%s,\"reason\":\"%s\",\"pairing\":%s,\"peer_count\":%" PRIu32
+        ",\"single_device\":true,\"unlimited\":true}\n",
         ret == ESP_OK ? "true" : "false", ret == ESP_OK ? "ok" : esp_err_to_name(ret),
-        EspNowLink::is_pairing() ? "true" : "false", static_cast<unsigned>(EspNowLink::get_saved_peer_count()));
+        EspNowLink::is_pairing() ? "true" : "false", static_cast<uint32_t>(EspNowLink::get_saved_peer_count()));
     return WebServer::send_json(request, response_buffer);
 }
 
@@ -888,8 +906,9 @@ esp_err_t espnow_pair_handler(WebServer::Request* request) {
 esp_err_t espnow_pair_stop_handler(WebServer::Request* request) {
     EspNowLink::leave_pairing_mode();
     DEVICE_EVENT_I(TAG, "espnow: pairing source=web action=stop result=ok");
-    snprintf(response_buffer, sizeof(response_buffer), "{\"ok\":true,\"pairing\":false,\"peer_count\":%u}\n",
-             static_cast<unsigned>(EspNowLink::get_saved_peer_count()));
+    snprintf(response_buffer, sizeof(response_buffer),
+             "{\"ok\":true,\"pairing\":false,\"peer_count\":%" PRIu32 "}\n",
+             static_cast<uint32_t>(EspNowLink::get_saved_peer_count()));
     return WebServer::send_json(request, response_buffer);
 }
 
@@ -903,8 +922,9 @@ esp_err_t espnow_pair_clear_handler(WebServer::Request* request) {
         ESP_LOGW(TAG, "clear ESP-NOW paired peers failed: reason=%s", esp_err_to_name(ret));
     }
     snprintf(response_buffer, sizeof(response_buffer),
-             "{\"ok\":%s,\"reason\":\"%s\",\"pairing\":false,\"peer_count\":%u}\n", ret == ESP_OK ? "true" : "false",
-             ret == ESP_OK ? "ok" : esp_err_to_name(ret), static_cast<unsigned>(EspNowLink::get_saved_peer_count()));
+             "{\"ok\":%s,\"reason\":\"%s\",\"pairing\":false,\"peer_count\":%" PRIu32 "}\n",
+             ret == ESP_OK ? "true" : "false",
+             ret == ESP_OK ? "ok" : esp_err_to_name(ret), static_cast<uint32_t>(EspNowLink::get_saved_peer_count()));
     return WebServer::send_json(request, response_buffer);
 }
 

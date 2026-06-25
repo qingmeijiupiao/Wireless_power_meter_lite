@@ -1,5 +1,6 @@
 #include "ota_service.h"
 
+#include <cinttypes>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -114,12 +115,12 @@ bool parse_version(const char* text, Version* version) {
     if (text == nullptr || version == nullptr) {
         return false;
     }
-    unsigned    major = 0;
-    unsigned    minor = 0;
-    unsigned    patch = 0;
+    uint32_t    major = 0;
+    uint32_t    minor = 0;
+    uint32_t    patch = 0;
     const char* start = text[0] == 'v' ? text + 1 : text;
     char        tail  = '\0';
-    if (sscanf(start, "%u.%u.%u%c", &major, &minor, &patch, &tail) != 3) {
+    if (sscanf(start, "%" SCNu32 ".%" SCNu32 ".%" SCNu32 "%c", &major, &minor, &patch, &tail) != 3) {
         return false;
     }
     version->major = major;
@@ -214,7 +215,7 @@ esp_err_t fetch_manifest(char* output, size_t output_size) {
     if (total == 0) {
         return ESP_ERR_INVALID_RESPONSE;
     }
-    DEVICE_EVENT_I(TAG, "ota: manifest source=jsdelivr result=ok bytes=%u", static_cast<unsigned>(total));
+    DEVICE_EVENT_I(TAG, "ota: manifest source=jsdelivr result=ok bytes=%" PRIu32, static_cast<uint32_t>(total));
     return ESP_OK;
 }
 
@@ -258,9 +259,9 @@ bool parse_size_token(const char* json, const jsmntok_t* token, size_t* output) 
     char text[32] = {};
     memcpy(text, json + token->start, length);
 
-    unsigned long long parsed = 0;
+    uint64_t parsed = 0;
     char               tail   = '\0';
-    if (sscanf(text, "%llu%c", &parsed, &tail) != 1 || parsed == 0 || parsed > SIZE_MAX) {
+    if (sscanf(text, "%" SCNu64 "%c", &parsed, &tail) != 1 || parsed == 0 || parsed > SIZE_MAX) {
         return false;
     }
     *output = static_cast<size_t>(parsed);
@@ -331,7 +332,7 @@ esp_err_t check_latest_version() {
         set_state(State::FAILED, "manifest_invalid");
         return ESP_ERR_INVALID_RESPONSE;
     }
-    ESP_LOGI(TAG, "remote manifest parsed latest=%s size=%u", latest, static_cast<unsigned>(latest_size));
+    ESP_LOGI(TAG, "remote manifest parsed latest=%s size=%" PRIu32, latest, static_cast<uint32_t>(latest_size));
 
     const esp_app_desc_t* running         = esp_app_get_description();
     Version               current_version = {};
@@ -387,13 +388,14 @@ esp_err_t firmware_http_event(esp_http_client_event_t* event) {
 
     if (event->event_id == HTTP_EVENT_ON_HEADER && context->request_offset > 0 && event->header_key != nullptr &&
         event->header_value != nullptr && ascii_equals_ignore_case(event->header_key, "Content-Range")) {
-        unsigned long long start   = 0;
-        unsigned long long end     = 0;
-        unsigned long long total   = 0;
+        uint64_t start   = 0;
+        uint64_t end     = 0;
+        uint64_t total   = 0;
         char               tail    = '\0';
         context->range_header_seen = true;
         context->range_valid =
-            sscanf(event->header_value, "bytes %llu-%llu/%llu%c", &start, &end, &total, &tail) == 3 &&
+            sscanf(event->header_value, "bytes %" SCNu64 "-%" SCNu64 "/%" SCNu64 "%c", &start, &end, &total,
+                   &tail) == 3 &&
             start == context->request_offset && total == context->expected_size && end >= start && end < total;
         return ESP_OK;
     }
@@ -488,7 +490,8 @@ esp_err_t download_firmware(const char* url, const char* version, size_t expecte
 
         char range_header[48] = {};
         if (context.request_offset > 0) {
-            snprintf(range_header, sizeof(range_header), "bytes=%u-", static_cast<unsigned>(context.request_offset));
+            snprintf(range_header, sizeof(range_header), "bytes=%" PRIu32 "-",
+                     static_cast<uint32_t>(context.request_offset));
             err = esp_http_client_set_header(client, "Range", range_header);
             if (err != ESP_OK) {
                 esp_http_client_cleanup(client);
@@ -496,9 +499,11 @@ esp_err_t download_firmware(const char* url, const char* version, size_t expecte
             }
         }
 
-        DEVICE_EVENT_I(TAG, "ota: http_attempt attempt=%u/%u offset=%u expected=%u", static_cast<unsigned>(attempt),
-                       static_cast<unsigned>(MAX_DOWNLOAD_ATTEMPTS), static_cast<unsigned>(context.request_offset),
-                       static_cast<unsigned>(expected_size));
+        DEVICE_EVENT_I(TAG,
+                       "ota: http_attempt attempt=%" PRIu32 "/%" PRIu32 " offset=%" PRIu32 " expected=%" PRIu32,
+                       static_cast<uint32_t>(attempt),
+                       static_cast<uint32_t>(MAX_DOWNLOAD_ATTEMPTS), static_cast<uint32_t>(context.request_offset),
+                       static_cast<uint32_t>(expected_size));
         const size_t before_attempt = context.total;
         err                         = esp_http_client_perform(client);
         const int status_code       = esp_http_client_get_status_code(client);
@@ -520,10 +525,10 @@ esp_err_t download_firmware(const char* url, const char* version, size_t expecte
         }
 
         ESP_LOGW(TAG,
-                 "ota: http_attempt attempt=%u result=failed status=%d "
-                 "bytes=%u/%u gained=%u err=%s",
-                 static_cast<unsigned>(attempt), status_code, static_cast<unsigned>(context.total),
-                 static_cast<unsigned>(expected_size), static_cast<unsigned>(context.total - before_attempt),
+                 "ota: http_attempt attempt=%" PRIu32 " result=failed status=%d "
+                 "bytes=%" PRIu32 "/%" PRIu32 " gained=%" PRIu32 " err=%s",
+                 static_cast<uint32_t>(attempt), status_code, static_cast<uint32_t>(context.total),
+                 static_cast<uint32_t>(expected_size), static_cast<uint32_t>(context.total - before_attempt),
                  esp_err_to_name(err));
 
         const bool protocol_or_write_error =
@@ -544,8 +549,8 @@ esp_err_t download_firmware(const char* url, const char* version, size_t expecte
         if (context.ota_started) {
             OtaManager::abort();
         }
-        ESP_LOGW(TAG, "ota: firmware source=jsdelivr result=failed bytes=%u/%u err=%s",
-                 static_cast<unsigned>(context.total), static_cast<unsigned>(expected_size), esp_err_to_name(err));
+        ESP_LOGW(TAG, "ota: firmware source=jsdelivr result=failed bytes=%" PRIu32 "/%" PRIu32 " err=%s",
+                 static_cast<uint32_t>(context.total), static_cast<uint32_t>(expected_size), esp_err_to_name(err));
         return err;
     }
 
@@ -563,8 +568,8 @@ esp_err_t download_firmware(const char* url, const char* version, size_t expecte
         return err;
     }
 
-    DEVICE_STATE_I(TAG, "ota: firmware source=jsdelivr result=activated version=%s bytes=%u", version,
-                   static_cast<unsigned>(context.total));
+    DEVICE_STATE_I(TAG, "ota: firmware source=jsdelivr result=activated version=%s bytes=%" PRIu32, version,
+                   static_cast<uint32_t>(context.total));
     return ESP_OK;
 }
 

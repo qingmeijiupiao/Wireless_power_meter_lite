@@ -8,6 +8,7 @@
 #include "pages/settings/settings_page.h"
 
 #include <algorithm>
+#include <cinttypes>
 #include <cmath>
 #include <cstdio>
 
@@ -271,7 +272,7 @@ const char* SettingsPage::item_value(uint8_t item) {
     case Rotate180:
         return rotation_180_ ? "180" : "0";
     case Backlight:
-        snprintf(value_buf_, sizeof(value_buf_), "%u/5", static_cast<unsigned>(backlight_level_));
+        snprintf(value_buf_, sizeof(value_buf_), "%" PRIu32 "/5", static_cast<uint32_t>(backlight_level_));
         return value_buf_;
     case WebBoot:
         return WifiService::is_web_enabled_on_boot() ? "ON" : "OFF";
@@ -298,7 +299,8 @@ const char* SettingsPage::item_value(uint8_t item) {
     case EspNowPair:
         return EspNowLink::is_pairing() ? "WAIT" : "";
     case EspNowInfo:
-        snprintf(value_buf_, sizeof(value_buf_), "%u/3", static_cast<unsigned>(EspNowLink::get_saved_peer_count()));
+        snprintf(value_buf_, sizeof(value_buf_), "%" PRIu32 "/3",
+                 static_cast<uint32_t>(EspNowLink::get_saved_peer_count()));
         return value_buf_;
     case CanBaudrate:
         switch (CanCallback::CAN_BAUDRATE.read()) {
@@ -411,13 +413,13 @@ void SettingsPage::build_dialog_content() {
     if (item == EspNowPair) {
         snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "State %s",
                  EspNowLink::is_pairing() ? "PAIRING" : "STOPPED");
-        snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Paired %u/3",
-                 static_cast<unsigned>(EspNowLink::get_saved_peer_count()));
+        snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Paired %" PRIu32 "/3",
+                 static_cast<uint32_t>(EspNowLink::get_saved_peer_count()));
         snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "No time limit");
         snprintf(detail_lines_[3], sizeof(detail_lines_[3]), "Success auto exits");
     } else if (item == EspNowInfo) {
         const size_t count = EspNowLink::get_saved_peer_count();
-        snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "Paired %u/3", static_cast<unsigned>(count));
+        snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "Paired %" PRIu32 "/3", static_cast<uint32_t>(count));
         for (size_t i = 0; i < 3; ++i) {
             EspNowLink::SavedPeer peer = {};
             if (i < count && EspNowLink::get_saved_peer(i, &peer) == ESP_OK) {
@@ -430,9 +432,9 @@ void SettingsPage::build_dialog_content() {
         }
     } else if (item == FirmwareInfo) {
         const MAC_t mac = WiFiManager::instance().get_mac(WIFI_IF_STA);
-        snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "Version %u.%u.%u %s",
-                 static_cast<unsigned>(VERSION_MAJOR), static_cast<unsigned>(VERSION_MINOR),
-                 static_cast<unsigned>(VERSION_PATCH), VERSION_PATCH == 99 ? "Test" : "Release");
+        snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "Version %" PRIu32 ".%" PRIu32 ".%" PRIu32 " %s",
+                 static_cast<uint32_t>(VERSION_MAJOR), static_cast<uint32_t>(VERSION_MINOR),
+                 static_cast<uint32_t>(VERSION_PATCH), VERSION_PATCH == 99 ? "Test" : "Release");
         snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Build Time");
         snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "%.16s", BUILD_TIME);
         snprintf(detail_lines_[3], sizeof(detail_lines_[3]), "MAC %02X:%02X:%02X:%02X:%02X:%02X", mac.octet1,
@@ -451,10 +453,10 @@ void SettingsPage::build_dialog_content() {
                          ota.latest_version);
                 snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "MAIN to confirm");
             } else if (ota.state == OtaService::State::DOWNLOADING) {
-                const unsigned percent =
-                    ota.image_size == 0 ? 0U : static_cast<unsigned>(ota.bytes_downloaded * 100 / ota.image_size);
+                const uint32_t percent =
+                    ota.image_size == 0 ? 0U : static_cast<uint32_t>(ota.bytes_downloaded * 100 / ota.image_size);
                 snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Source %.18s", ota.active_source);
-                snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "Download %u%%", percent);
+                snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "Download %" PRIu32 "%%", percent);
                 snprintf(detail_lines_[3], sizeof(detail_lines_[3]), "Do not power off");
             } else if (ota.state == OtaService::State::FAILED) {
                 snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "%.26s", ota.last_error);
@@ -477,12 +479,12 @@ void SettingsPage::build_dialog_content() {
     } else if (item == BlackboxInfo) {
         const uint32_t interval = BlackboxService::get_snapshot_interval_s();
         snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "State %s", Blackbox::is_enabled() ? "ON" : "OFF");
-        snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Used %lu/%lu",
-                 static_cast<unsigned long>(Blackbox::count()), static_cast<unsigned long>(Blackbox::capacity()));
+        snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Used %" PRIu32 "/%" PRIu32,
+                 static_cast<uint32_t>(Blackbox::count()), static_cast<uint32_t>(Blackbox::capacity()));
         if (interval == 0) {
             snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "Snapshot OFF");
         } else {
-            snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "Snapshot %lus", static_cast<unsigned long>(interval));
+            snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "Snapshot %" PRIu32 "s", static_cast<uint32_t>(interval));
         }
     } else if (item == CalibrationInfo) {
         const auto params       = CurrentCalib::params_data.read();
@@ -493,10 +495,12 @@ void SettingsPage::build_dialog_content() {
             }
         }
         const float sample_resistance_mohm = params.current_base_K == 0 ? 0.0f : 2500.0f / params.current_base_K;
-        snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "calibration %s %u/6", valid_points == 6 ? "YES" : "NO",
-                 static_cast<unsigned>(valid_points));
+        snprintf(detail_lines_[0], sizeof(detail_lines_[0]), "calibration %s %" PRIu32 "/6",
+                 valid_points == 6 ? "YES" : "NO",
+                 static_cast<uint32_t>(valid_points));
         snprintf(detail_lines_[1], sizeof(detail_lines_[1]), "Resistance %.3fmR", sample_resistance_mohm);
-        snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "BaseK %u", static_cast<unsigned>(params.current_base_K));
+        snprintf(detail_lines_[2], sizeof(detail_lines_[2]), "BaseK %" PRIu32,
+                 static_cast<uint32_t>(params.current_base_K));
     }
 }
 
@@ -526,7 +530,8 @@ void SettingsPage::adjust_selected_item() {
             break;
         }
         ST7735::set_rotation(rotation_180_ ? ST7735::Rotation::HorizontalMirror : ST7735::Rotation::Horizontal);
-        DEVICE_EVENT_I(TAG, "ui: config source=screen rotate_180=%u", rotation_180_ ? 1U : 0U);
+        DEVICE_EVENT_I(TAG, "ui: config source=screen rotate_180=%" PRIu32,
+                       static_cast<uint32_t>(rotation_180_ ? 1U : 0U));
         break;
     case Backlight:
         backlight_level_++;
@@ -539,7 +544,8 @@ void SettingsPage::adjust_selected_item() {
             break;
         }
         ST7735::set_backlight(backlight_value_from_level(backlight_level_));
-        DEVICE_EVENT_I(TAG, "ui: config source=screen backlight_level=%u", static_cast<unsigned>(backlight_level_));
+        DEVICE_EVENT_I(TAG, "ui: config source=screen backlight_level=%" PRIu32,
+                       static_cast<uint32_t>(backlight_level_));
         break;
     case WebBoot: {
         bool enabled = !WifiService::is_web_enabled_on_boot();
@@ -577,14 +583,14 @@ void SettingsPage::adjust_selected_item() {
             ESP_LOGE(TAG, "failed to persist CAN baudrate");
             break;
         }
-        DEVICE_EVENT_I(TAG, "can: config baud=%lu source=screen reboot_required=1", static_cast<unsigned long>(next));
+        DEVICE_EVENT_I(TAG, "can: config baud=%" PRIu32 " source=screen reboot_required=1", static_cast<uint32_t>(next));
         break;
     }
     case CanTerm: {
         const esp_err_t ret = CanResistor::instance().toggle();
         if (ret == ESP_OK) {
-            DEVICE_STATE_I(TAG, "can: resistor source=screen state=%u result=ok",
-                           CanResistor::instance().get() ? 1U : 0U);
+            DEVICE_STATE_I(TAG, "can: resistor source=screen state=%" PRIu32 " result=ok",
+                           static_cast<uint32_t>(CanResistor::instance().get() ? 1U : 0U));
         } else {
             ESP_LOGE(TAG, "can: resistor source=screen result=%s", esp_err_to_name(ret));
         }

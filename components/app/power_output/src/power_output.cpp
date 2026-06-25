@@ -134,8 +134,8 @@ esp_err_t init(gpio_num_t output_gpio_num) {
 
     _initialized = true;
     DEVICE_EVENT_I(TAG, "output: init gpio=%d on_cd_ms=%lu off_cd_ms=%lu", output_gpio_num,
-                   static_cast<unsigned long>(OUTPUT_ON_COOLDOWN_MS),
-                   static_cast<unsigned long>(OUTPUT_OFF_COOLDOWN_MS));
+                   static_cast<uint32_t>(OUTPUT_ON_COOLDOWN_MS),
+                   static_cast<uint32_t>(OUTPUT_OFF_COOLDOWN_MS));
     return ESP_OK;
 }
 

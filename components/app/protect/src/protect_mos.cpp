@@ -105,15 +105,15 @@ void mos_fault_task(void*) {
 
         const TickType_t detection_ticks = now_ticks - detection_start_ticks;
         if (!suspicious_reported && detection_ticks >= MOS_SUSPICIOUS_TICKS) {
-            DEVICE_EVENT_W(TAG, "mos: suspicious current_ma=%ld duration_ms=%lu", static_cast<long>(current_uA / 1000),
-                           static_cast<unsigned long>(detection_ticks * portTICK_PERIOD_MS));
+            DEVICE_EVENT_W(TAG, "mos: suspicious current_ma=%ld duration_ms=%lu", static_cast<int32_t>(current_uA / 1000),
+                           static_cast<uint32_t>(detection_ticks * portTICK_PERIOD_MS));
             suspicious_reported = true;
         }
 
         if (!fault_reported && detection_ticks >= MOS_FAULT_TICKS) {
             ESP_LOGE(TAG, "MOS fault suspected: output is off but current remains, current_ma=%ld duration_ms=%lu",
-                     static_cast<long>(current_uA / 1000),
-                     static_cast<unsigned long>(detection_ticks * portTICK_PERIOD_MS));
+                     static_cast<int32_t>(current_uA / 1000),
+                     static_cast<uint32_t>(detection_ticks * portTICK_PERIOD_MS));
             fault_reported = true;
         }
 

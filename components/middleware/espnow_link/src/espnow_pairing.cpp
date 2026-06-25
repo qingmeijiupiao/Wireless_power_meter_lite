@@ -227,7 +227,7 @@ void handle_pair_confirm(const PairEvent& event) {
     peer.encrypted = true;
     if (save_peer(peer, pending_channel) == ESP_OK) {
         DEVICE_STATE_I(TAG, "espnow: peer action=paired role=responder channel=%u result=ok",
-                       static_cast<unsigned>(pending_channel));
+                       static_cast<uint32_t>(pending_channel));
         pair_transaction_active = false;
         leave_pairing_mode();
     }
@@ -328,7 +328,7 @@ void run_channel_recovery(const MacAddress& peer) {
             channel_recovery_result = ESP_OK;
             channel_recovering      = false;
             DEVICE_STATE_I(TAG, "espnow: peer_channel state=recovered channel=%u result=ok",
-                           static_cast<unsigned>(channel));
+                           static_cast<uint32_t>(channel));
             return;
         }
     }
@@ -497,7 +497,7 @@ void pairing_task(void*) {
                 initiating_pairing = false;
                 unregister_initiator_handlers();
                 DEVICE_STATE_I(TAG, "espnow: peer action=paired role=initiator channel=%u result=ok",
-                               static_cast<unsigned>(pending_channel));
+                               static_cast<uint32_t>(pending_channel));
             } else {
                 EspNowLink::remove_peer(pending_peer);
                 initiating_pairing = false;
@@ -569,7 +569,7 @@ esp_err_t enter_pairing_mode(uint32_t timeout_ms) {
     pending_peer            = {};
     memset(pending_lmk, 0, sizeof(pending_lmk));
     DEVICE_STATE_I(TAG, "espnow: pairing old=stopped new=active timeout_ms=%lu result=ok",
-                   static_cast<unsigned long>(timeout_ms));
+                   static_cast<uint32_t>(timeout_ms));
     return ESP_OK;
 }
 
@@ -655,7 +655,7 @@ esp_err_t clear_saved_peers() {
         Internal::erase_peer(peer.address);
     }
     DEVICE_STATE_W(Internal::TAG, "espnow: peers action=clear old_count=%u new_count=0 result=ok",
-                   static_cast<unsigned>(previous_count));
+                   static_cast<uint32_t>(previous_count));
     return ESP_OK;
 }
 

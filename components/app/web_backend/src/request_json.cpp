@@ -79,7 +79,7 @@ bool decode_string(const char* json, const jsmntok_t& token, char* out, size_t o
     size_t decoded_size = 0;
     bool   matches      = true;
     for (int offset = token.start; offset < token.end; ++offset) {
-        const unsigned char byte = static_cast<unsigned char>(json[offset]);
+        const uint8_t byte = static_cast<uint8_t>(json[offset]);
         if (byte < 0x20) {
             return false;
         }

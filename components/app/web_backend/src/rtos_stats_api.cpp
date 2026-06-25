@@ -27,18 +27,18 @@ enum class SampleState : uint8_t {
 struct TaskResult {
     char               name[configMAX_TASK_NAME_LEN];
     int                state;
-    unsigned           priority;
+    uint32_t           priority;
     double             cpu_pct;
-    unsigned long long runtime_delta;
-    unsigned long long runtime_total;
-    unsigned           stack_free_min_bytes;
+    uint64_t           runtime_delta;
+    uint64_t           runtime_total;
+    uint32_t           stack_free_min_bytes;
 };
 
 portMUX_TYPE       stats_mux           = portMUX_INITIALIZER_UNLOCKED;
 SampleState        sample_state        = SampleState::IDLE;
 uint32_t           sample_seconds      = 0;
 int64_t            sample_started_us   = 0;
-unsigned long long sample_total_delta  = 0;
+uint64_t           sample_total_delta  = 0;
 double             sample_cpu_used_pct = 0.0;
 size_t             result_count        = 0;
 TaskResult         results[MAX_RTOS_TASKS];
@@ -137,18 +137,18 @@ void sample_task(void*) {
         TaskResult& result = results[count++];
         snprintf(result.name, sizeof(result.name), "%s", task.pcTaskName);
         result.state                = static_cast<int>(task.eCurrentState);
-        result.priority             = static_cast<unsigned>(task.uxCurrentPriority);
+        result.priority             = static_cast<uint32_t>(task.uxCurrentPriority);
         result.cpu_pct              = cpu_pct;
-        result.runtime_delta        = static_cast<unsigned long long>(runtime_delta);
-        result.runtime_total        = static_cast<unsigned long long>(task.ulRunTimeCounter);
-        result.stack_free_min_bytes = static_cast<unsigned>(task.usStackHighWaterMark);
+        result.runtime_delta        = static_cast<uint64_t>(runtime_delta);
+        result.runtime_total        = static_cast<uint64_t>(task.ulRunTimeCounter);
+        result.stack_free_min_bytes = static_cast<uint32_t>(task.usStackHighWaterMark);
         if (strcmp(task.pcTaskName, "IDLE") == 0) {
             idle_cpu_pct = cpu_pct;
         }
     }
 
     taskENTER_CRITICAL(&stats_mux);
-    sample_total_delta  = static_cast<unsigned long long>(total_delta);
+    sample_total_delta  = static_cast<uint64_t>(total_delta);
     sample_cpu_used_pct = 100.0 - idle_cpu_pct;
     result_count        = count;
     sample_state        = SampleState::READY;
@@ -163,7 +163,7 @@ esp_err_t send_current_state(WebServer::Request* request) {
     const SampleState        state        = sample_state;
     const uint32_t           seconds      = sample_seconds;
     const int64_t            started_us   = sample_started_us;
-    const unsigned long long total_delta  = sample_total_delta;
+    const uint64_t total_delta  = sample_total_delta;
     const double             cpu_used_pct = sample_cpu_used_pct;
     const size_t             tasks        = result_count;
     taskEXIT_CRITICAL(&stats_mux);
@@ -172,7 +172,7 @@ esp_err_t send_current_state(WebServer::Request* request) {
     size_t pos = 0;
     bool   ok =
         append_response(&pos, "{\"state\":\"%s\",\"sample_seconds\":%u,\"elapsed_ms\":%lld", sample_state_to_str(state),
-                        static_cast<unsigned>(seconds), static_cast<long long>(elapsed_ms));
+                        static_cast<uint32_t>(seconds), static_cast<int64_t>(elapsed_ms));
     if (state == SampleState::READY) {
         ok = ok && append_response(&pos, ",\"total_delta\":%llu,\"cpu_used_pct\":%.3f,\"tasks\":[", total_delta,
                                    cpu_used_pct);

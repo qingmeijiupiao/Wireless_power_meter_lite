@@ -52,7 +52,7 @@ portMUX_TYPE  state_lock   = portMUX_INITIALIZER_UNLOCKED;
  */
 void enqueue_event(const Event& event) {
     if (event_queue == nullptr || xQueueSend(event_queue, &event, 0) != pdTRUE) {
-        ESP_LOGW(TAG, "time: event_queue result=dropped type=%u", static_cast<unsigned>(event.type));
+        ESP_LOGW(TAG, "time: event_queue result=dropped type=%u", static_cast<uint32_t>(event.type));
     }
 }
 
@@ -102,9 +102,9 @@ void log_sync_event(const struct timeval& synced_time) {
     portEXIT_CRITICAL(&state_lock);
 
     DEVICE_STATE_I(TAG, "time: sync old=unsynchronized new=synchronized unix_s=%lld unix_us=%ld",
-                   static_cast<long long>(utc_seconds), static_cast<long>(synced_time.tv_usec));
-    DEVICE_EVENT_I(TAG, "time: utc unix_s=%lld iso=%s", static_cast<long long>(utc_seconds), utc_text);
-    DEVICE_EVENT_I(TAG, "time: local unix_s=%lld iso=%s timezone=%s", static_cast<long long>(utc_seconds), local_text,
+                   static_cast<int64_t>(utc_seconds), static_cast<int32_t>(synced_time.tv_usec));
+    DEVICE_EVENT_I(TAG, "time: utc unix_s=%lld iso=%s", static_cast<int64_t>(utc_seconds), utc_text);
+    DEVICE_EVENT_I(TAG, "time: local unix_s=%lld iso=%s timezone=%s", static_cast<int64_t>(utc_seconds), local_text,
                    TIMEZONE);
 }
 
@@ -198,7 +198,7 @@ esp_err_t init() {
 
     initialized = true;
     DEVICE_EVENT_I(TAG, "time: init timezone=%s ntp_servers=%u smooth_sync=1 result=ok", TIMEZONE,
-                   static_cast<unsigned>(NTP_SERVER_COUNT));
+                   static_cast<uint32_t>(NTP_SERVER_COUNT));
     return ESP_OK;
 }
 

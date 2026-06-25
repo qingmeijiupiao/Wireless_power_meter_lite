@@ -13,6 +13,7 @@
 #include "energy_meter.h"
 #include "global_state.h"
 #include "HXC_NVS.h"
+#include <cinttypes>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -54,7 +55,7 @@ static void print_escaped_text(const char* text) {
             printf("\\t");
             break;
         default:
-            if (std::isprint(static_cast<unsigned char>(*cursor))) {
+            if (std::isprint(static_cast<uint8_t>(*cursor))) {
                 putchar(*cursor);
             } else {
                 printf("\\x%02X", *cursor);
@@ -112,7 +113,7 @@ esp_err_t init() {
      */
     shell.register_command(
         ShellCommand_t("timestamp", "Get system timestamp since boot (us)", "", [](int argc, char** argv) -> int {
-            printf("%lld us\n", esp_timer_get_time());
+            printf("%" PRId64 " us\n", static_cast<int64_t>(esp_timer_get_time()));
             return 0;
         }));
 
@@ -139,8 +140,8 @@ esp_err_t init() {
             auto                              after       = snapshot();
             const configRUN_TIME_COUNTER_TYPE total_delta = after.second - before.second;
 
-            printf("RTOS_STATS_BEGIN sample_s=%d tasks=%u total_delta=%llu\n", sample_seconds,
-                   static_cast<unsigned>(after.first.size()), static_cast<unsigned long long>(total_delta));
+            printf("RTOS_STATS_BEGIN sample_s=%d tasks=%" PRIu32 " total_delta=%" PRIu64 "\n", sample_seconds,
+                   static_cast<uint32_t>(after.first.size()), static_cast<uint64_t>(total_delta));
             printf("%-16s %5s %4s %9s %14s %14s %14s\n", "TASK", "STATE", "PRIO", "CPU(%)", "RUNTIME_DELTA",
                    "RUNTIME_TOTAL", "STACK_FREE_MIN");
             printf("---------------- ----- ---- --------- -------------- -------------- --------------\n");
@@ -153,11 +154,12 @@ esp_err_t init() {
                 const double cpu_pct =
                     total_delta == 0 ? 0.0
                                      : 100.0 * static_cast<double>(runtime_delta) / static_cast<double>(total_delta);
-                printf("%-16s %5d %4u %9.3f %14llu %14llu %14u\n", task.pcTaskName,
-                       static_cast<int>(task.eCurrentState), static_cast<unsigned>(task.uxCurrentPriority), cpu_pct,
-                       static_cast<unsigned long long>(runtime_delta),
-                       static_cast<unsigned long long>(task.ulRunTimeCounter),
-                       static_cast<unsigned>(task.usStackHighWaterMark));
+                printf("%-16s %5d %4" PRIu32 " %9.3f %14" PRIu64 " %14" PRIu64 " %14" PRIu32 "\n",
+                       task.pcTaskName,
+                       static_cast<int>(task.eCurrentState), static_cast<uint32_t>(task.uxCurrentPriority), cpu_pct,
+                       static_cast<uint64_t>(runtime_delta),
+                       static_cast<uint64_t>(task.ulRunTimeCounter),
+                       static_cast<uint32_t>(task.usStackHighWaterMark));
             }
             printf("RTOS_STATS_END\n");
             return 0;
@@ -195,9 +197,10 @@ esp_err_t init() {
             auto print_status = []() {
                 uint8_t    channel           = 0;
                 const bool channel_available = WifiService::get_channel(&channel) == ESP_OK;
-                printf("active: %d, pairing: %d, paired_peers: %u, channel: %s%u\n", EspNowLink::is_active() ? 1 : 0,
-                       EspNowLink::is_pairing() ? 1 : 0, static_cast<unsigned>(EspNowLink::get_saved_peer_count()),
-                       channel_available ? "" : "N/A", channel_available ? static_cast<unsigned>(channel) : 0U);
+                printf("active: %d, pairing: %d, paired_peers: %" PRIu32 ", channel: %s%" PRIu32 "\n",
+                       EspNowLink::is_active() ? 1 : 0,
+                       EspNowLink::is_pairing() ? 1 : 0, static_cast<uint32_t>(EspNowLink::get_saved_peer_count()),
+                       channel_available ? "" : "N/A", channel_available ? static_cast<uint32_t>(channel) : 0U);
             };
 
             if (argc < 2 || strcmp(argv[1], "status") == 0) {
@@ -209,7 +212,7 @@ esp_err_t init() {
                 uint32_t timeout_s = 60;
                 if (argc >= 3) {
                     char*               end    = nullptr;
-                    const unsigned long parsed = strtoul(argv[2], &end, 10);
+                    const uint32_t parsed = strtoul(argv[2], &end, 10);
                     if (end == argv[2] || *end != '\0' || parsed < 1 || parsed > 300) {
                         printf("Usage: espnow pair [timeout_s], timeout range 1-300\n");
                         return 1;
@@ -217,8 +220,8 @@ esp_err_t init() {
                     timeout_s = static_cast<uint32_t>(parsed);
                 }
                 const esp_err_t ret = EspNowLink::enter_pairing_mode(timeout_s * 1000);
-                printf("single-device pairing start: %s, timeout_s: %lu\n", esp_err_to_name(ret),
-                       static_cast<unsigned long>(timeout_s));
+                printf("single-device pairing start: %s, timeout_s: %" PRIu32 "\n", esp_err_to_name(ret),
+                       static_cast<uint32_t>(timeout_s));
                 print_status();
                 return ret == ESP_OK ? 0 : 1;
             }
@@ -280,10 +283,10 @@ esp_err_t init() {
     shell.register_command(
         ShellCommand_t("can_baudrate", "Set CAN baudrate (decimal)", "<baudrate>", [](int argc, char** argv) -> int {
             if (argc < 2) {
-                printf("Current CAN baudrate: %lu\n", (uint32_t)CanCallback::CAN_BAUDRATE);
+                printf("Current CAN baudrate: %" PRIu32 "\n", static_cast<uint32_t>(CanCallback::CAN_BAUDRATE));
                 return 0;
             }
-            uint32_t baudrate = (uint32_t)strtoul(argv[1], nullptr, 10);
+            uint32_t baudrate = static_cast<uint32_t>(strtoul(argv[1], nullptr, 10));
             if (baudrate == 0) {
                 printf("Error: invalid baudrate\n");
                 return 1;
@@ -293,9 +296,9 @@ esp_err_t init() {
                 printf("Error: failed to persist CAN baudrate: %s\n", esp_err_to_name(err));
                 return 1;
             }
-            DEVICE_EVENT_I(TAG, "can: config baud=%lu source=shell reboot_required=1",
-                           static_cast<unsigned long>(baudrate));
-            printf("CAN baudrate set to %lu\n", baudrate);
+            DEVICE_EVENT_I(TAG, "can: config baud=%" PRIu32 " source=shell reboot_required=1",
+                           static_cast<uint32_t>(baudrate));
+            printf("CAN baudrate set to %" PRIu32 "\n", baudrate);
             return 0;
         }));
 
@@ -309,17 +312,17 @@ esp_err_t init() {
         ShellCommand_t("can_id", "Set CAN ID (decimal or 0x hex)", "<id>", [](int argc, char** argv) -> int {
             if (argc < 2) {
                 uint32_t id = CanCallback::CAN_ID;
-                printf("Current CAN ID: %lu (0x%lX)\n", id, id);
+                printf("Current CAN ID: %" PRIu32 " (0x%" PRIX32 ")\n", id, id);
                 return 0;
             }
-            uint32_t        id  = (uint32_t)strtoul(argv[1], nullptr, 0);
+            uint32_t        id  = static_cast<uint32_t>(strtoul(argv[1], nullptr, 0));
             const esp_err_t err = CanCallback::CAN_ID.set(id);
             if (err != ESP_OK) {
                 printf("Error: failed to persist CAN ID: %s\n", esp_err_to_name(err));
                 return 1;
             }
-            DEVICE_EVENT_I(TAG, "can: config id=0x%lx source=shell reboot_required=1", static_cast<unsigned long>(id));
-            printf("CAN ID set to %lu (0x%lX)\n", id, id);
+            DEVICE_EVENT_I(TAG, "can: config id=0x%" PRIx32 " source=shell reboot_required=1", static_cast<uint32_t>(id));
+            printf("CAN ID set to %" PRIu32 " (0x%" PRIX32 ")\n", id, id);
             return 0;
         }));
 
@@ -358,24 +361,25 @@ esp_err_t init() {
             const double   current_a      = state.current_uA / 1000000.0;
 
             printf("Shared meter session:\n");
-            printf("  energy:       %.3f mWh (%lld uWh)\n", meter.energy_uwh / 1000.0,
-                   static_cast<long long>(meter.energy_uwh));
-            printf("  charge:       %.3f mAh (%lld uAh)\n", meter.charge_uah / 1000.0,
-                   static_cast<long long>(meter.charge_uah));
-            printf("  meter time:   %llu ms (%02llu:%02llu:%02llu)\n",
-                   static_cast<unsigned long long>(meter.meter_time_ms),
-                   static_cast<unsigned long long>(meter_seconds / 3600),
-                   static_cast<unsigned long long>((meter_seconds / 60) % 60),
-                   static_cast<unsigned long long>(meter_seconds % 60));
+            printf("  energy:       %.3f mWh (%" PRId64 " uWh)\n", meter.energy_uwh / 1000.0,
+                   static_cast<int64_t>(meter.energy_uwh));
+            printf("  charge:       %.3f mAh (%" PRId64 " uAh)\n", meter.charge_uah / 1000.0,
+                   static_cast<int64_t>(meter.charge_uah));
+            printf("  meter time:   %" PRIu64 " ms (%02" PRIu64 ":%02" PRIu64 ":%02" PRIu64 ")\n",
+                   static_cast<uint64_t>(meter.meter_time_ms),
+                   static_cast<uint64_t>(meter_seconds / 3600),
+                   static_cast<uint64_t>((meter_seconds / 60) % 60),
+                   static_cast<uint64_t>(meter_seconds % 60));
             printf("LP Core lifetime counters:\n");
             const EnergyMeter::Snapshot lifetime = EnergyMeter::lifetime_snapshot();
-            printf("  energy:       %lld uWh\n", static_cast<long long>(lifetime.energy_uwh));
-            printf("  charge:       %lld uAh\n", static_cast<long long>(lifetime.charge_uah));
+            printf("  energy:       %" PRId64 " uWh\n", static_cast<int64_t>(lifetime.energy_uwh));
+            printf("  charge:       %" PRId64 " uAh\n", static_cast<int64_t>(lifetime.charge_uah));
             printf("System:\n");
-            printf("  uptime:       %llu ms (%02llu:%02llu:%02llu)\n", static_cast<unsigned long long>(system_time_ms),
-                   static_cast<unsigned long long>(system_seconds / 3600),
-                   static_cast<unsigned long long>((system_seconds / 60) % 60),
-                   static_cast<unsigned long long>(system_seconds % 60));
+            printf("  uptime:       %" PRIu64 " ms (%02" PRIu64 ":%02" PRIu64 ":%02" PRIu64 ")\n",
+                   static_cast<uint64_t>(system_time_ms),
+                   static_cast<uint64_t>(system_seconds / 3600),
+                   static_cast<uint64_t>((system_seconds / 60) % 60),
+                   static_cast<uint64_t>(system_seconds % 60));
             printf("  voltage:      %.3f V\n", voltage_v);
             printf("  current:      %.6f A\n", current_a);
             printf("  power:        %.3f W\n", voltage_v * current_a);
@@ -391,16 +395,16 @@ esp_err_t init() {
         "start_logo", "Set startup logo duration in milliseconds (0 disables)", "[duration_ms]",
         [](int argc, char** argv) -> int {
             if (argc < 2) {
-                printf("Startup logo duration: %lu ms\n",
-                       static_cast<unsigned long>(SCREEN::get_start_logo_duration_ms()));
+                printf("Startup logo duration: %" PRIu32 " ms\n",
+                       static_cast<uint32_t>(SCREEN::get_start_logo_duration_ms()));
                 return 0;
             }
 
             char*         end         = nullptr;
-            unsigned long duration_ms = strtoul(argv[1], &end, 10);
+            uint32_t duration_ms = static_cast<uint32_t>(strtoul(argv[1], &end, 10));
             if (argv[1][0] == '\0' || *end != '\0' || duration_ms > SCREEN::MAX_START_LOGO_DURATION_MS) {
-                printf("Usage: start_logo [duration_ms: 0-%lu]\n",
-                       static_cast<unsigned long>(SCREEN::MAX_START_LOGO_DURATION_MS));
+                printf("Usage: start_logo [duration_ms: 0-%" PRIu32 "]\n",
+                       static_cast<uint32_t>(SCREEN::MAX_START_LOGO_DURATION_MS));
                 return 1;
             }
 
@@ -409,8 +413,8 @@ esp_err_t init() {
                 printf("Error: failed to persist startup logo duration: %s\n", esp_err_to_name(err));
                 return 1;
             }
-            DEVICE_EVENT_I(TAG, "ui: config source=shell start_logo_ms=%lu reboot_required=1", duration_ms);
-            printf("Startup logo duration set to %lu ms, restart required\n", duration_ms);
+            DEVICE_EVENT_I(TAG, "ui: config source=shell start_logo_ms=%" PRIu32 " reboot_required=1", duration_ms);
+            printf("Startup logo duration set to %" PRIu32 " ms, restart required\n", duration_ms);
             return 0;
         }));
 
@@ -427,15 +431,15 @@ esp_err_t init() {
             const char* action = argc >= 2 ? argv[1] : "status";
 
             if (strcmp(action, "status") == 0) {
-                printf("Blackbox status: enabled=%d persisted_records=%lu\n", Blackbox::is_enabled(),
-                       static_cast<unsigned long>(Blackbox::count()));
+                printf("Blackbox status: enabled=%d persisted_records=%" PRIu32 "\n", Blackbox::is_enabled(),
+                       static_cast<uint32_t>(Blackbox::count()));
                 return 0;
             }
 
             if (strcmp(action, "clear") == 0) {
                 esp_err_t ret = Blackbox::erase_all();
-                printf("Blackbox clear: %s, persisted_records=%lu\n", esp_err_to_name(ret),
-                       static_cast<unsigned long>(Blackbox::count()));
+                printf("Blackbox clear: %s, persisted_records=%" PRIu32 "\n", esp_err_to_name(ret),
+                       static_cast<uint32_t>(Blackbox::count()));
                 return ret == ESP_OK ? 0 : 1;
             }
 
@@ -469,7 +473,7 @@ esp_err_t init() {
                         limit_label = "all";
                     } else {
                         char*         end    = nullptr;
-                        unsigned long parsed = strtoul(argv[2], &end, 10);
+                        uint32_t parsed = strtoul(argv[2], &end, 10);
                         if (argv[2][0] == '\0' || *end != '\0' || parsed == 0 || parsed > UINT32_MAX) {
                             printf("Usage: blackbox %s [count|all]\n", action);
                             return 1;
@@ -490,14 +494,14 @@ esp_err_t init() {
                 }
 
                 const uint32_t raw_count = Blackbox::count();
-                printf("BLACKBOX_DUMP_BEGIN persisted_records=%lu limit=%s order=newest_first\n",
-                       static_cast<unsigned long>(raw_count), limit_label);
+                printf("BLACKBOX_DUMP_BEGIN persisted_records=%" PRIu32 " limit=%s order=newest_first\n",
+                       static_cast<uint32_t>(raw_count), limit_label);
                 uint32_t emitted = 0;
                 uint32_t index   = 0;
                 for (; index < raw_count && emitted < limit;) {
                     const Blackbox::Record record = Blackbox::read(index);
                     if (record.header.sof != CircularFlashBuffer::BLOCK_SOF) {
-                        printf("record=%lu type=INVALID\n", static_cast<unsigned long>(index));
+                        printf("record=%" PRIu32 " type=INVALID\n", static_cast<uint32_t>(index));
                         ++index;
                         ++emitted;
                         continue;
@@ -506,10 +510,11 @@ esp_err_t init() {
                     if (record.header.type == Blackbox::LogType::STRING) {
                         const Blackbox::TextRecord text = Blackbox::read_text(index);
                         if (text.record_count != 0) {
-                            printf("record=%lu timestamp_ms=%lu type=STRING fragments=%u text=",
-                                   static_cast<unsigned long>(index),
-                                   static_cast<unsigned long>(record.header.timestamp),
-                                   static_cast<unsigned>(text.record_count));
+                            printf("record=%" PRIu32 " timestamp_ms=%" PRIu32
+                                   " type=STRING fragments=%" PRIu32 " text=",
+                                   static_cast<uint32_t>(index),
+                                   static_cast<uint32_t>(record.header.timestamp),
+                                   static_cast<uint32_t>(text.record_count));
                             print_escaped_text(text.str);
                             putchar('\n');
                             index += text.record_count;
@@ -518,17 +523,18 @@ esp_err_t init() {
                         }
                     }
 
-                    printf("record=%lu timestamp_ms=%lu type=%s payload=", static_cast<unsigned long>(index),
-                           static_cast<unsigned long>(record.header.timestamp),
+                    printf("record=%" PRIu32 " timestamp_ms=%" PRIu32 " type=%s payload=", static_cast<uint32_t>(index),
+                           static_cast<uint32_t>(record.header.timestamp),
                            record.header.type == Blackbox::LogType::STRUCTURED ? "STRUCTURED" : "UNKNOWN");
                     print_hex(record.payload.bytes, Blackbox::PAYLOAD_SIZE);
                     putchar('\n');
                     ++index;
                     ++emitted;
                 }
-                printf("BLACKBOX_DUMP_END emitted=%lu consumed_records=%lu remaining_records=%lu\n",
-                       static_cast<unsigned long>(emitted), static_cast<unsigned long>(index),
-                       static_cast<unsigned long>(raw_count - index));
+                printf("BLACKBOX_DUMP_END emitted=%" PRIu32 " consumed_records=%" PRIu32
+                       " remaining_records=%" PRIu32 "\n",
+                       static_cast<uint32_t>(emitted), static_cast<uint32_t>(index),
+                       static_cast<uint32_t>(raw_count - index));
                 return 0;
             }
 
@@ -630,7 +636,8 @@ esp_err_t init() {
                 for (uint8_t i = 0; i < protect_get_channel_count(); ++i) {
                     protect_channel_info_t info = {};
                     if (protect_get_channel_info(i, &info)) {
-                        printf("%u:%-4s %-4s %7.3f %15.3f %7.3f %15.3f %s\n", static_cast<unsigned>(i), info.name,
+                        printf("%" PRIu32 ":%-4s %-4s %7.3f %15.3f %7.3f %15.3f %s\n",
+                               static_cast<uint32_t>(i), info.name,
                                info.unit, info.threshold.warning_threshold, info.threshold.warning_recovery_threshold,
                                info.threshold.protect_threshold, info.threshold.protect_recovery_threshold,
                                info.threshold.is_asc ? ">=" : "<=");
@@ -645,7 +652,7 @@ esp_err_t init() {
             }
 
             char*                  channel_end = nullptr;
-            const long             channel     = strtol(argv[1], &channel_end, 10);
+            const int32_t          channel     = static_cast<int32_t>(strtol(argv[1], &channel_end, 10));
             protect_channel_info_t info        = {};
             if (channel_end == argv[1] || *channel_end != '\0' || channel < 0 ||
                 channel >= protect_get_channel_count() ||
@@ -718,16 +725,20 @@ esp_err_t init() {
                 printf("mode: %s, wifi_state: %d, web_running: %d, boot_enabled: %d\n",
                        mode_to_str(WifiService::get_mode()), (int)WifiService::get_wifi_state(),
                        WebBackend::is_running(), cfg.web_enabled_on_boot);
-                printf("ip: %u.%u.%u.%u, saved_ssid: %s, ap_ssid: %s, last_error: %s\n", ip.octet1, ip.octet2,
-                       ip.octet3, ip.octet4, cfg.ssid[0] ? cfg.ssid : "(none)", WifiService::get_ap_ssid(),
+                printf("ip: %" PRIu32 ".%" PRIu32 ".%" PRIu32 ".%" PRIu32
+                       ", saved_ssid: %s, ap_ssid: %s, last_error: %s\n",
+                       static_cast<uint32_t>(ip.octet1), static_cast<uint32_t>(ip.octet2),
+                       static_cast<uint32_t>(ip.octet3), static_cast<uint32_t>(ip.octet4),
+                       cfg.ssid[0] ? cfg.ssid : "(none)", WifiService::get_ap_ssid(),
                        WifiService::get_last_error());
-                printf("espnow_active: %d, channel: %s%u, tx: %lu, no_ack: %lu, invalid: %lu, timing: %lu\n",
+                printf("espnow_active: %d, channel: %s%" PRIu32 ", tx: %" PRIu32 ", no_ack: %" PRIu32
+                       ", invalid: %" PRIu32 ", timing: %" PRIu32 "\n",
                        EspNowLink::is_active() ? 1 : 0, channel_available ? "" : "N/A",
-                       channel_available ? static_cast<unsigned>(channel) : 0U,
-                       static_cast<unsigned long>(now_stats.tx_packets),
-                       static_cast<unsigned long>(now_stats.ack_timeouts),
-                       static_cast<unsigned long>(now_stats.rx_invalid_packets),
-                       static_cast<unsigned long>(now_stats.timing_errors));
+                       channel_available ? static_cast<uint32_t>(channel) : 0U,
+                       static_cast<uint32_t>(now_stats.tx_packets),
+                       static_cast<uint32_t>(now_stats.ack_timeouts),
+                       static_cast<uint32_t>(now_stats.rx_invalid_packets),
+                       static_cast<uint32_t>(now_stats.timing_errors));
                 printf("sta_mac: %02X:%02X:%02X:%02X:%02X:%02X, ap_mac: %02X:%02X:%02X:%02X:%02X:%02X\n",
                        sta_mac.octet1, sta_mac.octet2, sta_mac.octet3, sta_mac.octet4, sta_mac.octet5, sta_mac.octet6,
                        ap_mac.octet1, ap_mac.octet2, ap_mac.octet3, ap_mac.octet4, ap_mac.octet5, ap_mac.octet6);
@@ -826,8 +837,9 @@ esp_err_t init() {
     shell.register_command(
         ShellCommand_t("ina226_register", "Get ina226 register value", "", [](int argc, char** argv) -> int {
             const auto state = get_global_state();
-            printf("ina226_register_raw current: %d, voltage: %u, available: %u\n", state.current_register_raw,
-                   state.voltage_register_raw, state.flags.lp_ina226_initialized);
+            printf("ina226_register_raw current: %d, voltage: %" PRIu32 ", available: %" PRIu32 "\n",
+                   state.current_register_raw, static_cast<uint32_t>(state.voltage_register_raw),
+                   static_cast<uint32_t>(state.flags.lp_ina226_initialized ? 1U : 0U));
             return 0;
         }));
 
@@ -936,8 +948,8 @@ esp_err_t init() {
                 printf("Error: failed to persist calibration: %s\n", esp_err_to_name(err));
                 return 1;
             }
-            DEVICE_EVENT_I(TAG, "calib: cleared base_k=%u source=shell reboot_required=1",
-                           static_cast<unsigned>(base_k));
+            DEVICE_EVENT_I(TAG, "calib: cleared base_k=%" PRIu32 " source=shell reboot_required=1",
+                           static_cast<uint32_t>(base_k));
             printf("Calibration params cleared (base_K=%d preserved)\n", base_k);
             return 0;
         });
