@@ -162,7 +162,7 @@ esp_err_t start() {
     esp_err_t ret = WebServer::begin();
     if (ret == ESP_OK) {
         running                                           = true;
-        get_global_state().flags.bits.web_backend_running = true;
+        update_global_state([](GlobalState& state) { state.flags.web_backend_running = true; });
         DEVICE_STATE_I(TAG, "web: lifecycle old=stopped new=running port=80 result=ok");
     }
     return ret;
@@ -211,7 +211,7 @@ esp_err_t start_with_wifi_service() {
 esp_err_t stop() {
     const bool was_running                            = running;
     running                                           = false;
-    get_global_state().flags.bits.web_backend_running = false;
+    update_global_state([](GlobalState& state) { state.flags.web_backend_running = false; });
     const esp_err_t ret                               = WebServer::stop();
     if (was_running && ret == ESP_OK) {
         DEVICE_STATE_I(TAG, "web: lifecycle old=running new=stopped result=ok");

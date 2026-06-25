@@ -118,9 +118,9 @@ bool append_snapshot(size_t* pos, const Blackbox::Record& record) {
                           ",\"snapshot\":{\"version\":%u,\"flags\":%lu,\"protect\":%u,"
                           "\"voltage_mv\":%u,\"current_ua\":%ld,\"meter_mwh\":%.3f,"
                           "\"board_temp_c\":%.2f,\"chip_temp_c\":%.2f}",
-                          static_cast<unsigned>(snapshot.version), static_cast<unsigned long>(snapshot.flags.raw),
-                          static_cast<unsigned>(snapshot.protect_states.protect_states_raw),
-                          static_cast<unsigned>(snapshot.voltage_mV), static_cast<long>(snapshot.current_uA),
+                          static_cast<uint8_t>(snapshot.version), std::bit_cast<uint32_t>(snapshot.flags),
+                          static_cast<uint8_t>(snapshot.protect_states.protect_states_raw),
+                          static_cast<uint8_t>(snapshot.voltage_mV), static_cast<int32_t>(snapshot.current_uA),
                           snapshot.meter_mwh, snapshot.board_temperature / 100.0, snapshot.chip_temperature / 100.0);
 }
 

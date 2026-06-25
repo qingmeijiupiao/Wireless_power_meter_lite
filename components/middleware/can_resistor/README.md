@@ -8,7 +8,7 @@ CAN 终端电阻控制中间件。封装终端电阻使能 GPIO、状态持久�
 - `CanResistor::instance()` 返回单例控制器。
 - `init()` 初始化 GPIO，并从 `can_term` NVS Key 恢复上次状态。
 - `set()` 和 `toggle()` 修改 GPIO 后立即写入 NVS；持久化失败时返回错误并回滚 GPIO。
-- `add_on_change_callback(callback)` 添加状态改变回调函数，用于同步更新 `GlobalState` 中的 `flags.bits.can_resistor_enabled`。
+- `add_on_change_callback(callback)` 添加状态改变回调函数，用于同步更新 `GlobalState` 中的 `flags.can_resistor_enabled`。
 
 ## API
 

@@ -3,7 +3,7 @@
  * @LastEditors: qingmeijiupiao
  * @Description: 历史曲线页面交互、配置与绘制实现
  * @Author: qingmeijiupiao
- * @LastEditTime: 2026-06-24
+ * @LastEditTime: 2026-06-25 16:31:53
  */
 #include "pages/curve/curve_page.h"
 
@@ -602,20 +602,20 @@ void CurvePage::render(RenderMode mode) {
         draw_curve_badge(57, 1, 18, "A", ST7735::BLACK, current_color);
         draw_curve_badge(78, 1, 18, "W", ST7735::WHITE, power_color);
     } else {
-        const GlobalMeasurementSnapshot measurement = get_global_measurement_snapshot();
-        const float                     voltage     = measurement.voltage_mV / 1000.0f;
-        const float                     current     = std::abs(measurement.current_uA) / 1000000.0f;
-        const float                     value       = display_mode_ == DisplayMode::Voltage
+        const auto  state    = get_global_state();
+        const float voltage  = state.voltage_mV / 1000.0f;
+        const float current  = std::abs(state.current_uA) / 1000000.0f;
+        const float value    = display_mode_ == DisplayMode::Voltage
                                                           ? voltage
                                                           : (display_mode_ == DisplayMode::Current ? current : voltage * current);
-        char                            current_text[16];
+        char current_text[16];
         format_curve_value(current_text, sizeof(current_text), value);
         draw_curve_badge(36, 1, 31, "NOW", ST7735::BLACK, now_color);
         draw_curve_badge(71, 1, 34, current_text, mode_color, value_background, true, mode_color);
     }
     draw_curve_badge(109, 1, 32, window_text(), ST7735::BLACK, time_color, window_selected);
 
-    const bool output_enabled = get_global_state().flags.bits.output_enabled;
+    const bool output_enabled = get_global_state().flags.output_enabled;
     ST7735::draw_image(145, 3, output_enabled ? METER_CIRCLE_GREEN_WIDTH : METER_CIRCLE_RED_WIDTH,
                        output_enabled ? METER_CIRCLE_GREEN_HEIGHT : METER_CIRCLE_RED_HEIGHT,
                        output_enabled ? meter_circle_green_data : meter_circle_red_data);

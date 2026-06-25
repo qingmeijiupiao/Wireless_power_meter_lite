@@ -126,7 +126,7 @@ void screen_task(void* arg) {
         return;
     }
 
-    get_global_state().flags.bits.screen_initialized = true;
+    update_global_state([](GlobalState& state) { state.flags.screen_initialized = true; });
 
     DEVICE_STATE_I(TAG, "ui: lifecycle old=starting new=running result=ok");
     while (true) {

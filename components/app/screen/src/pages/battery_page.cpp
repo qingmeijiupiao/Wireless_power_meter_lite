@@ -155,7 +155,7 @@ void BatteryPage::render(RenderMode mode) {
     const EnergyMeter::Snapshot meter          = EnergyMeter::snapshot();
     const int64_t               meter_uwh      = meter.energy_uwh;
     const int64_t               meter_uah      = meter.charge_uah;
-    const auto&                 global_state   = get_global_state();
+    const auto                  global_state   = get_global_state();
     const float                 voltage        = global_state.voltage_mV / 1000.0f;
     const float                 current        = global_state.current_uA / 1000000.0f;
     const float                 power          = voltage * current;
@@ -177,7 +177,7 @@ void BatteryPage::render(RenderMode mode) {
         format_fixed_digits(line, sizeof(line), power, "W", 3, 2, true);
         ST7735::draw_string(106, 5, line, ST7735::WHITE, ST7735::BLACK, DENGB12);
 
-        const bool output_enabled = global_state.flags.bits.output_enabled;
+        const bool output_enabled = global_state.flags.output_enabled;
         ST7735::draw_image(145, 4, output_enabled ? METER_CIRCLE_GREEN_WIDTH : METER_CIRCLE_RED_WIDTH,
                            output_enabled ? METER_CIRCLE_GREEN_HEIGHT : METER_CIRCLE_RED_HEIGHT,
                            output_enabled ? meter_circle_green_data : meter_circle_red_data);

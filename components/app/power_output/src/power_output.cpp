@@ -106,8 +106,7 @@ esp_err_t init(gpio_num_t output_gpio_num) {
         return ret;
     }
     _output_gpio.set_on_change_callback([](bool value) {
-        auto& state                     = get_global_state();
-        state.flags.bits.output_enabled = value;
+        update_global_state([value](GlobalState& state) { state.flags.output_enabled = value; });
     });
     _output_gpio.set(false);
 

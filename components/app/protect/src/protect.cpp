@@ -5,6 +5,7 @@
 #include "global_state.h"
 #include "diagnostic_log.h"
 #include "HXC_NVS.h"
+#include <bit>
 #include <cmath>
 #include <vector>
 #ifndef ENABLE_PROTECT_LOG
@@ -25,12 +26,13 @@
 
 TaskHandle_t protect_task_handle = nullptr;
 
-// 保护模块直接读取共享运行状态，避免轮询路径重复获取单例引用。
-GlobalState& glb_states = get_global_state();
-
 /** @brief 将物理量转换为千分之一单位，供日志使用整数格式输出。 */
 static int32_t to_milli(float value) {
     return static_cast<int32_t>(value * 1000.0f);
+}
+
+static bool ina226_measurement_reliable(const GlobalStateFlags& flags) {
+    return flags.lp_ina226_initialized && !flags.lp_i2c_error && !flags.lp_ina226_read_timeout;
 }
 
 /**
@@ -41,24 +43,27 @@ static int32_t to_milli(float value) {
  */
 static void log_state_change_event(const char* channel, ProtectState_t last_state, ProtectState_t new_state,
                                    float value, const protect_threshold_t& threshold) {
-    const int      current_raw = glb_states.current_register_raw;
-    const unsigned voltage_raw = glb_states.voltage_register_raw;
+    const auto     state       = get_global_state();
+    const int      current_raw = state.current_register_raw;
+    const unsigned voltage_raw = state.voltage_register_raw;
     if (new_state == PROTECT_STATE_NORMAL) {
         DEVICE_STATE_I(PROTECT_LOG_TAG,
                        "protect: state channel=%s old=%u new=%u value_milli=%ld warn=%ld protect=%ld bypass=%u "
                        "output=%u raw_i=%d raw_v=%u",
                        channel, static_cast<unsigned>(last_state), static_cast<unsigned>(new_state),
                        static_cast<long>(to_milli(value)), static_cast<long>(to_milli(threshold.warning_threshold)),
-                       static_cast<long>(to_milli(threshold.protect_threshold)), protect_is_bypassed() ? 1U : 0U,
-                       glb_states.flags.bits.output_enabled ? 1U : 0U, current_raw, voltage_raw);
+                       static_cast<long>(to_milli(threshold.protect_threshold)),
+                       state.flags.protect_bypassed ? 1U : 0U,
+                       state.flags.output_enabled ? 1U : 0U, current_raw, voltage_raw);
     } else {
         DEVICE_STATE_W(PROTECT_LOG_TAG,
                        "protect: state channel=%s old=%u new=%u value_milli=%ld warn=%ld protect=%ld bypass=%u "
                        "output=%u raw_i=%d raw_v=%u",
                        channel, static_cast<unsigned>(last_state), static_cast<unsigned>(new_state),
                        static_cast<long>(to_milli(value)), static_cast<long>(to_milli(threshold.warning_threshold)),
-                       static_cast<long>(to_milli(threshold.protect_threshold)), protect_is_bypassed() ? 1U : 0U,
-                       glb_states.flags.bits.output_enabled ? 1U : 0U, current_raw, voltage_raw);
+                       static_cast<long>(to_milli(threshold.protect_threshold)),
+                       state.flags.protect_bypassed ? 1U : 0U,
+                       state.flags.output_enabled ? 1U : 0U, current_raw, voltage_raw);
     }
 }
 
@@ -369,7 +374,8 @@ bool have_protect() {
 }
 
 bool protect_has_active_fault() {
-    auto& global_state_protects = glb_states.protect_states.states_bit;
+    const auto  state                 = get_global_state();
+    const auto& global_state_protects = state.protect_states.states_bit;
     return global_state_protects.temperature_protect_state == PROTECT_STATE_PROTECT ||
            global_state_protects.high_voltage_protect_state == PROTECT_STATE_PROTECT ||
            global_state_protects.low_voltage_protect_state == PROTECT_STATE_PROTECT ||
@@ -378,29 +384,44 @@ bool protect_has_active_fault() {
 
 void protect_set_bypassed(bool bypassed, const char* source) {
     source = source == nullptr ? "unknown" : source;
-    if (glb_states.flags.bits.protect_bypassed == bypassed) {
+    bool changed      = false;
+    bool output_on    = false;
+    bool active_fault = false;
+    update_global_state([&](GlobalState& state) {
+        if (state.flags.protect_bypassed == bypassed) {
+            return;
+        }
+        auto& protects = state.protect_states.states_bit;
+        active_fault = protects.temperature_protect_state == PROTECT_STATE_PROTECT ||
+                       protects.high_voltage_protect_state == PROTECT_STATE_PROTECT ||
+                       protects.low_voltage_protect_state == PROTECT_STATE_PROTECT ||
+                       protects.current_protect_state == PROTECT_STATE_PROTECT;
+        output_on                       = state.flags.output_enabled;
+        state.flags.protect_bypassed    = bypassed;
+        changed                         = true;
+    });
+    if (!changed) {
         return;
     }
-    glb_states.flags.bits.protect_bypassed = bypassed;
     DEVICE_STATE_W(PROTECT_LOG_TAG, "protect: bypass source=%s old=%u new=%u active_fault=%u output=%u", source,
-                   bypassed ? 0U : 1U, bypassed ? 1U : 0U, protect_has_active_fault() ? 1U : 0U,
-                   glb_states.flags.bits.output_enabled ? 1U : 0U);
+                   bypassed ? 0U : 1U, bypassed ? 1U : 0U, active_fault ? 1U : 0U, output_on ? 1U : 0U);
 }
 
 bool protect_is_bypassed() {
-    return glb_states.flags.bits.protect_bypassed;
+    return get_global_state().flags.protect_bypassed;
 }
 
 bool protect_should_block_output() {
-    if (protect_is_bypassed()) {
+    const auto state = get_global_state();
+    if (state.flags.protect_bypassed) {
         return false;
     }
-    auto& states = glb_states.protect_states.states_bit;
+    const auto& states = state.protect_states.states_bit;
     if (states.temperature_protect_state == PROTECT_STATE_PROTECT) {
         return true;
     }
     // INA226 降级时不允许 OVP/UVP/OCP 的旧状态继续阻止输出，避免传感器异常影响机器人调试。
-    if (!protect_ina226_measurement_reliable()) {
+    if (!ina226_measurement_reliable(state.flags)) {
         return false;
     }
     return states.high_voltage_protect_state == PROTECT_STATE_PROTECT ||
@@ -415,8 +436,7 @@ bool protect_should_block_output() {
  * MOS 诊断；false 当前只能展示/记录降级状态。
  */
 bool protect_ina226_measurement_reliable() {
-    return glb_states.flags.bits.lp_ina226_initialized && !glb_states.flags.bits.lp_i2c_error &&
-           !glb_states.flags.bits.lp_ina226_read_timeout;
+    return ina226_measurement_reliable(get_global_state().flags);
 }
 
 /**
@@ -436,13 +456,14 @@ bool protect_get_channel_info(uint8_t index, protect_channel_info_t* info) {
     }
     ensure_protect_config_loaded();
 
-    auto& global_state_protects = glb_states.protect_states.states_bit;
+    const auto  state                 = get_global_state();
+    const auto& global_state_protects = state.protect_states.states_bit;
     switch (index) {
     case 0:
         *info = {
             .name      = "OTP",
             .unit      = "C",
-            .now_value = glb_states.board_temperature / 100.0f,
+            .now_value = state.board_temperature / 100.0f,
             .state     = global_state_protects.temperature_protect_state,
             .threshold = temperature_threshold,
         };
@@ -451,7 +472,7 @@ bool protect_get_channel_info(uint8_t index, protect_channel_info_t* info) {
         *info = {
             .name      = "OVP",
             .unit      = "V",
-            .now_value = glb_states.voltage_mV / 1000.0f,
+            .now_value = state.voltage_mV / 1000.0f,
             .state     = global_state_protects.high_voltage_protect_state,
             .threshold = high_voltage_threshold,
         };
@@ -460,7 +481,7 @@ bool protect_get_channel_info(uint8_t index, protect_channel_info_t* info) {
         *info = {
             .name      = "UVP",
             .unit      = "V",
-            .now_value = glb_states.voltage_mV / 1000.0f,
+            .now_value = state.voltage_mV / 1000.0f,
             .state     = global_state_protects.low_voltage_protect_state,
             .threshold = low_voltage_threshold,
         };
@@ -469,7 +490,7 @@ bool protect_get_channel_info(uint8_t index, protect_channel_info_t* info) {
         *info = {
             .name      = "OCP",
             .unit      = "A",
-            .now_value = std::abs(glb_states.current_uA) / 1000000.0f,
+            .now_value = std::abs(state.current_uA) / 1000000.0f,
             .state     = global_state_protects.current_protect_state,
             .threshold = current_threshold,
         };
@@ -541,21 +562,22 @@ static bool _protect_init_ok = false;
 void protect_task(void* pvParameters) {
     auto           ticks                 = xTaskGetTickCount();
     constexpr int  protect_check_HZ      = 20;
-    auto&          global_state_protects = glb_states.protect_states.states_bit;
     ProtectState_t temp_state;
     ProtectState_t last_state;
     static bool    first_check          = true;
     bool           last_ina226_reliable = protect_ina226_measurement_reliable();
 
     while (1) {
-        const bool ina226_reliable = protect_ina226_measurement_reliable();
+        const auto state           = get_global_state();
+        auto       global_state_protects = state.protect_states.states_bit;
+        const bool ina226_reliable = ina226_measurement_reliable(state.flags);
         if (ina226_reliable != last_ina226_reliable) {
             if (ina226_reliable) {
                 DEVICE_STATE_I(PROTECT_LOG_TAG, "protect: measurement old=unreliable new=reliable");
             } else {
                 DEVICE_STATE_W(PROTECT_LOG_TAG,
                                "protect: measurement old=reliable new=unreliable reason=ina226 flags=0x%08lx",
-                               static_cast<unsigned long>(glb_states.flags.raw));
+                               static_cast<unsigned long>(std::bit_cast<uint32_t>(state.flags)));
             }
             last_ina226_reliable = ina226_reliable;
         }
@@ -564,11 +586,14 @@ void protect_task(void* pvParameters) {
         temp_state = debounce_protect_state(0, global_state_protects.temperature_protect_state,
                                             check_now_state(temperature_threshold,
                                                             global_state_protects.temperature_protect_state,
-                                                            glb_states.board_temperature / 100.0f));
+                                                            state.board_temperature / 100.0f));
         if (temp_state != global_state_protects.temperature_protect_state) {
             last_state                                      = global_state_protects.temperature_protect_state;
             global_state_protects.temperature_protect_state = temp_state;
-            log_state_change_event("OTP", last_state, temp_state, glb_states.board_temperature / 100.0f,
+            update_global_state([temp_state](GlobalState& state) {
+                state.protect_states.states_bit.temperature_protect_state = temp_state;
+            });
+            log_state_change_event("OTP", last_state, temp_state, state.board_temperature / 100.0f,
                                    temperature_threshold);
             for (auto& cb : protect_change_callbacks) {
                 cb(last_state, temp_state);
@@ -579,12 +604,15 @@ void protect_task(void* pvParameters) {
         temp_state = debounce_protect_state(
             1, global_state_protects.high_voltage_protect_state,
             ina226_reliable ? check_now_state(high_voltage_threshold, global_state_protects.high_voltage_protect_state,
-                                              glb_states.voltage_mV / 1e3)
+                                              state.voltage_mV / 1e3)
                             : PROTECT_STATE_NORMAL);
         if (temp_state != global_state_protects.high_voltage_protect_state) {
             last_state                                       = global_state_protects.high_voltage_protect_state;
             global_state_protects.high_voltage_protect_state = temp_state;
-            log_state_change_event("OVP", last_state, temp_state, glb_states.voltage_mV / 1e3, high_voltage_threshold);
+            update_global_state([temp_state](GlobalState& state) {
+                state.protect_states.states_bit.high_voltage_protect_state = temp_state;
+            });
+            log_state_change_event("OVP", last_state, temp_state, state.voltage_mV / 1e3, high_voltage_threshold);
             for (auto& cb : protect_change_callbacks) {
                 cb(last_state, temp_state);
             }
@@ -593,12 +621,15 @@ void protect_task(void* pvParameters) {
         temp_state = debounce_protect_state(
             2, global_state_protects.low_voltage_protect_state,
             ina226_reliable ? check_now_state(low_voltage_threshold, global_state_protects.low_voltage_protect_state,
-                                              glb_states.voltage_mV / 1e3)
+                                              state.voltage_mV / 1e3)
                             : PROTECT_STATE_NORMAL);
         if (temp_state != global_state_protects.low_voltage_protect_state) {
             last_state                                      = global_state_protects.low_voltage_protect_state;
             global_state_protects.low_voltage_protect_state = temp_state;
-            log_state_change_event("UVP", last_state, temp_state, glb_states.voltage_mV / 1e3, low_voltage_threshold);
+            update_global_state([temp_state](GlobalState& state) {
+                state.protect_states.states_bit.low_voltage_protect_state = temp_state;
+            });
+            log_state_change_event("UVP", last_state, temp_state, state.voltage_mV / 1e3, low_voltage_threshold);
             for (auto& cb : protect_change_callbacks) {
                 cb(last_state, temp_state);
             }
@@ -608,12 +639,15 @@ void protect_task(void* pvParameters) {
         temp_state = debounce_protect_state(
             3, global_state_protects.current_protect_state,
             ina226_reliable ? check_now_state(current_threshold, global_state_protects.current_protect_state,
-                                              std::abs(glb_states.current_uA) / 1e6)
+                                              std::abs(state.current_uA) / 1e6)
                             : PROTECT_STATE_NORMAL);
         if (temp_state != global_state_protects.current_protect_state) {
             last_state                                  = global_state_protects.current_protect_state;
             global_state_protects.current_protect_state = temp_state;
-            log_state_change_event("OCP", last_state, temp_state, std::abs(glb_states.current_uA) / 1e6,
+            update_global_state([temp_state](GlobalState& state) {
+                state.protect_states.states_bit.current_protect_state = temp_state;
+            });
+            log_state_change_event("OCP", last_state, temp_state, std::abs(state.current_uA) / 1e6,
                                    current_threshold);
             for (auto& cb : protect_change_callbacks) {
                 cb(last_state, temp_state);
@@ -623,7 +657,7 @@ void protect_task(void* pvParameters) {
         if (first_check) {
             first_check                               = false;
             _protect_init_ok                          = true;
-            glb_states.flags.bits.protect_initialized = true;
+            update_global_state([](GlobalState& state) { state.flags.protect_initialized = true; });
             DEVICE_STATE_I(PROTECT_LOG_TAG, "protect: lifecycle old=starting new=ready result=ok");
         }
 
@@ -657,9 +691,11 @@ bool protect_init_ok() {
 esp_err_t protect_deinit() {
     protect_mos_fault_stop();
     if (protect_task_handle) {
-        glb_states.protect_states.protect_states_raw = 0; // 清除保护状态
+        update_global_state([](GlobalState& state) {
+            state.protect_states.protect_states_raw = 0; // 清除保护状态
+            state.flags.protect_initialized         = false;
+        });
         reset_pending_protect_states();
-        glb_states.flags.bits.protect_initialized = false;
         vTaskDelete(protect_task_handle);
         protect_task_handle = nullptr;
         DEVICE_STATE_I(PROTECT_LOG_TAG, "protect: lifecycle old=ready new=stopped result=ok");

@@ -2,8 +2,8 @@
 
 `global_state` 是 HP 核运行期状态的共享入口。它把测量值、温度、保护状态和各模块诊断标志集中到一个 `GlobalState` 实例中，供保护、屏幕、CAN、Web 和黑匣子读取。
 
-电压、电流和 INA226 原始寄存器通过 `update_global_measurement()` 同批次发布；
-需要跨字段一致性的调用方使用 `get_global_measurement_snapshot()` 读取。
+读取方通过 `get_global_state()` 获取加锁复制得到的完整快照；
+写入方通过 `update_global_state()` 在受保护的 action 域内修改共享状态。
 
 这里的“全局状态”只保存在 RAM 中，不负责持久化。需要掉电保存的数据由 NVS 或黑匣子组件单独处理。
 
@@ -51,8 +51,7 @@ classDiagram
         +uint16_t voltage_register_raw
     }
     class GlobalStateFlags {
-        +uint32_t raw
-        +bits
+        +32 bit 位域
     }
     class protect_states_t {
         +保护状态位域
@@ -78,7 +77,7 @@ classDiagram
 
 ## Flags 明细
 
-`GlobalStateFlags` 占 4 字节。可以用 `flags.raw` 整体记录，也可以用 `flags.bits.<name>` 访问单个标志。
+`GlobalStateFlags` 占 4 字节，调用方直接用 `flags.<name>` 访问单个标志。少数需要 raw 值的诊断/持久化路径在调用处用 `std::bit_cast<uint32_t>()` 显式转换。
 
 | 位域 | 写入模块 | 说明 |
 |------|----------|------|
@@ -107,23 +106,22 @@ classDiagram
 ```cpp
 #include "global_state.h"
 
-auto& state = get_global_state();
+const auto state = get_global_state();
 
 // 读取实时状态
 int32_t current_uA = state.current_uA;
-bool output_on = state.flags.bits.output_enabled;
-
-// 同一批次读取电压、电流和 INA226 原始寄存器
-GlobalMeasurementSnapshot measurement = get_global_measurement_snapshot();
+bool output_on = state.flags.output_enabled;
 
 // 模块更新自己负责的标志
-state.flags.bits.screen_initialized = true;
+update_global_state([](GlobalState& state) {
+    state.flags.screen_initialized = true;
+});
 ```
 
 ## 注意事项
 
-- `get_global_state()` 返回引用，不会复制结构体。
-- 普通业务状态仍按简单整数读写；测量相关四个字段由独立临界区提供同批次快照。
+- `get_global_state()` 返回完整快照，不暴露全局可变引用。
+- `update_global_state()` 的 action 域内持有全局状态锁，只做轻量字段读写，不要执行日志、绘图、网络发送、NVS 等耗时操作。
 - 单位不要混用：温度是 `0.01 摄氏度`，电流是 `uA`，电压是 `mV`。
 - `energy_meter` 保留精确的 `int64_t uAh/uWh` HP 缓存，供可重置计量会话使用。
 - INA226 原始寄存器随主状态一起同步，业务模块不会绕过跨核锁直接读取 RTC 内存。

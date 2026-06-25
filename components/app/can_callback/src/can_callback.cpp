@@ -59,8 +59,7 @@ esp_err_t init() {
     auto& hw           = get_hardware_config();
     auto& can_resistor = CanResistor::instance();
     can_resistor.add_on_change_callback([](bool enabled) {
-        auto& state                           = get_global_state();
-        state.flags.bits.can_resistor_enabled = enabled;
+        update_global_state([enabled](GlobalState& state) { state.flags.can_resistor_enabled = enabled; });
         ESP_LOGW(TAG, "CAN resistor changed to %s", enabled ? "ON" : "OFF");
     });
 
@@ -94,13 +93,13 @@ esp_err_t init() {
     can_bus->add_can_receive_callback_func(CAN_ID + CALLBACK_GET_STATE, [](HXC_CAN_message_t* msg) {
         static HXC_CAN_message_t state_msg = {};
 
-        auto&                     state      = get_global_state();
+        auto                      state      = get_global_state();
         CALLBACK_GET_STATE_DATA_t state_data = {};
         state_data.voltage_mV                = state.voltage_mV;
         state_data.current_mA                = std::abs(state.current_uA / 1000);
         state_data.Board_temperature         = state.board_temperature / 100;
         state_data.Chip_temperature          = state.chip_temperature / 100;
-        state_data.output_state              = state.flags.bits.output_enabled;
+        state_data.output_state              = state.flags.output_enabled;
         state_data.current_direction         = state.current_uA > 0 ? 1 : 0;
         state_data.CAN_resistor              = CanResistor::instance().get();
         state_data.UVP_flag                  = state.protect_states.states_bit.low_voltage_protect_state;

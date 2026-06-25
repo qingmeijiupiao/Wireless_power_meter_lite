@@ -110,7 +110,7 @@ static void split_build_time(char* build_date, size_t build_date_size, char* bui
  * 该接口保持短响应，避免首页刷新时占用过多 HTTP 任务栈和发送缓冲。
  */
 esp_err_t state_handler(WebServer::Request* request) {
-    auto& state       = get_global_state();
+    auto  state       = get_global_state();
     IP_t  ip          = WifiService::get_ip();
     char  ip_text[16] = {};
     ip_to_str(ip, ip_text, sizeof(ip_text));
@@ -141,7 +141,7 @@ esp_err_t state_handler(WebServer::Request* request) {
              "error\":\"%s\"}"
              "}\n",
              voltage_v, current_a, voltage_v * abs_current_a, board_temp_c, chip_temp_c, meter.energy_uwh / 1000.0,
-             meter.charge_uah / 1000.0, meter.meter_time_ms, state.flags.bits.output_enabled ? "true" : "false",
+             meter.charge_uah / 1000.0, meter.meter_time_ms, state.flags.output_enabled ? "true" : "false",
              protect_is_bypassed() ? "true" : "false", esp_timer_get_time() / 1000,
              (unsigned)protect.temperature_protect_state, (unsigned)protect.high_voltage_protect_state,
              (unsigned)protect.low_voltage_protect_state, (unsigned)protect.current_protect_state,
@@ -512,8 +512,8 @@ esp_err_t calibration_handler(WebServer::Request* request) {
 
 /** @brief GET /api/diagnostics，返回底层采样寄存器等诊断数据。 */
 esp_err_t diagnostics_handler(WebServer::Request* request) {
-    const auto& state = get_global_state();
-    if (!state.flags.bits.lp_ina226_initialized) {
+    const auto state = get_global_state();
+    if (!state.flags.lp_ina226_initialized) {
         ESP_LOGW(TAG, "INA226 diagnostics unavailable");
     }
     twai_node_status_t can_status         = {};
@@ -525,7 +525,7 @@ esp_err_t diagnostics_handler(WebServer::Request* request) {
              "available\":%s,\"state\":%u,\"tx_error_count\":%u,\"rx_error_count\":%u,\"bus_error_count\":%lu,\"bus_"
              "off_count\":%lu,\"tx_failed_count\":%lu,\"rx_overflow_count\":%lu}}\n",
              state.current_register_raw, state.voltage_register_raw,
-             state.flags.bits.lp_ina226_initialized ? "true" : "false", can_info_available ? "true" : "false",
+             state.flags.lp_ina226_initialized ? "true" : "false", can_info_available ? "true" : "false",
              static_cast<unsigned>(can_status.state), static_cast<unsigned>(can_status.tx_error_count),
              static_cast<unsigned>(can_status.rx_error_count), static_cast<unsigned long>(can_statistics.bus_err_num),
              can == nullptr ? 0UL : static_cast<unsigned long>(can->get_bus_off_count()),

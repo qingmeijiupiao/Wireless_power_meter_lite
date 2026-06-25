@@ -88,9 +88,9 @@ uint32_t DashboardPage::refresh_interval_ms() const {
 void DashboardPage::render(RenderMode mode) {
     (void)mode;
     char        temp_str[16];
-    auto&       global_state       = get_global_state();
-    auto&       global_state_flags = global_state.flags;
-    auto&       protect_states     = global_state.protect_states.states_bit;
+    const auto  global_state       = get_global_state();
+    const auto& global_state_flags = global_state.flags;
+    const auto& protect_states     = global_state.protect_states.states_bit;
     const float voltage            = global_state.voltage_mV / 1000.0f;
     const float current            = std::abs(global_state.current_uA / 1000000.0f);
 
@@ -125,7 +125,7 @@ void DashboardPage::render(RenderMode mode) {
     };
 
     auto draw_output_state = [&]() {
-        const bool enabled = global_state_flags.bits.output_enabled;
+        const bool enabled = global_state_flags.output_enabled;
         ST7735::draw_image(62, 66, enabled ? OPEN_WIDTH : CLOSE_WIDTH, enabled ? OPEN_HEIGHT : CLOSE_HEIGHT,
                            enabled ? open_data : close_data);
     };

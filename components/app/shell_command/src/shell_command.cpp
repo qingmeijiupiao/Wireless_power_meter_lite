@@ -350,7 +350,7 @@ esp_err_t init() {
             }
 
             const auto     meter          = EnergyMeter::snapshot();
-            const auto&    state          = get_global_state();
+            const auto     state          = get_global_state();
             const uint64_t meter_seconds  = meter.meter_time_ms / 1000;
             const uint64_t system_time_ms = static_cast<uint64_t>(esp_timer_get_time() / 1000);
             const uint64_t system_seconds = system_time_ms / 1000;
@@ -825,9 +825,9 @@ esp_err_t init() {
      */
     shell.register_command(
         ShellCommand_t("ina226_register", "Get ina226 register value", "", [](int argc, char** argv) -> int {
-            const auto& state = get_global_state();
+            const auto state = get_global_state();
             printf("ina226_register_raw current: %d, voltage: %u, available: %u\n", state.current_register_raw,
-                   state.voltage_register_raw, state.flags.bits.lp_ina226_initialized);
+                   state.voltage_register_raw, state.flags.lp_ina226_initialized);
             return 0;
         }));
 

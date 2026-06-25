@@ -2,6 +2,7 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <bit>
 
 #include "blackbox.h"
 #include "blackbox_service.h"
@@ -92,12 +93,13 @@ void append_early() {
 
 void append_runtime() {
     const IP_t  ip           = WifiService::get_ip();
-    const auto& global_state = get_global_state();
+    const auto  global_state = get_global_state();
+    const auto  flags_raw    = std::bit_cast<uint32_t>(global_state.flags);
     append_boot_line("boot: runtime can_resistor=%u wifi_mode=%u ip=%u.%u.%u.%u",
                      CanResistor::instance().get() ? 1U : 0U, static_cast<unsigned>(WifiService::get_mode()), ip.octet1,
                      ip.octet2, ip.octet3, ip.octet4);
     append_boot_line("boot: runtime ina226_raw_i=%d ina226_raw_v=%u flags=0x%lx", global_state.current_register_raw,
-                     global_state.voltage_register_raw, static_cast<unsigned long>(global_state.flags.raw));
+                     global_state.voltage_register_raw, static_cast<unsigned long>(flags_raw));
 }
 
 } // namespace BootDiagnostics

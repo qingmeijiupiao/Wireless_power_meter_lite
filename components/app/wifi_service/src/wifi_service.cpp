@@ -95,13 +95,20 @@ static esp_err_t persist_sta_credentials(const char* ssid, const char* password)
 }
 
 static void update_global_state_flags() {
-    auto& state                               = get_global_state();
-    state.flags.bits.wifi_service_initialized = initialized;
-    state.flags.bits.wifi_enabled             = mode != Mode::OFF;
-    state.flags.bits.wifi_sta_connected       = mode == Mode::STA && WiFiManager::instance().is_connected();
-    state.flags.bits.wifi_ap_mode             = mode == Mode::AP_PROVISION;
-    state.flags.bits.wifi_has_saved_sta       = has_saved_sta();
-    state.flags.bits.wifi_web_enabled_on_boot = is_web_enabled_on_boot();
+    const bool service_initialized = initialized;
+    const bool wifi_enabled        = mode != Mode::OFF;
+    const bool sta_connected       = mode == Mode::STA && WiFiManager::instance().is_connected();
+    const bool ap_mode             = mode == Mode::AP_PROVISION;
+    const bool saved_sta           = has_saved_sta();
+    const bool web_on_boot         = is_web_enabled_on_boot();
+    update_global_state([=](GlobalState& state) {
+        state.flags.wifi_service_initialized = service_initialized;
+        state.flags.wifi_enabled             = wifi_enabled;
+        state.flags.wifi_sta_connected       = sta_connected;
+        state.flags.wifi_ap_mode             = ap_mode;
+        state.flags.wifi_has_saved_sta       = saved_sta;
+        state.flags.wifi_web_enabled_on_boot = web_on_boot;
+    });
 }
 
 static void enqueue_reconnect_event(ReconnectEvent event) {

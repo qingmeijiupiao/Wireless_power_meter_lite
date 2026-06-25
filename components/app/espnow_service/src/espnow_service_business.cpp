@@ -226,7 +226,7 @@ void on_data_request(const EspNowLink::Message& message, void*) {
     DataMessage response                    = {};
     response.request_id                     = request_id;
     const int64_t               started_us  = esp_timer_get_time();
-    const auto&                 state       = get_global_state();
+    const auto                  state       = get_global_state();
     const EnergyMeter::Snapshot meter       = EnergyMeter::snapshot();
     response.available                      = true;
     response.data.voltage_mv                = state.voltage_mV;

@@ -41,10 +41,10 @@ void CurveHistory::poll(uint32_t now_ms) {
         return;
     }
 
-    const GlobalMeasurementSnapshot measurement = get_global_measurement_snapshot();
-    samples_[write_index_]                      = {
-                             .voltage_mV = measurement.voltage_mV,
-                             .current_mA = compact_current_mA(measurement.current_uA),
+    const auto state        = get_global_state();
+    samples_[write_index_] = {
+        .voltage_mV = state.voltage_mV,
+        .current_mA = compact_current_mA(state.current_uA),
     };
     write_index_    = (write_index_ + 1) % MAX_SAMPLES;
     count_          = std::min(count_ + 1, MAX_SAMPLES);

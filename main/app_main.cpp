@@ -20,7 +20,6 @@
 #include "web_backend.h"
 #include "ota_service.h"
 
-auto& global_state             = get_global_state();
 auto& Chip_Temperature_Sensor  = ESPChipTemperatureSensor_t::instance();
 auto& Board_Temperature_sensor = TMP235_t::instance();
 
@@ -31,28 +30,31 @@ void update_main_state(TimerHandle_t xTimer) {
     if (!LP_Core_GetSnapshot(&snapshot)) {
         return;
     }
-    update_global_measurement({
-        .voltage_mV           = static_cast<uint16_t>(snapshot.voltage_uv / 1000),
-        .current_uA           = snapshot.current_uA,
-        .current_register_raw = snapshot.shunt_register_raw,
-        .voltage_register_raw = snapshot.voltage_register_raw,
+    const int16_t board_temperature = Board_Temperature_sensor.getTemperature();
+    const int16_t chip_temperature  = static_cast<int16_t>(Chip_Temperature_Sensor.getTemperature() * 100.0f);
+    update_global_state([&](GlobalState& state) {
+        state.voltage_mV           = static_cast<uint16_t>(snapshot.voltage_uv / 1000);
+        state.current_uA           = snapshot.current_uA;
+        state.current_register_raw = snapshot.shunt_register_raw;
+        state.voltage_register_raw = snapshot.voltage_register_raw;
+        state.meter_mah            = snapshot.meter_uah / 1000.0f;
+        state.meter_mwh            = snapshot.meter_uwh / 1000.0f;
+        state.board_temperature    = board_temperature;
+        state.chip_temperature     = chip_temperature;
+        state.flags.lp_core_running        = snapshot.state.ulp_state_bits.ulp_run;
+        state.flags.lp_ina226_initialized  = snapshot.state.ulp_state_bits.ulp_ina226_init_ok;
+        state.flags.lp_i2c_error           = snapshot.state.ulp_state_bits.ulp_i2c_init_err;
+        state.flags.lp_ina226_read_timeout = snapshot.state.ulp_state_bits.ulp_ina226_read_timeout;
     });
     // GlobalState 保存固定大小的展示值；精确累计值交给 energy_meter 用于会话差分。
-    global_state.meter_mah = snapshot.meter_uah / 1000.0f;
-    global_state.meter_mwh = snapshot.meter_uwh / 1000.0f;
     EnergyMeter::update_lifetime(snapshot.meter_uah, snapshot.meter_uwh);
-    global_state.board_temperature = Board_Temperature_sensor.getTemperature();
-    global_state.chip_temperature  = Chip_Temperature_Sensor.getTemperature() * 100.0f;
-    LP_Core_SetBoardTemperature(global_state.board_temperature);
-    global_state.flags.bits.lp_core_running        = snapshot.state.ulp_state_bits.ulp_run;
-    global_state.flags.bits.lp_ina226_initialized  = snapshot.state.ulp_state_bits.ulp_ina226_init_ok;
-    global_state.flags.bits.lp_i2c_error           = snapshot.state.ulp_state_bits.ulp_i2c_init_err;
-    global_state.flags.bits.lp_ina226_read_timeout = snapshot.state.ulp_state_bits.ulp_ina226_read_timeout;
+    LP_Core_SetBoardTemperature(board_temperature);
 }
 
 extern "C" void app_main(void) {
     ESP_ERROR_CHECK(Blackbox::init());
-    global_state.flags.bits.blackbox_enabled = Blackbox::is_enabled();
+    const bool blackbox_enabled = Blackbox::is_enabled();
+    update_global_state([blackbox_enabled](GlobalState& state) { state.flags.blackbox_enabled = blackbox_enabled; });
     ESP_ERROR_CHECK(HXC::NVS_Base::setup());
     ESP_ERROR_CHECK(BlackboxService::init());
     ESP_ERROR_CHECK(OtaService::init());

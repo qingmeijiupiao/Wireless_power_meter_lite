@@ -23,7 +23,6 @@ constexpr TickType_t MOS_FAULT_TICKS           = pdMS_TO_TICKS(5000);
 constexpr int32_t    MOS_SUSPICIOUS_CURRENT_UA = 100 * 1000;
 
 TaskHandle_t mos_task_handle = nullptr;
-GlobalState& glb_states      = get_global_state();
 
 /**
  * @brief MOS 损坏后台诊断任务。
@@ -45,8 +44,9 @@ void mos_fault_task(void*) {
 
     while (true) {
         const TickType_t now_ticks = xTaskGetTickCount();
+        const auto       state     = get_global_state();
 
-        if (glb_states.flags.bits.output_enabled) {
+        if (state.flags.output_enabled) {
             output_was_enabled  = true;
             detection_active    = false;
             suspicious_reported = false;
@@ -86,7 +86,7 @@ void mos_fault_task(void*) {
         }
         unreliable_reported = false;
 
-        const int32_t current_uA = std::abs(glb_states.current_uA);
+        const int32_t current_uA = std::abs(state.current_uA);
         if (current_uA < MOS_SUSPICIOUS_CURRENT_UA) {
             // 电流回落后清除窗口，下一次异常必须重新持续满确认时间。
             detection_active    = false;

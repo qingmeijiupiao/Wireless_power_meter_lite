@@ -3,35 +3,35 @@
  * @LastEditors: qingmeijiupiao
  * @Description: 该组件用于同步各种全局变量，包括保护状态、电压、电流、电能、温度等
  * @author: qingmeijiupiao
- * @LastEditTime: 2026-06-01 18:39:18
+ * @LastEditTime: 2026-06-25 16:24:42
  */
 #ifndef GLOBAL_STATE_H
 #define GLOBAL_STATE_H
 #include "protect.h"
 #include <cstdint>
-union GlobalStateFlags {
-    uint32_t raw;
-    struct {
-        uint32_t output_enabled           : 1;
-        uint32_t can_resistor_enabled     : 1;
-        uint32_t protect_bypassed         : 1;
-        uint32_t protect_initialized      : 1;
-        uint32_t lp_core_running          : 1;
-        uint32_t lp_ina226_initialized    : 1;
-        uint32_t lp_i2c_error             : 1;
-        uint32_t lp_ina226_read_timeout   : 1;
-        uint32_t wifi_service_initialized : 1;
-        uint32_t wifi_enabled             : 1;
-        uint32_t wifi_sta_connected       : 1;
-        uint32_t wifi_ap_mode             : 1;
-        uint32_t wifi_has_saved_sta       : 1;
-        uint32_t wifi_web_enabled_on_boot : 1;
-        uint32_t web_backend_running      : 1;
-        uint32_t screen_initialized       : 1;
-        uint32_t blackbox_enabled         : 1;
-        uint32_t reserved                 : 15;
-    } bits;
-};
+#include <type_traits>
+#include <utility>
+
+struct GlobalStateFlags {
+    uint32_t output_enabled           : 1;
+    uint32_t can_resistor_enabled     : 1;
+    uint32_t protect_bypassed         : 1;
+    uint32_t protect_initialized      : 1;
+    uint32_t lp_core_running          : 1;
+    uint32_t lp_ina226_initialized    : 1;
+    uint32_t lp_i2c_error             : 1;
+    uint32_t lp_ina226_read_timeout   : 1;
+    uint32_t wifi_service_initialized : 1;
+    uint32_t wifi_enabled             : 1;
+    uint32_t wifi_sta_connected       : 1;
+    uint32_t wifi_ap_mode             : 1;
+    uint32_t wifi_has_saved_sta       : 1;
+    uint32_t wifi_web_enabled_on_boot : 1;
+    uint32_t web_backend_running      : 1;
+    uint32_t screen_initialized       : 1;
+    uint32_t blackbox_enabled         : 1;
+    uint32_t reserved                 : 15;
+} __attribute__((packed));
 static_assert(sizeof(GlobalStateFlags) == 4, "GlobalStateFlags size must be 4 bytes");
 
 struct GlobalState {
@@ -49,31 +49,28 @@ struct GlobalState {
 static_assert(sizeof(GlobalState) == 28, "GlobalState size mismatch");
 
 /**
- * @brief 同一批次发布的实时测量快照
+ * @brief 获取全局运行状态快照
+ * @return 加锁复制得到的全局运行状态快照
  */
-struct GlobalMeasurementSnapshot {
-    uint16_t voltage_mV           = 0; /**< 总线电压，单位 mV。 */
-    int32_t  current_uA           = 0; /**< 电流，单位 uA，符号表示方向。 */
-    int16_t  current_register_raw = 0; /**< INA226 分流电压寄存器原始值。 */
-    uint16_t voltage_register_raw = 0; /**< INA226 总线电压寄存器原始值。 */
-};
+const GlobalState get_global_state();
+
+namespace global_state_detail {
+GlobalState& unsafe_ref();
+void         lock();
+void         unlock();
+} // namespace global_state_detail
 
 /**
- * @brief 获取全局运行状态引用
- * @return 全局运行状态引用
+ * @brief 在全局状态锁保护下更新状态
+ * @param action 可按 void(GlobalState&) 调用的轻量操作
  */
-GlobalState& get_global_state();
-
-/**
- * @brief 原子更新同一批次的测量值和原始寄存器值
- * @param snapshot 待发布的测量快照
- */
-void update_global_measurement(const GlobalMeasurementSnapshot& snapshot);
-
-/**
- * @brief 原子读取同一批次的测量值和原始寄存器值
- * @return 当前测量快照
- */
-GlobalMeasurementSnapshot get_global_measurement_snapshot();
+template <typename F>
+void update_global_state(F&& action) {
+    static_assert(std::is_invocable_r_v<void, F, GlobalState&>,
+                  "update_global_state action must be callable as void(GlobalState&)");
+    global_state_detail::lock();
+    std::forward<F>(action)(global_state_detail::unsafe_ref());
+    global_state_detail::unlock();
+}
 
 #endif
