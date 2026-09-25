@@ -94,6 +94,7 @@ esp_err_t init() {
         ESP_LOGE(TAG, "shell init failed: %s", esp_err_to_name(ret));
         return ret;
     }
+    shell.set_prompt("ESP@wireless_power_meter_lite> ");
     /**
      * @brief  reboot - 重启设备
      * @usage  reboot
