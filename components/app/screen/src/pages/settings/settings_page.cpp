@@ -26,7 +26,6 @@
 #include "WarningRectangle.h"
 #include "blackbox_service.h"
 #include "can_callback.h"
-#include "can_resistor.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "global_state.h"
@@ -316,7 +315,7 @@ const char* SettingsPage::item_value(uint8_t item) {
             return "Other";
         }
     case CanTerm:
-        return CanResistor::instance().get() ? "ON" : "OFF";
+        return CanCallback::terminal_resistor_enabled() ? "ON" : "OFF";
     case FirmwareInfo:
         return "";
     case FirmwareUpdate: {
@@ -587,10 +586,10 @@ void SettingsPage::adjust_selected_item() {
         break;
     }
     case CanTerm: {
-        const esp_err_t ret = CanResistor::instance().toggle();
+        const esp_err_t ret = CanCallback::toggle_terminal_resistor();
         if (ret == ESP_OK) {
             DEVICE_STATE_I(TAG, "can: resistor source=screen state=%" PRIu32 " result=ok",
-                           static_cast<uint32_t>(CanResistor::instance().get() ? 1U : 0U));
+                           static_cast<uint32_t>(CanCallback::terminal_resistor_enabled() ? 1U : 0U));
         } else {
             ESP_LOGE(TAG, "can: resistor source=screen result=%s", esp_err_to_name(ret));
         }
