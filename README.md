@@ -65,12 +65,15 @@ flowchart LR
 main/                       启动编排、LP Core 程序和共享状态加载
 components/
   app/                      产品业务和设备功能
-  middleware/               可复用服务、协议和数据处理
-  bsp/                      芯片外设与板级驱动
-  common/                   通用算法和日志契约
+  bsp/                      板级专用驱动（hardware、st7735_driver、Temperature）
   assets/                   字体、图片和 Web 静态资源
 scripts/                    资源生成、固件合并和日志分析工具
 ```
+
+`middleware`、`common` 以及通用 `bsp` 组件已统一迁移到
+[wireless-power-components](https://github.com/qingmeijiupiao/wireless-power-components)
+公共仓库，由 `main/idf_component.yml` 按固定 Git 提交引用；本仓库只保留产品业务、
+板级专用驱动和静态资源。下方依赖方向图中的 `middleware` 与 `common` 表示逻辑分层。
 
 推荐依赖方向：
 
@@ -206,7 +209,7 @@ ESP-NOW 和普通 WiFi 共用同一套 2.4 GHz 射频，因此不能把它们当
 | 修改保护逻辑 | `components/app/protect/` |
 | 增加输出操作约束 | `components/app/power_output/` 的策略接口 |
 | 修改 ESP-NOW 产品命令 | `components/app/espnow_service/` |
-| 修改可靠传输或配对 | `components/middleware/espnow_link/` |
+| 修改可靠传输或配对 | [公共仓库 espnow_link](https://github.com/qingmeijiupiao/wireless-power-components/blob/79d506e686ec743ad961ab76c732af96313db54a/components/middleware/espnow_link/) |
 | 修改 WiFi/AP 配网策略 | `components/app/wifi_service/` |
 | 修改采样和积分 | `main/ulp_app/` 与 `main/ulp_loader/` |
 | 适配不同板卡 | `components/bsp/hardware/` 及相关 BSP 组件 |
