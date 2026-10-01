@@ -91,3 +91,7 @@ dependencies:
     git: https://github.com/qingmeijiupiao/wireless-power-components.git
     path: components/middleware/espnow_link
     version: 79d506e686ec743ad961ab76c732af96313db54a
+  espnow_service_proto:
+    git: https://github.com/qingmeijiupiao/wireless-power-components.git
+    path: components/product/espnow_service_proto
+    version: b9816655d7e1db46a8e5d3c7e29e05d9edb5f9a4
