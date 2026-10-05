@@ -6,6 +6,7 @@
  * @LastEditTime: 2026-05-01 01:51:17
  */
 #include "power_output.h"
+#include "remote_switch_registry.h"
 #include "protect_policy.hpp"
 #include "cooldown_policy.hpp"
 #include "cpp_gpio_driver.hpp"
@@ -16,6 +17,18 @@
 #include <array>
 
 namespace PowerOutput {
+
+/** 所有开启来源统一经过急停仲裁，OFF 永远不被此策略阻断。 */
+class RemoteInterlockPolicy final : public OutputPolicy {
+public:
+    OutputResult check(OutputOperation op, bool) override {
+        return op != OutputOperation::OFF && EspNowService::RemoteRegistry::is_inhibited() ?
+            OutputResult::FAIL_PROTECT_ACTIVE : OutputResult::OK;
+    }
+    void on_state_applied(OutputOperation, bool) override {}
+};
+static RemoteInterlockPolicy remote_interlock_policy;
+
 
 static constexpr char TAG[] = "PowerOutput";
 
@@ -115,6 +128,7 @@ esp_err_t init(gpio_num_t output_gpio_num) {
     _policy_count    = 0;
     add_policy(&_protect_policy);
     add_policy(&_cooldown_policy);
+    add_policy(&remote_interlock_policy);
 
     // 监听保护状态变更，保护触发时强制关闭输出
     add_on_protect_change_callback([](ProtectState_t last_state, ProtectState_t new_state) {
